@@ -18,6 +18,7 @@ export * from './bezier-curve';
 export * from './bezier-fit';
 export * from './bezier-spline';
 export * from './cross-section';
+export * from './channels';
 export * from './rail-profile';
 export * from './outline-cutout';
 export * from './board';

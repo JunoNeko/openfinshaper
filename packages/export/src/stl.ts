@@ -1,11 +1,13 @@
 import {
+  boardChannels,
   buildFinBladeMesh,
+  channelLift,
   getLength,
   hasTailCutout,
   loftPoint,
   loftSection,
-  ringFractions,
   resolveFins,
+  stationRing,
   tessellateBoard,
   tessellationSteps,
   type BezierBoard,
@@ -57,11 +59,15 @@ const f = (n: number): string => (Number.isFinite(n) ? n : 0).toExponential(6);
 const sampleRing = (board: BezierBoard, pos: number, ringSteps: number): P3[] | null => {
   const section = loftSection(board, pos);
   if (!section) return null;
-  const fs = ringFractions(board, ringSteps + 1);
+  // The board's ladder, with a point on every channel wall when it has channels.
+  const plan = stationRing(board, section, pos, ringSteps + 1);
+  const cut = boardChannels(board).length > 0;
   const ring: P3[] = [];
-  for (let r = 0; r <= ringSteps; r++) {
-    const p = loftPoint(section, fs[r]!);
-    ring.push({ x: pos, y: p.x, z: p.y + section.rocker });
+  for (const fr of plan.fs) {
+    const p = loftPoint(section, fr);
+    let z = p.y + section.rocker;
+    if (cut) z += channelLift(board, plan, fr, pos, p.x);
+    ring.push({ x: pos, y: p.x, z });
   }
   return ring;
 };
@@ -136,7 +142,9 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
   for (let j = 0; j < rings.length - 1; j++) {
     const a = rings[j]!;
     const b = rings[j + 1]!;
-    for (let r = 0; r < ringSteps; r++) {
+    // One more point per channel wall than `ringSteps` asks for, on a board with channels.
+    const n = Math.min(a.length, b.length) - 1;
+    for (let r = 0; r < n; r++) {
       // +y side
       const p1 = a[r]!;
       const p2 = b[r]!;
@@ -164,7 +172,7 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
       cz += p.z;
     }
     const c: P3 = { x: cx / ring.length, y: 0, z: cz / ring.length };
-    for (let r = 0; r < ringSteps; r++) {
+    for (let r = 0; r < ring.length - 1; r++) {
       const p2 = ring[r]!;
       const p3 = ring[r + 1]!;
       if (noseEnd) {

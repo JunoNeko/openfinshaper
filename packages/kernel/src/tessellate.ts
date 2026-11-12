@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { getLength, getMaxThickness, getMaxWidth, getWidthAtPos, type BezierBoard } from './board';
+import { boardChannels } from './channels';
 import {
   MIN_DIM,
+  channelLift,
   isFinite3,
   loftPoint,
   loftRing,
   loftSection,
   ringFractions,
   ringHalf,
+  stationRing,
+  type LateralMap,
   type Vert3,
 } from './loft';
 import { CUTOUT_EPS, cachedOutlineSegments, hasTailCutout, yInOut } from './outline-cutout';
@@ -307,7 +311,8 @@ const tessellateCutout = (
   const x0 = eps;
   const x1 = length - eps;
   const half = ringHalf(ringSteps);
-  const fs = ringFractions(board, half);
+  const ladder = ringFractions(board, half);
+  const cut = boardChannels(board).length > 0;
 
   const positions: number[] = [];
   const indices: number[] = [];
@@ -359,6 +364,17 @@ const tessellateCutout = (
   const rightRows: (number[] | null)[] = [];
   const leftRows: (number[] | null)[] = [];
 
+  /** The notch's remap at x, as a channel sees it. */
+  const lateralAt = (x: number): LateralMap => {
+    let { yIn, yOut } = yInOut(segments, x);
+    if (yIn < CUTOUT_EPS) yIn = 0;
+    if (yOut < yIn + CUTOUT_EPS) yOut = yIn;
+    const k = yOut > 1e-6 ? (yOut - yIn) / yOut : 0;
+    return (px) => yIn + px * k;
+  };
+  // Points per half ring: the ladder's, plus each channel's (the same at every station).
+  let rowLength = half;
+
   for (const x of xs) {
     const section = loftSection(board, x);
     if (!section) {
@@ -373,13 +389,17 @@ const tessellateCutout = (
     yIns.push(yIn);
 
     const scale = yOut > 1e-6 ? (yOut - yIn) / yOut : 0;
+    const ring = cut ? stationRing(board, section, x, half, lateralAt) : null;
+    const fs = ring ? ring.fs : ladder;
+    rowLength = fs.length;
     const right: number[] = [];
     const left: number[] = [];
     let ok = true;
-    for (let i = 0; i < half; i++) {
+    for (let i = 0; i < fs.length; i++) {
       const p = loftPoint(section, fs[i]!);
       const mapped = yIn + p.x * scale; // p.x ∈ [0, yOut] → [yIn, yOut]
-      const z = p.y + section.rocker;
+      let z = p.y + section.rocker;
+      if (ring) z += channelLift(board, ring, fs[i]!, x, mapped);
       if (!isFinite3(x, mapped, z)) {
         ok = false;
         break;
@@ -403,10 +423,10 @@ const tessellateCutout = (
       const b = rows[r + 1];
       if (!a || !b) continue;
       // Close the deck↔bottom wall (the ring's wrap edge) only inside the notch.
-      const cut = yIns[r]! > CUTOUT_EPS || yIns[r + 1]! > CUTOUT_EPS;
-      const lim = cut ? half : half - 1;
+      const wall = yIns[r]! > CUTOUT_EPS || yIns[r + 1]! > CUTOUT_EPS;
+      const lim = wall ? rowLength : rowLength - 1;
       for (let j = 0; j < lim; j++) {
-        const j1 = (j + 1) % half;
+        const j1 = (j + 1) % rowLength;
         const a0 = a[j]!;
         const a1 = a[j1]!;
         const b0 = b[j]!;

@@ -75,6 +75,7 @@ import {
   getWidthAtPos,
   type BezierBoard,
 } from './board';
+import { boardChannels, channelAnchors, channelDepthAt, splineSpan } from './channels';
 import { crossSection, scaleCrossSection, type CrossSection } from './cross-section';
 import { knot } from './knot';
 import { vec2, type Vec2 } from './vec2';
@@ -351,8 +352,181 @@ const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
   return out;
 };
 
+// --- channels: points on the walls, the bottom lifted ---------------------------
+
+/** Distance from the stringer for a profile point's distance from the centreline. */
+export type LateralMap = (px: number) => number;
+const IDENTITY: LateralMap = (px) => px;
+
+/** Samples used to find where a station's bottom ends. */
+const BOTTOM_END_SAMPLES = 64;
+
 /**
- * A full closed cross-section ring at station `x`, as `2 * ringHalf - 2` points.
+ * Where the station's bottom ends, as a fraction of its profile: the widest point,
+ * the rail's apex. Points before it are bottom, which channels cut; after it, deck.
+ */
+export const bottomEnd = (s: LoftedSection): number => {
+  let best = 0;
+  let widest = -Infinity;
+  for (let i = 0; i <= BOTTOM_END_SAMPLES; i++) {
+    const f = i / BOTTOM_END_SAMPLES;
+    const x = loftPoint(s, f).x;
+    if (x > widest) {
+      widest = x;
+      best = f;
+    }
+  }
+  return best;
+};
+
+/** Bisection steps finding a wall on a station: 2^-40 of the profile, far under a micron. */
+const WALL_STEPS = 40;
+
+/** The fraction on the bottom (0 to `end`) where the profile is `y` out from the stringer. */
+const bottomFractionAt = (s: LoftedSection, y: number, end: number, map: LateralMap): number => {
+  const at = (f: number) => map(loftPoint(s, f).x);
+  if (at(0) >= y) return 0;
+  if (at(end) <= y) return end;
+  let lo = 0;
+  let hi = end;
+  for (let i = 0; i < WALL_STEPS; i++) {
+    const m = (lo + hi) / 2;
+    if (at(m) < y) lo = m;
+    else hi = m;
+  }
+  return (lo + hi) / 2;
+};
+
+/** The share of a station's bottom anchors may use; the rest is left for the rail. */
+const ANCHOR_REACH = 0.95;
+
+/**
+ * The channel anchors at station `x` as fractions of its profile, never decreasing.
+ *
+ * Where they don't fit on this station's bottom (toward a pointed tail, where the
+ * walls are held past the channel's end, or in a swallow's notch, where the bottom
+ * starts off the stringer), they are moved onto it: shifted out to where the bottom
+ * starts and scaled in to {@link ANCHOR_REACH} of it. Clamping them instead would pile
+ * them onto one point, which a mesh welds into edges shared by four faces. Both moves
+ * are continuous in x and do nothing where the channels fit, so walls stay exact
+ * wherever they are cut; only where a channel runs off the bottom (a design problem,
+ * `channelProblems`) does its wall lose its edge.
+ */
+const anchorFractions = (
+  b: BezierBoard,
+  s: LoftedSection,
+  x: number,
+  end: number,
+  map: LateralMap,
+): number[] => {
+  const ys = channelAnchors(boardChannels(b), x);
+  const start = map(loftPoint(s, 0).x);
+  const reach = (map(loftPoint(s, end).x) - start) * ANCHOR_REACH;
+  const widest = ys.length ? ys[ys.length - 1]! : 0;
+  const k = widest > reach && widest > 0 ? Math.max(0, reach) / widest : 1;
+  const out = ys.map((y) => bottomFractionAt(s, start + y * k, end, map));
+  for (let i = 1; i < out.length; i++) out[i] = Math.max(out[i]!, out[i - 1]!);
+  return out;
+};
+
+/**
+ * A board's ring with channels: the ladder and the anchors in one fixed order, each
+ * entry placed between two of the knots `0, anchor 1, …, anchor k, 1` (interval `k`,
+ * share `t` along it). A station moves the anchors; every other point keeps its share
+ * of the interval it is in, so every ring has the same points in the same order, and
+ * anchor j is point `index[j]` everywhere: a wall is one unbroken edge of the mesh.
+ */
+interface RingPlan {
+  readonly k: readonly number[];
+  readonly t: readonly number[];
+}
+
+const PLAN_CACHE = new WeakMap<BezierBoard, Map<number, RingPlan | null>>();
+
+/** Where the plan takes its reference anchors: the middle of the first channel. */
+const referenceX = (b: BezierBoard): number => {
+  const [a, c] = splineSpan(boardChannels(b)[0]!.depth);
+  return Math.min(getLength(b), Math.max(0, (a + c) / 2));
+};
+
+const buildPlan = (
+  b: BezierBoard,
+  half: number,
+  mapAt: (x: number) => LateralMap,
+): RingPlan | null => {
+  const x = referenceX(b);
+  const s = loftSection(b, x);
+  if (!s) return null;
+  const ref = anchorFractions(b, s, x, bottomEnd(s), mapAt(x));
+  const knots = [0, ...ref, 1];
+  const entries: { f: number; k: number; t: number }[] = [];
+  for (const f of ringFractions(b, half)) {
+    if (f <= 0) entries.push({ f, k: 0, t: 0 });
+    else if (f >= 1) entries.push({ f, k: knots.length - 2, t: 1 });
+    else {
+      let k = 0;
+      while (k + 2 < knots.length && knots[k + 1]! <= f) k++;
+      const lo = knots[k]!;
+      const hi = knots[k + 1]!;
+      entries.push({ f, k, t: hi > lo ? (f - lo) / (hi - lo) : 0 });
+    }
+  }
+  ref.forEach((f, j) => entries.push({ f, k: j + 1, t: 0 }));
+  // Stable: a ladder point and an anchor at the same place keep this order everywhere.
+  entries.sort((p, q) => p.f - q.f || p.k - q.k || p.t - q.t);
+  return { k: entries.map((e) => e.k), t: entries.map((e) => e.t) };
+};
+
+/** A station's ring: fractions along its profile, and where its bottom ends. */
+export interface StationRing {
+  readonly fs: readonly number[];
+  /** Points before this fraction are on the bottom; channels lift them. */
+  readonly bottomEnd: number;
+}
+
+/**
+ * The ring fractions for station `x` of a board: {@link ringFractions} on a board
+ * without channels (the same array, so such a board's mesh is unchanged to the bit),
+ * and with channels the same ladder bent so a point lands exactly on every wall
+ * ({@link RingPlan}). `mapAt(x)` turns a profile's distance from the centreline into
+ * distance from the stringer, where a swallow tail's notch moves the profile out.
+ */
+export const stationRing = (
+  b: BezierBoard,
+  s: LoftedSection,
+  x: number,
+  half: number,
+  mapAt: (x: number) => LateralMap = () => IDENTITY,
+): StationRing => {
+  if (boardChannels(b).length === 0) return { fs: ringFractions(b, half), bottomEnd: 0 };
+  let plans = PLAN_CACHE.get(b);
+  if (!plans) {
+    plans = new Map();
+    PLAN_CACHE.set(b, plans);
+  }
+  if (!plans.has(half)) plans.set(half, buildPlan(b, half, mapAt));
+  const plan = plans.get(half);
+  const end = bottomEnd(s);
+  if (!plan) return { fs: ringFractions(b, half), bottomEnd: end };
+  const knots = [0, ...anchorFractions(b, s, x, end, mapAt(x)), 1];
+  const fs = plan.k.map((k, i) => {
+    const lo = knots[k]!;
+    return lo + (knots[k + 1]! - lo) * plan.t[i]!;
+  });
+  return { fs, bottomEnd: end };
+};
+
+/**
+ * How far the hull's surface point at fraction `f` of station `x` is lifted by the
+ * board's channels (cm): their depth where it is on the bottom, `y` out from the
+ * stringer; 0 on the deck and wherever there is no channel.
+ */
+export const channelLift = (b: BezierBoard, ring: StationRing, f: number, x: number, y: number) =>
+  f < ring.bottomEnd ? channelDepthAt(boardChannels(b), x, y) : 0;
+
+/**
+ * A full closed cross-section ring at station `x`, as `2 * ringHalf - 2` points (more
+ * with channels: see {@link stationRing}).
  *
  * Walks the +Y rail from the bottom centreline up to the deck centreline, then
  * mirrors the sweep back down the -Y rail, skipping the two shared centreline
@@ -364,20 +538,24 @@ export const loftRing = (b: BezierBoard, x: number, ringSteps: number): Vert3[] 
   if (!section) return null;
 
   const half = ringHalf(ringSteps);
-  const fs = ringFractions(b, half);
+  const plan = stationRing(b, section, x, half);
+  const fs = plan.fs;
+  const cut = boardChannels(b).length > 0;
   const ring: Vert3[] = [];
 
   const push = (f: number, mirror: boolean): boolean => {
     const p = loftPoint(section, f);
     const vy = mirror ? -p.x : p.x;
-    const vz = p.y + section.rocker;
+    let vz = p.y + section.rocker;
+    if (cut) vz += channelLift(b, plan, f, x, p.x);
     if (!isFinite3(x, vy, vz)) return false;
     ring.push({ x, y: vy, z: vz });
     return true;
   };
 
-  for (let i = 0; i < half; i++) if (!push(fs[i]!, false)) return null;
-  for (let i = half - 2; i >= 1; i--) if (!push(fs[i]!, true)) return null;
+  const n = fs.length;
+  for (let i = 0; i < n; i++) if (!push(fs[i]!, false)) return null;
+  for (let i = n - 2; i >= 1; i--) if (!push(fs[i]!, true)) return null;
 
   if (ring.length < 3) return null;
   return ring;
