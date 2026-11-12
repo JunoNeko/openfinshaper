@@ -84,11 +84,10 @@ They are not wired into the app's status bar yet.
 
 ## Not yet
 
-| Gap                       | Why it matters                                                                                                                                       |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Volume and specs          | They integrate the cross-sections, so they leave channels out: a few tenths of a litre on the test boards                                            |
-| 2D cross-section view     | Uses `loftCrossSection`, so it doesn't show channels                                                                                                 |
-| Rail bands                | Use `loftCrossSection` too                                                                                                                           |
-| STEP (`board-surface.ts`) | Fits through the ladder without channels; needs patches split at the walls (step 5)                                                                  |
-| Native file format and UI | Steps 2–4                                                                                                                                            |
-| `stl.ts`, ordinary tails  | Writes its faces inward (negative signed volume); OpenShaper has this too, and channels don't change it. Most slicers repair it; it should be fixed. |
+| Gap                       | Why it matters                                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Volume and specs          | They integrate the cross-sections, so they leave channels out: a few tenths of a litre on the test boards |
+| 2D cross-section view     | Uses `loftCrossSection`, so it doesn't show channels                                                      |
+| Rail bands                | Use `loftCrossSection` too                                                                                |
+| STEP (`board-surface.ts`) | Fits through the ladder without channels; needs patches split at the walls (step 5)                       |
+| Native file format and UI | Steps 2–4                                                                                                 |

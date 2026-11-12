@@ -150,15 +150,16 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
       const p2 = b[r]!;
       const p3 = b[r + 1]!;
       const p4 = a[r + 1]!;
-      writeFacet(out, p1, p2, p3);
-      writeFacet(out, p1, p3, p4);
+      // Wound so the faces point out of the board (the ring runs bottom → deck on +y).
+      writeFacet(out, p1, p3, p2);
+      writeFacet(out, p1, p4, p3);
       // mirrored -y side (reverse winding to keep normals outward)
       const m1 = { x: p1.x, y: -p1.y, z: p1.z };
       const m2 = { x: p2.x, y: -p2.y, z: p2.z };
       const m3 = { x: p3.x, y: -p3.y, z: p3.z };
       const m4 = { x: p4.x, y: -p4.y, z: p4.z };
-      writeFacet(out, m1, m3, m2);
-      writeFacet(out, m1, m4, m3);
+      writeFacet(out, m1, m2, m3);
+      writeFacet(out, m1, m3, m4);
     }
   }
 
@@ -254,9 +255,31 @@ export const exportStlAscii = (board: BezierBoard, opts: StlOptions = {}): strin
   return out.join('\n') + '\n';
 };
 
-/** Write every triangle of a kernel mesh as STL facets. */
-/** Append a mesh's triangles as facets, coordinates multiplied by `scale` (a unit change). */
+/**
+ * The volume a closed mesh encloses, signed: positive when its triangles are wound so
+ * their faces point out (the divergence theorem over the faces).
+ */
+const signedVolume = ({ positions: p, indices: ix }: BoardMesh): number => {
+  let v = 0;
+  for (let t = 0; t < ix.length; t += 3) {
+    const a = ix[t]! * 3;
+    const b = ix[t + 1]! * 3;
+    const c = ix[t + 2]! * 3;
+    v +=
+      p[a]! * (p[b + 1]! * p[c + 2]! - p[b + 2]! * p[c + 1]!) -
+      p[a + 1]! * (p[b]! * p[c + 2]! - p[b + 2]! * p[c]!) +
+      p[a + 2]! * (p[b]! * p[c + 1]! - p[b + 1]! * p[c]!);
+  }
+  return v / 6;
+};
+
+/**
+ * Append a mesh's triangles as facets, coordinates multiplied by `scale` (a unit change),
+ * wound so the faces point out of the solid: a mirrored fin's mesh comes wound inside
+ * out, and a slicer reads an inside-out solid as a hole.
+ */
 export const writeMesh = (out: number[], mesh: BoardMesh, scale = 1): void => {
+  const flip = signedVolume(mesh) < 0;
   const { positions, indices } = mesh;
   const at = (i: number): P3 =>
     scale === 1
@@ -267,6 +290,10 @@ export const writeMesh = (out: number[], mesh: BoardMesh, scale = 1): void => {
           z: positions[i * 3 + 2]! * scale,
         };
   for (let t = 0; t < indices.length; t += 3) {
-    writeFacet(out, at(indices[t]!), at(indices[t + 1]!), at(indices[t + 2]!));
+    const a = at(indices[t]!);
+    const b = at(indices[t + 1]!);
+    const c = at(indices[t + 2]!);
+    if (flip) writeFacet(out, a, c, b);
+    else writeFacet(out, a, b, c);
   }
 };
