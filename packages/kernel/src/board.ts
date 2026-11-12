@@ -24,7 +24,7 @@ import {
 } from './cross-section';
 import { adaptiveSimpson, simpsonIntegral, trapezoidIntegralXY } from './math';
 import { noFins, type FinConfig } from './fins';
-import type { BottomChannel } from './channels';
+import type { BoardChannels } from './channel-layout';
 import { cachedOutlineSegments, hasTailCutout, yInOut, type WidthBounds } from './outline-cutout';
 import { vec2, type Vec2 } from './vec2';
 
@@ -66,10 +66,11 @@ export interface BezierBoard {
   /** Parametric fin configuration (resolved to geometry on demand by `resolveFins`). */
   readonly fins: FinConfig;
   /**
-   * Bottom channels, cut into the hull by the loft (`channels.ts`). Absent on a board
-   * without any, so such a board is exactly what it was before channels existed.
+   * Bottom channels, typed in or drawn (`channel-layout.ts`), cut into the hull by the
+   * loft (`channels.ts`). Absent on a board without any, so such a board is exactly what
+   * it was before channels existed.
    */
-  readonly channels?: readonly BottomChannel[];
+  readonly channels?: BoardChannels;
 }
 
 // Legacy fixed integration resolutions (BezierBoard.*_SPLITS). These are NO LONGER
@@ -129,7 +130,7 @@ export const board = (
   crossSections: readonly CrossSection[],
   interpolationType: InterpolationType = 'controlPoint',
   fins: FinConfig = noFins(),
-  channels?: readonly BottomChannel[],
+  channels?: BoardChannels,
 ): BezierBoard => ({
   outline,
   bottom,
@@ -137,7 +138,7 @@ export const board = (
   crossSections,
   interpolationType,
   fins,
-  ...(channels?.length ? { channels } : {}),
+  ...(channels && (channels.from === 'numbers' || channels.channels.length) ? { channels } : {}),
 });
 
 // --- dimensions ---

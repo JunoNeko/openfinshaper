@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   board,
+  boardChannels,
+  defaultChannelParams,
   crossSection,
   defaultFinConfig,
   getLength,
@@ -208,5 +210,50 @@ describe('board-json handle-angle locks', () => {
     );
     doc.outline[1]!.l = 'locked';
     expect(() => readBoardJson(JSON.stringify(doc))).toThrow(BoardJsonError);
+  });
+});
+
+describe('board-json channels', () => {
+  const sb = () => loadBrd('shortboard');
+  const withChannels = (channels: Parameters<typeof board>[6]) => {
+    const b = sb();
+    return board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, channels); // prettier-ignore
+  };
+  const params = () => ({ ...defaultChannelParams(sb()), count: 5, layout: 'outline' as const });
+
+  it('round-trips typed-in channels exactly', () => {
+    const original = withChannels({ from: 'numbers', params: params() });
+    const { board: restored } = readBoardJson(writeBoardJson(original));
+    expect(restored.channels).toEqual(original.channels);
+    expect(boardChannels(restored)).toEqual(boardChannels(original));
+  });
+
+  it('round-trips drawn channels, a centred one too, and the numbers they came from', () => {
+    const typed = withChannels({ from: 'numbers', params: params() });
+    const drawn = withChannels({
+      from: 'drawn',
+      channels: boardChannels(typed).map((c, i) =>
+        i === 1 ? { ...c, wall: { shape: 'round', radius: 0.8 } } : c,
+      ),
+      params: params(),
+    });
+    expect(boardChannels(drawn)[0]!.inner).toBeNull();
+    const { board: restored } = readBoardJson(writeBoardJson(drawn));
+    expect(restored.channels).toEqual(drawn.channels);
+  });
+
+  it('writes nothing for a board without channels', () => {
+    expect(JSON.parse(writeBoardJson(sb())).channels).toBeUndefined();
+    expect(readBoardJson(writeBoardJson(sb())).board.channels).toBeUndefined();
+  });
+
+  it('refuses damaged channels', () => {
+    const doc = JSON.parse(writeBoardJson(withChannels({ from: 'numbers', params: params() })));
+    doc.channels.params.depth = 'deep';
+    expect(() => readBoardJson(JSON.stringify(doc))).toThrow(/channel numbers/);
+    doc.channels = { from: 'drawn', channels: [{ inner: null, outer: [], depth: [], wall: {} }] };
+    expect(() => readBoardJson(JSON.stringify(doc))).toThrow(BoardJsonError);
+    doc.channels = { from: 'sketched' };
+    expect(() => readBoardJson(JSON.stringify(doc))).toThrow(/typed in or drawn/);
   });
 });

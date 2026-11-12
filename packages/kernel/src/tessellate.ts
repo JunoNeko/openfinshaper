@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { getLength, getMaxThickness, getMaxWidth, getWidthAtPos, type BezierBoard } from './board';
-import { boardChannels } from './channels';
+import { boardChannels } from './channel-layout';
 import {
   MIN_DIM,
   channelLift,

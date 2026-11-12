@@ -5,7 +5,14 @@ import {
   railPresetById,
 } from '@openshaper/kernel';
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import type { FinSetup, FinSpec, FinSystem, InterpolationType, Spline } from '@openshaper/kernel';
+import type {
+  BoardChannels,
+  FinSetup,
+  FinSpec,
+  FinSystem,
+  InterpolationType,
+  Spline,
+} from '@openshaper/kernel';
 import {
   alignTangentsHorizontal,
   alignTangentsVertical,
@@ -27,6 +34,7 @@ import {
   setFinFromPlanPoint,
   setFinSetup,
   setFinSymmetrical,
+  withChannels,
   setFinSystem,
   setKnotContinuous,
   setKnotLock,
@@ -139,6 +147,8 @@ export interface BoardState {
   setFinSystem: (system: FinSystem) => void;
   /** Toggle symmetric port/starboard pair editing. */
   setFinSymmetrical: (symmetrical: boolean) => void;
+  /** Add, change or remove (`null`) the bottom channels: one undo step. */
+  setChannels: (channels: BoardChannels | null) => void;
   /** Patch one fin's parametric spec (distance, inset, base, depth, toe, cant, …). */
   updateFin: (index: number, patch: Partial<FinSpec>) => void;
   /** Re-place a fin from a dropped plan point (2D drag); keeps the fin's side. */
@@ -445,6 +455,17 @@ export const createBoardStore = (): StoreApi<BoardState> =>
         const { board } = get();
         if (!board || board.fins.symmetrical === symmetrical) return;
         commit(setFinSymmetrical(board, symmetrical), 'Toggle fin symmetry');
+      },
+
+      setChannels: (channels) => {
+        const { board } = get();
+        if (!board) return;
+        const next = withChannels(board, channels ?? undefined);
+        if (next.channels === board.channels) return;
+        commit(
+          next,
+          !channels ? 'Remove channels' : !board.channels ? 'Add channels' : 'Edit channels',
+        );
       },
 
       updateFin: (index, patch) => {

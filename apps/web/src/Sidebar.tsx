@@ -57,6 +57,7 @@ import { SUPPORT_URL } from './support';
 import type { BoardMeta } from './file-io';
 import { fmtDimsHeadline, fmtLen, fmtVol, parseLen, type LengthUnit } from './format';
 import type { TraceView, UseTrace } from './use-trace';
+import { ChannelPanel } from './ChannelPanel';
 import { FinPanel } from './FinPanel';
 import {
   anyOpen,
@@ -235,6 +236,16 @@ export const Sidebar = memo(function Sidebar({
     () => boardStore.getState().board?.fins ?? null,
   );
 
+  const channelSet = useSyncExternalStore(
+    boardStore.subscribe,
+    () => boardStore.getState().board?.channels ?? null,
+  );
+  const channelCount = !channelSet
+    ? ''
+    : channelSet.from === 'numbers'
+      ? `${Math.round(channelSet.params.count)}`
+      : `${channelSet.channels.length * 2} drawn`;
+
   const overlaysOn = Object.values(overlayToggles).filter(Boolean).length;
   const hasTrace = Boolean(trace.traces.outline || trace.traces.rocker);
 
@@ -263,6 +274,7 @@ export const Sidebar = memo(function Sidebar({
     controlPoint: <ControlPointInspector store={boardStore} units={units} />,
     analysis: <AnalysisSection overlayToggles={overlayToggles} setOverlay={setOverlay} />,
     boardInfo: <BoardInfoSection meta={meta} setMeta={setMeta} />,
+    channels: <ChannelPanel store={boardStore} units={units} />,
     fins: <FinPanel store={boardStore} units={units} />,
     weight: (
       <WeightSection
@@ -286,6 +298,7 @@ export const Sidebar = memo(function Sidebar({
     specs: specs ? fmtVol(specs.volume) : undefined,
     analysis: overlaysOn > 0 ? `${overlaysOn} on` : undefined,
     boardInfo: meta.model || undefined,
+    channels: channelCount || undefined,
     fins: fins ? FIN_SETUP_LABELS[fins.setup] : undefined,
     weight: weight ? fmtWeight(weight.total) : undefined,
     history: `${past.length} step${past.length === 1 ? '' : 's'}`,

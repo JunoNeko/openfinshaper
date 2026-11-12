@@ -28,7 +28,10 @@ const golden = resolve(here, '../../../docs/specs/golden');
 const shortboard = parseBrdGeometry(readFileSync(resolve(golden, 'shortboard.brd'), 'utf8'));
 
 const withChannels = (b: BezierBoard, channels: BottomChannel[]): BezierBoard =>
-  board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, channels);
+  board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, {
+    from: 'drawn',
+    channels,
+  });
 
 /**
  * A straight channel `yi`–`yo` cm out, full `depth` from `start` to `hold`, out by `end`.
@@ -205,7 +208,10 @@ describe('channels in the hull', () => {
       shortboard.crossSections,
       shortboard.interpolationType,
       shortboard.fins,
-      [straight(null, 6, depth, { shape: 'round', radius: 1 }, 50, 90, 0)],
+      {
+        from: 'drawn',
+        channels: [straight(null, 6, depth, { shape: 'round', radius: 1 }, 50, 90, 0)],
+      },
     );
     expect(hasTailCutout(fish.outline)).toBe(true);
     const mesh = tessellateBoard(fish, { lengthSteps: 60, ringSteps: 48 });

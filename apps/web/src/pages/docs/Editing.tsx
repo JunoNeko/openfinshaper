@@ -18,6 +18,7 @@ export default function DocsEditing() {
         { id: 'sections', label: 'Cross-sections' },
         { id: 'rails', label: 'Rail presets' },
         { id: 'tail', label: 'Concave tails' },
+        { id: 'channels', label: 'Channels' },
         { id: 'undo', label: 'Undo & history' },
       ]}
     >
@@ -257,6 +258,43 @@ export default function DocsEditing() {
         <p>
           One shape is not supported: a single notch only, so batwing tails with two cutouts cannot
           be described.
+        </p>
+      </Section>
+
+      <Section id="channels" title="Channels">
+        <p>
+          Grooves cut up into the bottom, usually running out toward the tail. Add them from{' '}
+          <strong>Channels</strong> in the Shape tab of the sidebar. They are cut into the 3D view
+          and the STL; volume, the cross-section view and STEP don&apos;t include them yet. Each
+          change is one undo step. They are saved in the <code>.board</code> file, autosave and
+          share links; the legacy <code>.brd</code> format has no place for them.
+        </p>
+        <Terms>
+          <Term name="How many">
+            Across the whole board. An even count puts half each side of the stringer; an odd count
+            puts one on the stringer as wide as the others.
+          </Term>
+          <Term name="Layout">
+            Straight, parallel to the stringer, or following the outline: each wall keeps its share
+            of the board&apos;s width, so the channels follow the rail and change with the outline.
+          </Term>
+          <Term name="Tail end, front end, fade in">
+            Where they run from and to, measured from the tail; a tail end of 0 runs them out
+            through it. They are full depth from the tail end and fade in smoothly over the last
+            stretch toward the front.
+          </Term>
+          <Term name="Spacing">
+            Stringer to first wall, rail to last wall, and the land between neighbouring channels,
+            all measured where the channels end at the tail; the channel width is what is left.
+          </Term>
+          <Term name="Walls">
+            Square (a vertical step), bevelled or rounded (over the width or radius you give), or
+            scooped (no step, deepest in the middle).
+          </Term>
+        </Terms>
+        <p>
+          The panel says when they don&apos;t fit: running off the bottom, deeper than half the
+          board&apos;s thickness, or too many for the width.
         </p>
       </Section>
 

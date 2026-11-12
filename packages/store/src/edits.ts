@@ -1,4 +1,5 @@
 import {
+  type BoardChannels,
   board,
   closestPointOnSpline,
   coeffsOf,
@@ -13,7 +14,7 @@ import {
   knotLock,
   mirrorFinIndex,
   maxX,
-  scaleChannels,
+  scaleBoardChannels,
   scaleSpline,
   splineFromKnots,
   splitCurve,
@@ -631,10 +632,14 @@ export const scaleBoard = (b: BezierBoard, fL: number, fW: number, fT: number): 
     b.crossSections.map((cs) => crossSection(cs.position * fL, scaleSpline(cs.spline, fT, fW))),
     b.interpolationType,
     scaleFins(b.fins, fL, fW, fT),
-    b.channels && scaleChannels(b.channels, fL, fW, fT),
+    b.channels && scaleBoardChannels(b.channels, fL, fW, fT),
   );
 
 // --- fins -------------------------------------------------------------------
+
+/** Return a new board with different channels, or none (`undefined`). */
+export const withChannels = (b: BezierBoard, channels: BoardChannels | undefined): BezierBoard =>
+  board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, channels);
 
 /** Return a new board with a different fin configuration. */
 export const withFins = (b: BezierBoard, fins: FinConfig): BezierBoard =>

@@ -16,8 +16,49 @@ A channel is two walls drawn in plan, a depth along the board and a wall shape:
 | `depth` | Spline of x against cut depth (cm); the channel is as long as this curve          |
 | `wall`  | `square` (vertical step), `bevel` (width), `round` (radius) or `scoop`            |
 
-Each channel is cut on both sides. Typed-in channels will only generate these curves
-(step 2), so straight and curved channels are one shape everywhere downstream.
+Each channel is cut on both sides.
+
+## Typed-in or drawn (`channel-layout.ts`)
+
+`BezierBoard.channels` is one of two kinds:
+
+- **Typed in:** `{ from: 'numbers', params }`. The curves are generated from the numbers
+  and the board each time (`layoutChannels`, memoised per board). Channels that follow
+  the outline therefore follow it as the outline is edited.
+- **Drawn:** `{ from: 'drawn', channels, params? }`. This is for walls reshaped by hand
+  (step 4). It keeps the numbers the channels started from.
+
+`boardChannels(b)` turns either kind into curves for the loft. Straight channels are
+just straight walls, so there is one shape everywhere downstream.
+
+The numbers (`ChannelParams`):
+
+| Number       | Meaning                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------- |
+| `count`      | Channels across the whole board; an odd count puts one on the stringer, as wide as the rest |
+| `layout`     | `parallel` (straight walls) or `outline` (each wall keeps its share of the half-width)      |
+| `depth`      | How deep they are cut                                                                       |
+| `tailEnd`    | Where they end at the tail, from the tail                                                   |
+| `length`     | Where they end at the front, from the tail                                                  |
+| `runIn`      | The length over which the depth fades in at the front, with flat ends (no kink)             |
+| `inner`      | From the stringer to the first wall                                                         |
+| `railMargin` | From the rail to the last wall                                                              |
+| `land`       | The flat bottom between neighbouring channels                                               |
+| `wall`       | Wall shape and size                                                                         |
+
+`inner`, `railMargin` and `land` are measured at the tail end; the channel width is
+whatever is left. Where nothing is left, no channels are made and
+`boardChannelProblems` says why. `defaultChannelParams` starts four channels where the
+tail has some width, which matters on a pointed tail.
+
+The panel is in the sidebar's Shape tab (`ChannelPanel.tsx`), and every change is one
+undo step (`setChannels`). Channels are saved in the `.board` file (`board-json.ts`, an
+optional `channels` block, still version 2), autosave and share links. Legacy `.brd`
+has no place for them.
+
+The print version routes the board editor at `/app` again; the public OpenShaper site
+serves only the fin designer. The precache guard no longer rejects the editor's code,
+but its page still stays out of the precache.
 `BezierBoard.channels` is absent on a board without channels, which is therefore exactly
 what it was before: `tessellateBoard`, the STL and every characterization snapshot are
 unchanged, byte for byte.
@@ -68,7 +109,7 @@ Measured on the golden shortboard, exporting STL at the default 0.5 cm face size
 - The outer wall stays inside the outline wherever the channel has depth.
 - The depth stays under half the thickness.
 
-They are not wired into the app's status bar yet.
+The Channels panel shows them.
 
 ## Tests (`channels.test.ts`)
 

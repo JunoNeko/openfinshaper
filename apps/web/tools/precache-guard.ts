@@ -74,9 +74,8 @@ export class PrecacheGuardError extends Error {
 }
 
 /**
- * Assert the precache contains exactly the fin designer's asset graph, and nothing
- * else: no other page, and none of the OpenShaper board editor this was forked from. Throws {@link PrecacheGuardError} on any
- * violation.
+ * Assert the precache holds the fin designer's shell, help and assets, and no other
+ * page. Throws {@link PrecacheGuardError} on any violation.
  */
 export function assertEditorPrecache(entries: readonly PrecacheEntry[]): void {
   const urls = entries.map((e) => e.url);
@@ -118,11 +117,8 @@ export function assertEditorPrecache(entries: readonly PrecacheEntry[]): void {
     problems.push(`no other page may be precached: ${otherHtml.join(', ')}`);
   }
 
-  // The board editor is unrouted, so its code should never be built at all.
-  const boardEditor = urls.filter((u) => /^assets\/EditorPage-/.test(u));
-  if (boardEditor.length > 0) {
-    problems.push(`the board editor must not ship: ${boardEditor.join(', ')}`);
-  }
+  // The print version routes the board editor again (/app), so its code ships; only its
+  // page stays out of the precache, by the HTML rule above.
 
   // A docs glob that matches nothing still builds — it just quietly ships help
   // that can't be read offline, which is the whole reason it's precached.

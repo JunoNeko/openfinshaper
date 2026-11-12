@@ -81,12 +81,12 @@ describe('assertEditorPrecache', () => {
     );
   });
 
-  // openfinshaper.com serves the fin designer alone: none of the board editor.
-  it('rejects the board editor, its shell or its code', () => {
+  // The print version routes the board editor: its code ships, its page isn't precached.
+  it('takes the board editor’s code, but not its page', () => {
     const shell = [...validManifest(), { url: 'app', revision: 'a' }];
     expect(messageOf(() => assertEditorPrecache(shell))).toMatch(/no other page.*app/);
     const code = [...validManifest(), { url: 'assets/EditorPage-DQk.js', revision: null }];
-    expect(messageOf(() => assertEditorPrecache(code))).toMatch(/board editor must not ship/);
+    expect(() => assertEditorPrecache(code)).not.toThrow();
   });
 
   it('rejects a missing offline fallback', () => {

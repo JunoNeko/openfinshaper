@@ -199,10 +199,6 @@ export const channelAnchors = (channels: readonly BottomChannel[], x: number): n
   return ys.map((y) => Math.max(0, y)).sort((a, b) => a - b);
 };
 
-/** The board's channels: none unless it has some. */
-export const boardChannels = (b: { readonly channels?: readonly BottomChannel[] }) =>
-  b.channels ?? [];
-
 /** Samples along a channel's length when checking it. */
 const CHECK_SAMPLES = 64;
 
@@ -250,6 +246,14 @@ export const channelProblems = (
   return out;
 };
 
+/** A wall's size scaled across the board by `fW`. */
+export const scaleWall = (w: ChannelWall, fW: number): ChannelWall =>
+  w.shape === 'bevel'
+    ? { shape: 'bevel', width: w.width * fW }
+    : w.shape === 'round'
+      ? { shape: 'round', radius: w.radius * fW }
+      : w;
+
 /** `channels` on a board scaled by `fL` along, `fW` across and `fT` in thickness. */
 export const scaleChannels = (
   channels: readonly BottomChannel[],
@@ -261,10 +265,5 @@ export const scaleChannels = (
     inner: c.inner && scaleSpline(c.inner, fW, fL),
     outer: scaleSpline(c.outer, fW, fL),
     depth: scaleSpline(c.depth, fT, fL),
-    wall:
-      c.wall.shape === 'bevel'
-        ? { shape: 'bevel', width: c.wall.width * fW }
-        : c.wall.shape === 'round'
-          ? { shape: 'round', radius: c.wall.radius * fW }
-          : c.wall,
+    wall: scaleWall(c.wall, fW),
   }));

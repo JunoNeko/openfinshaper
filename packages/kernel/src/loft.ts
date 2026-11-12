@@ -75,7 +75,8 @@ import {
   getWidthAtPos,
   type BezierBoard,
 } from './board';
-import { boardChannels, channelAnchors, channelDepthAt, splineSpan } from './channels';
+import { boardChannels } from './channel-layout';
+import { channelAnchors, channelDepthAt, splineSpan } from './channels';
 import { crossSection, scaleCrossSection, type CrossSection } from './cross-section';
 import { knot } from './knot';
 import { vec2, type Vec2 } from './vec2';
