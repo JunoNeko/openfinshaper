@@ -54,15 +54,30 @@ describe('<ChannelPanel />', () => {
     expect((screen.getByLabelText(/^From stringer/) as HTMLInputElement).disabled).toBe(true);
   });
 
-  it('asks for a size for bevelled and rounded walls', () => {
+  it('starts with sharp steps, and asks for the size each section has', () => {
     const store = setup();
     fireEvent.click(screen.getByRole('button', { name: 'Add channels' }));
-    expect(screen.queryByLabelText(/^Radius/)).toBeNull();
-    fireEvent.change(screen.getByTitle('How the bottom steps down into each channel'), {
-      target: { value: 'round' },
-    });
+    expect(params(store).wall).toEqual({ shape: 'step', radius: 0 });
+    typeInto(/^Corner radius/, '6');
+    const w = params(store).wall;
+    expect(w.shape === 'step' && w.radius).toBeCloseTo(0.6, 9);
+    const section = screen.getByTitle(/^The channel's cross-section/);
+    fireEvent.change(section, { target: { value: 'wave' } });
+    expect(params(store).wall).toEqual({ shape: 'wave' });
+    expect(screen.queryByLabelText(/^Corner radius|^Radius|^Bevel/)).toBeNull();
+    fireEvent.change(section, { target: { value: 'round' } });
     typeInto(/^Radius/, '8');
-    expect(params(store).wall).toEqual({ shape: 'round', radius: 0.8 });
+    const r = params(store).wall;
+    expect(r.shape === 'round' && r.radius).toBeCloseTo(0.8, 9);
+  });
+
+  it('takes the front spread and width as percentages', () => {
+    const store = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Add channels' }));
+    typeInto(/^Front spread/, '100');
+    typeInto(/^Front width/, '40');
+    expect(params(store).frontSpread).toBeCloseTo(1, 9);
+    expect(params(store).frontWidth).toBeCloseTo(0.4, 9);
   });
 
   it('says when they do not fit, and removes them', () => {

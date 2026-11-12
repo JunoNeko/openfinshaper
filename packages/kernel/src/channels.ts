@@ -37,16 +37,30 @@
  */
 import { scaleSpline, valueAt, type Spline } from './bezier-spline';
 
-/** How the bottom steps down into a channel, seen in cross-section. */
+/**
+ * A channel's cross-section: how deep it is cut at each point across it.
+ *
+ * The first three are the shapes shapers build most (the owner's reference sections):
+ * steps, scoops and waves, usually set side by side with no flat between them. The last
+ * three have a flat floor between two walls.
+ */
 export type ChannelWall =
-  /** A vertical step, the full depth at the wall. */
+  /**
+   * Deepest at a steep wall on the rail side, the floor ramping straight back up to
+   * nothing on the stringer side: a sawtooth, set side by side. `radius` (cm) rounds the
+   * corner where the floor meets the wall; 0 leaves it sharp.
+   */
+  | { readonly shape: 'step'; readonly radius: number }
+  /** A concave arc, deepest in the middle, meeting its neighbours in a sharp ridge. */
+  | { readonly shape: 'scoop' }
+  /** A smooth flute: no edge anywhere, its neighbours meeting in a rounded crest. */
+  | { readonly shape: 'wave' }
+  /** Flat floor, vertical walls: the full depth at each wall. */
   | { readonly shape: 'square' }
-  /** A straight ramp from the wall to full depth over `width` (cm). */
+  /** Flat floor, each wall a straight ramp to full depth over `width` (cm). */
   | { readonly shape: 'bevel'; readonly width: number }
-  /** A quarter round from the wall to full depth over `radius` (cm). */
-  | { readonly shape: 'round'; readonly radius: number }
-  /** A smooth scoop: no step at either wall, deepest in the middle. */
-  | { readonly shape: 'scoop' };
+  /** Flat floor, each wall a quarter round to full depth over `radius` (cm). */
+  | { readonly shape: 'round'; readonly radius: number };
 
 export interface BottomChannel {
   /** The wall nearer the stringer, or null: a channel centred on the stringer. */
@@ -99,26 +113,42 @@ const at = (c: BottomChannel, x: number): ChannelAtX => ({
   depth: channelFullDepth(c, x),
 });
 
-/** The share of full depth at distance `d` (cm) in from the nearer wall, `u` ∈ [0, 1] across. */
-const wallShare = (wall: ChannelWall, d: number, u: number): number => {
+/** A quarter round over `r` (cm): 0 on the wall, 1 at `r` in from it. */
+const quarterRound = (d: number, r: number): number => {
+  if (!(r > 0) || d >= r) return 1;
+  const t = 1 - d / r;
+  return Math.sqrt(Math.max(0, 1 - t * t));
+};
+
+/**
+ * The share of full depth at a point `dIn` (cm) out from the inner edge and `dOut` in
+ * from the outer wall, `u` = dIn / (dIn + dOut) across the channel.
+ */
+const profileShare = (wall: ChannelWall, dIn: number, dOut: number, u: number): number => {
+  const v = Math.min(1, Math.max(0, u));
   switch (wall.shape) {
+    case 'step':
+      return v * quarterRound(dOut, wall.radius);
+    case 'scoop':
+      return Math.sin(Math.PI * v);
+    case 'wave':
+      return (1 - Math.cos(2 * Math.PI * v)) / 2;
     case 'square':
       return 1;
     case 'bevel':
-      return wall.width > 0 ? Math.min(1, d / wall.width) : 1;
-    case 'round': {
-      if (!(wall.radius > 0) || d >= wall.radius) return 1;
-      const t = 1 - d / wall.radius;
-      return Math.sqrt(Math.max(0, 1 - t * t));
-    }
-    case 'scoop':
-      return Math.sin(Math.PI * Math.min(1, Math.max(0, u)));
+      return wall.width > 0 ? Math.min(1, Math.min(dIn, dOut) / wall.width) : 1;
+    case 'round':
+      return quarterRound(Math.min(dIn, dOut), wall.radius);
   }
 };
 
 /**
  * How far the bottom is cut up (cm) at station `x`, distance `y` from the stringer
  * (either side). 0 outside every channel. Where channels overlap, the deeper wins.
+ *
+ * A channel centred on the stringer (no inner wall) spans -yo to yo. A step is
+ * one-sided, so a centred step is two steps back to back: a V, nothing on the
+ * stringer, full depth at both walls.
  */
 export const channelDepthAt = (
   channels: readonly BottomChannel[],
@@ -130,24 +160,26 @@ export const channelDepthAt = (
   for (const c of channels) {
     const { yi, yo, depth } = at(c, x);
     if (depth <= 0) continue;
+    let share: number;
     if (yi === null) {
-      // Centred: one channel from -yo to yo, its only walls the outer ones.
-      if (ay > yo) continue;
-      const d = yo - ay;
-      const u = 0.5 + (0.5 * ay) / Math.max(yo, 1e-9); // the middle is u = 0.5
-      out = Math.max(out, depth * wallShare(c.wall, d, u));
+      if (ay > yo || yo <= 0) continue;
+      share =
+        c.wall.shape === 'step'
+          ? profileShare(c.wall, ay, yo - ay, ay / yo)
+          : profileShare(c.wall, yo + ay, yo - ay, 0.5 + (0.5 * ay) / yo);
     } else {
       if (ay < yi || ay > yo || yo - yi <= 0) continue;
-      const d = Math.min(ay - yi, yo - ay);
-      const u = (ay - yi) / (yo - yi);
-      out = Math.max(out, depth * wallShare(c.wall, d, u));
+      share = profileShare(c.wall, ay - yi, yo - ay, (ay - yi) / (yo - yi));
     }
+    out = Math.max(out, depth * share);
   }
   return out;
 };
 
 /** Points spread across a channel's floor, besides those its walls need. */
 export const CHANNEL_FLOOR_POINTS = 6;
+/** More across a curved floor (scoop, wave), whose whole width is shape. */
+export const CHANNEL_CURVE_POINTS = 12;
 
 /**
  * A square wall is a vertical step: two ring points this far (cm) either side of it,
@@ -155,27 +187,49 @@ export const CHANNEL_FLOOR_POINTS = 6;
  */
 export const SQUARE_WALL_GAP = 1e-4;
 
-/** Where a rounded wall gets points, as shares of its radius in from the wall. */
+/**
+ * The nearest a channel point comes to the stringer (cm). The ring already has a point
+ * there; one on top of it would make a zero-length edge.
+ */
+const OFF_STRINGER = 1e-3;
+
+/** Where a rounded corner gets points, as shares of its radius in from the wall. */
 const ROUND_STOPS = [0, 0.05, 0.2, 0.45, 1] as const;
 
-/** Offsets (cm) in from a wall that need a ring point, for its shape. */
-const wallStops = (wall: ChannelWall): readonly number[] => {
+/** Offsets (cm) in from the outer and inner walls that need a ring point, for the shape. */
+const wallStops = (wall: ChannelWall): { outer: readonly number[]; inner: readonly number[] } => {
   switch (wall.shape) {
-    case 'square':
-      return [-SQUARE_WALL_GAP, SQUARE_WALL_GAP];
-    case 'bevel':
-      return [0, wall.width];
-    case 'round':
-      return ROUND_STOPS.map((s) => s * wall.radius);
+    case 'step':
+      // A vertical drop at the outer wall, then its rounded corner; a crease at the inner edge.
+      return {
+        outer: [
+          -SQUARE_WALL_GAP,
+          SQUARE_WALL_GAP,
+          ...ROUND_STOPS.slice(1).map((s) => s * wall.radius),
+        ],
+        inner: [0],
+      };
     case 'scoop':
-      return [0];
+    case 'wave':
+      return { outer: [0], inner: [0] };
+    case 'square':
+      return {
+        outer: [-SQUARE_WALL_GAP, SQUARE_WALL_GAP],
+        inner: [-SQUARE_WALL_GAP, SQUARE_WALL_GAP],
+      };
+    case 'bevel':
+      return { outer: [0, wall.width], inner: [0, wall.width] };
+    case 'round': {
+      const stops = ROUND_STOPS.map((s) => s * wall.radius);
+      return { outer: stops, inner: stops };
+    }
   }
 };
 
 /**
  * The distances from the stringer (cm, ascending) at which the ring at station `x`
- * needs a point for the channels to be cut true: on each wall (both sides of a square
- * one), across a bevel or round, and spread over each floor.
+ * needs a point for the channels to be cut true: on each wall (both sides of a vertical
+ * one), across a bevel or rounded corner, and spread over each floor.
  *
  * The COUNT never depends on `x`: the mesh joins neighbouring rings point by point, so
  * every ring needs the same number in the same order. A channel is anchored even where
@@ -188,15 +242,16 @@ export const channelAnchors = (channels: readonly BottomChannel[], x: number): n
     const { yi, yo } = wallsAt(c, x);
     const lo = yi ?? 0;
     const inside = (y: number) => Math.min(yo + SQUARE_WALL_GAP, Math.max(lo - SQUARE_WALL_GAP, y));
-    for (const s of wallStops(c.wall)) {
-      ys.push(inside(yo - s));
-      if (yi !== null) ys.push(inside(yi + s));
-    }
-    for (let k = 1; k <= CHANNEL_FLOOR_POINTS; k++) {
-      ys.push(lo + ((yo - lo) * k) / (CHANNEL_FLOOR_POINTS + 1));
-    }
+    const stops = wallStops(c.wall);
+    for (const s of stops.outer) ys.push(inside(yo - s));
+    if (yi !== null) for (const s of stops.inner) ys.push(inside(yi + s));
+    const n =
+      c.wall.shape === 'scoop' || c.wall.shape === 'wave'
+        ? CHANNEL_CURVE_POINTS
+        : CHANNEL_FLOOR_POINTS;
+    for (let k = 1; k <= n; k++) ys.push(lo + ((yo - lo) * k) / (n + 1));
   }
-  return ys.map((y) => Math.max(0, y)).sort((a, b) => a - b);
+  return ys.map((y) => Math.max(OFF_STRINGER, y)).sort((a, b) => a - b);
 };
 
 /** Samples along a channel's length when checking it. */
@@ -234,8 +289,10 @@ export const channelProblems = (
     let tooDeep = false;
     for (let k = 0; k <= CHECK_SAMPLES; k++) {
       const x = a + ((b - a) * k) / CHECK_SAMPLES;
-      const { yi, yo, depth } = at(c, x);
-      if (yi !== null && yi >= yo) crossed = true;
+      const { yo, depth } = at(c, x);
+      // Unclamped: wallsAt holds the inner wall inside the outer one. Meeting (a channel
+      // tapered to a point) is fine; passing isn't.
+      if (c.inner && heldAt(c.inner, x) > heldAt(c.outer, x) + 1e-9) crossed = true;
       if (depth > 0 && yo >= halfWidth(x)) offBottom = true;
       if (depth > 0 && depth >= thickness(x) / 2) tooDeep = true;
     }
@@ -250,8 +307,8 @@ export const channelProblems = (
 export const scaleWall = (w: ChannelWall, fW: number): ChannelWall =>
   w.shape === 'bevel'
     ? { shape: 'bevel', width: w.width * fW }
-    : w.shape === 'round'
-      ? { shape: 'round', radius: w.radius * fW }
+    : w.shape === 'round' || w.shape === 'step'
+      ? { ...w, radius: w.radius * fW }
       : w;
 
 /** `channels` on a board scaled by `fL` along, `fW` across and `fT` in thickness. */

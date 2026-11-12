@@ -52,6 +52,17 @@ export interface ChannelParams {
   readonly railMargin: number;
   /** The flat bottom left between neighbouring channels. */
   readonly land: number;
+  /**
+   * Each channel's distance from the stringer at the front end, as a share of its distance
+   * at the tail end (its centre line's). 1 keeps them parallel; less fans them out toward
+   * the tail, as most are laid out. Older files have none: 1.
+   */
+  readonly frontSpread: number;
+  /**
+   * Each channel's width at the front end, as a share of its width at the tail end. 0
+   * starts it as a point, 1 keeps its width. Older files have none: 1.
+   */
+  readonly frontWidth: number;
   readonly wall: ChannelWall;
 }
 
@@ -68,25 +79,41 @@ export type BoardChannels =
 /** Most channels the dialog offers. */
 export const MAX_CHANNELS = 9;
 
-/** A start for typed-in channels on `b`: four, a hand's width either side of the stringer. */
+/** The narrowest a default channel is where it leaves the tail (cm). */
+const MIN_DEFAULT_WIDTH = 3;
+
+/**
+ * A start for typed-in channels on `b`, as most are built: four step channels side by
+ * side from the stringer to just inside the rail, starting as points about two fifths
+ * of the way up and fanning out to run out through the tail. On a tail too narrow or
+ * thin for that (a pin, or the golden boards' pointed tails) they end where it is
+ * wide and thick enough.
+ */
 export const defaultChannelParams = (b: BezierBoard): ChannelParams => {
   const L = getLength(b);
-  // From where the tail has some width: a pointed tail has none at x = 0.
+  const railMargin = 3;
   let tailEnd = 0;
-  while (tailEnd < L / 4 && getWidthAtPos(b, tailEnd) < getWidthAtPos(b, L / 2) * 0.55) {
-    tailEnd += 1;
-  }
+  const depth = 0.5;
+  // Where the tail is wide enough for two a side, and thick enough to cut them (the
+  // checks want under half the thickness).
+  const fits = (x: number) =>
+    (getWidthAtPos(b, x) / 2 - railMargin) / 2 >= MIN_DEFAULT_WIDTH &&
+    getThicknessAtPos(b, x) > depth * 2;
+  while (tailEnd < L / 4 && !fits(tailEnd)) tailEnd += 1;
+  const length = Math.min(L * 0.42, tailEnd + 80);
   return {
     count: 4,
     layout: 'parallel',
-    depth: 0.5,
+    depth,
     tailEnd,
-    length: Math.min(L * 0.4, tailEnd + 75),
-    runIn: 20,
-    inner: 3,
-    railMargin: 4,
-    land: 1.5,
-    wall: { shape: 'square' },
+    length,
+    runIn: Math.round((length - tailEnd) * 0.35),
+    inner: 0,
+    railMargin,
+    land: 0,
+    frontSpread: 0.7,
+    frontWidth: 0,
+    wall: { shape: 'step', radius: 0 },
   };
 };
 
@@ -139,12 +166,6 @@ const smoothThrough = (pts: readonly (readonly [number, number])[]): Spline =>
     }),
   );
 
-const straightWall = (x0: number, x1: number, y: number): Spline =>
-  splineFromKnots([
-    knot(vec2(x0, y), vec2(x0, y), vec2(x0 + (x1 - x0) / 3, y), true),
-    knot(vec2(x1, y), vec2(x1 - (x1 - x0) / 3, y), vec2(x1, y), true),
-  ]);
-
 /** Full depth from the tail end, easing out to nothing over the run-in at the front. */
 const depthCurve = (p: ChannelParams): Spline => {
   const x0 = p.tailEnd;
@@ -171,21 +192,46 @@ export const layoutChannels = (b: BezierBoard, p: ChannelParams): BottomChannel[
   const across = wallsAcross(wRef, p);
   if (!across.length || !(wRef > 0)) return [];
   const depth = depthCurve(p);
-  const wall = (y: number): Spline => {
-    if (p.layout === 'parallel') return straightWall(p.tailEnd, p.length, y);
+  const spread = Number.isFinite(p.frontSpread) ? Math.max(0, p.frontSpread) : 1;
+  const narrow = Number.isFinite(p.frontWidth) ? Math.max(0, p.frontWidth) : 1;
+  /** A wall at `y` across the tail end, moved by `at(t)` along the channel (t: 0 tail, 1 front). */
+  const wall = (at: (t: number) => number): Spline => {
+    const span = p.length - p.tailEnd;
+    const onOutline = (x: number) => (p.layout === 'outline' ? half(x) / wRef : 1);
+    if (p.layout === 'parallel') {
+      // Straight lines, angled when the front differs from the tail.
+      const y0 = at(0);
+      const y1 = at(1);
+      return splineFromKnots([
+        knot(vec2(p.tailEnd, y0), vec2(p.tailEnd, y0), vec2(p.tailEnd + span / 3, y0 + (y1 - y0) / 3), true), // prettier-ignore
+        knot(vec2(p.length, y1), vec2(p.length - span / 3, y1 - (y1 - y0) / 3), vec2(p.length, y1), true), // prettier-ignore
+      ]);
+    }
     const pts: [number, number][] = [];
     for (let i = 0; i < OUTLINE_WALL_KNOTS; i++) {
-      const x = p.tailEnd + ((p.length - p.tailEnd) * i) / (OUTLINE_WALL_KNOTS - 1);
-      pts.push([x, (y * half(x)) / wRef]);
+      const t = i / (OUTLINE_WALL_KNOTS - 1);
+      const x = p.tailEnd + span * t;
+      pts.push([x, Math.max(0, at(t) * onOutline(x))]);
     }
     return smoothThrough(pts);
   };
-  return across.map(({ yi, yo }) => ({
-    inner: yi === null ? null : wall(yi),
-    outer: wall(yo),
-    depth,
-    wall: p.wall,
-  }));
+  const lerp = (a: number, c: number, t: number) => a + (c - a) * t;
+  return across.map(({ yi, yo }) => {
+    if (yi === null) {
+      // Centred: it stays on the stringer, narrowing to its front width.
+      return { inner: null, outer: wall((t) => yo * lerp(1, narrow, t)), depth, wall: p.wall };
+    }
+    const c0 = (yi + yo) / 2;
+    const w0 = yo - yi;
+    const centre = (t: number) => c0 * lerp(1, spread, t);
+    const width = (t: number) => w0 * lerp(1, narrow, t);
+    return {
+      inner: wall((t) => Math.max(0, centre(t) - width(t) / 2)),
+      outer: wall((t) => centre(t) + width(t) / 2),
+      depth,
+      wall: p.wall,
+    };
+  });
 };
 
 const LAYOUT_CACHE = new WeakMap<BezierBoard, readonly BottomChannel[]>();

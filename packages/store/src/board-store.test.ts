@@ -908,6 +908,8 @@ describe('board store: channels', () => {
     inner: 2,
     railMargin: 3,
     land: 1,
+    frontSpread: 1,
+    frontWidth: 1,
     wall: { shape: 'square' as const },
   };
 

@@ -101,6 +101,68 @@ describe('channel depth across the board', () => {
   });
 });
 
+describe("the common sections, side by side (the owner's reference drawing)", () => {
+  /** Two channels a side from the stringer to 12 cm out, abutting, 0.4 deep. */
+  const pair = (wall: ChannelWall) => [straight(0, 6, 0.4, wall), straight(6, 12, 0.4, wall)];
+  const d = (wall: ChannelWall, y: number) => channelDepthAt(pair(wall), 20, y);
+
+  it('steps: deepest at the rail-side wall, ramping straight back to nothing at the stringer side', () => {
+    const step: ChannelWall = { shape: 'step', radius: 0 };
+    expect(d(step, 0.001)).toBeCloseTo(0, 3);
+    expect(d(step, 3)).toBeCloseTo(0.2, 9);
+    expect(d(step, 5.999)).toBeCloseTo(0.4, 3);
+    // Over the wall: the next channel starts again from nothing.
+    expect(d(step, 6.001)).toBeCloseTo(0, 3);
+    expect(d(step, 9)).toBeCloseTo(0.2, 9);
+  });
+
+  it('steps with a rounded corner: still a vertical drop, the corner eased into the floor', () => {
+    const rounded: ChannelWall = { shape: 'step', radius: 0.5 };
+    expect(d(rounded, 6)).toBeCloseTo(0, 9); // the wall's top
+    expect(d(rounded, 5.75)).toBeLessThan(d({ shape: 'step', radius: 0 }, 5.75));
+    expect(d(rounded, 5.75)).toBeGreaterThan(0.3);
+    expect(d(rounded, 5)).toBeCloseTo((5 / 6) * 0.4, 9); // past the radius: the plain ramp
+  });
+
+  it('scoops: arcs deepest midway, meeting in a sharp ridge', () => {
+    const scoop: ChannelWall = { shape: 'scoop' };
+    expect(d(scoop, 3)).toBeCloseTo(0.4, 9);
+    expect(d(scoop, 6)).toBeCloseTo(0, 9);
+    const slope = (y: number) => (d(scoop, y + 1e-4) - d(scoop, y - 1e-4)) / 2e-4;
+    expect(slope(6 - 0.01)).toBeLessThan(-0.15); // falling into the ridge...
+    expect(slope(6 + 0.01)).toBeGreaterThan(0.15); // ...and rising out: an edge
+  });
+
+  it('waves: smooth all the way across, a rounded crest between neighbours', () => {
+    const wave: ChannelWall = { shape: 'wave' };
+    expect(d(wave, 3)).toBeCloseTo(0.4, 9);
+    expect(d(wave, 6)).toBeCloseTo(0, 9);
+    const slope = (y: number) => (d(wave, y + 1e-4) - d(wave, y - 1e-4)) / 2e-4;
+    expect(Math.abs(slope(6 - 0.01))).toBeLessThan(0.01);
+    expect(Math.abs(slope(6 + 0.01))).toBeLessThan(0.01);
+  });
+
+  it('a centred step is a V: nothing on the stringer, full depth at both walls', () => {
+    const v = [straight(null, 6, 0.4, { shape: 'step', radius: 0 })];
+    expect(channelDepthAt(v, 20, 0)).toBeCloseTo(0, 9);
+    expect(channelDepthAt(v, 20, 3)).toBeCloseTo(0.2, 9);
+    expect(channelDepthAt(v, 20, -5.999)).toBeCloseTo(0.4, 3);
+  });
+
+  it('cuts all four into a watertight hull', () => {
+    for (const wall of [
+      { shape: 'step', radius: 0 },
+      { shape: 'step', radius: 0.4 },
+      { shape: 'scoop' },
+      { shape: 'wave' },
+    ] as ChannelWall[]) {
+      const b = withChannels(shortboard, pair(wall));
+      const mesh = tessellateBoard(b, { lengthSteps: 50, ringSteps: 48 });
+      expect(badEdges(mesh), wall.shape).toBe(0);
+    }
+  });
+});
+
 describe('channel anchors', () => {
   it('are the same number at every station, sorted, on the walls', () => {
     const c = [straight(4, 10, 0.5), straight(null, 2, 0.3, { shape: 'round', radius: 0.5 })];
@@ -112,6 +174,11 @@ describe('channel anchors', () => {
     expect(ys).toEqual([...ys].sort((a, b) => a - b));
     expect(ys).toContain(4 - SQUARE_WALL_GAP);
     expect(ys).toContain(10 + SQUARE_WALL_GAP);
+  });
+
+  it('never land on the stringer, where the ring already has a point', () => {
+    const c = [straight(0, 6, 0.4, { shape: 'step', radius: 0 })];
+    expect(Math.min(...channelAnchors(c, 20))).toBeGreaterThan(0);
   });
 });
 

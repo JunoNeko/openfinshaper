@@ -22,7 +22,7 @@ import type { BoardState } from '@openshaper/store';
 import { Button } from '@openshaper/ui';
 import { useSyncExternalStore } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
-import { LenField } from './components/fields';
+import { LenField, PctField } from './components/fields';
 import type { LengthUnit } from './format';
 import { Sel } from './view-toolkit';
 
@@ -33,10 +33,12 @@ const LAYOUTS: { value: ChannelLayout; label: string }[] = [
 
 type WallShape = ChannelWall['shape'];
 const WALLS: { value: WallShape; label: string }[] = [
-  { value: 'square', label: 'Square' },
-  { value: 'bevel', label: 'Bevelled' },
-  { value: 'round', label: 'Rounded' },
-  { value: 'scoop', label: 'Scooped' },
+  { value: 'step', label: 'Step' },
+  { value: 'scoop', label: 'Scoop' },
+  { value: 'wave', label: 'Wave' },
+  { value: 'square', label: 'Flat, square' },
+  { value: 'bevel', label: 'Flat, bevelled' },
+  { value: 'round', label: 'Flat, rounded' },
 ];
 
 const COUNTS = Array.from({ length: MAX_CHANNELS }, (_, i) => {
@@ -45,18 +47,29 @@ const COUNTS = Array.from({ length: MAX_CHANNELS }, (_, i) => {
   return { value: String(n), label };
 });
 
-/** A wall of `shape`, keeping the size the current one has (or a starting size). */
-const wallOf = (shape: WallShape, current: ChannelWall, size: number): ChannelWall =>
-  shape === 'bevel'
-    ? { shape, width: size }
-    : shape === 'round'
-      ? { shape, radius: size }
-      : shape === current.shape
-        ? current
-        : { shape };
+/** A section of `shape` with `size` (its corner radius, bevel width or radius, cm). */
+const wallOf = (shape: WallShape, size: number): ChannelWall => {
+  switch (shape) {
+    case 'step':
+      return { shape, radius: size };
+    case 'bevel':
+      return { shape, width: size };
+    case 'round':
+      return { shape, radius: size };
+    default:
+      return { shape };
+  }
+};
 
-const wallSize = (w: ChannelWall): number =>
-  w.shape === 'bevel' ? w.width : w.shape === 'round' ? w.radius : 1;
+const wallSize = (w: ChannelWall): number | null =>
+  w.shape === 'bevel' ? w.width : w.shape === 'round' || w.shape === 'step' ? w.radius : null;
+
+/** What the size field is called for each section that has one. */
+const SIZE_LABELS: Partial<Record<WallShape, string>> = {
+  step: 'Corner radius',
+  bevel: 'Bevel width',
+  round: 'Radius',
+};
 
 function ChannelFields({
   params,
@@ -133,23 +146,45 @@ function ChannelFields({
         units={units}
         onCommit={(v) => set({ land: pos(v) })}
       />
+      <PctField
+        label="Front spread"
+        share={params.frontSpread}
+        title="Each channel's distance from the stringer at the front end, as a share of it at the tail end: 100 % parallel, less fans them out toward the tail"
+        onCommit={(v) => set({ frontSpread: Math.min(2, pos(v)) })}
+      />
+      <PctField
+        label="Front width"
+        share={params.frontWidth}
+        title="Each channel's width at the front end, as a share of it at the tail end: 0 % starts it as a point"
+        onCommit={(v) => set({ frontWidth: Math.min(2, pos(v)) })}
+      />
       <label className="flex items-center gap-2">
-        <span className="flex-1 text-muted-foreground">Walls</span>
+        <span className="flex-1 text-muted-foreground">Section</span>
         <Sel
           value={params.wall.shape}
-          onChange={(shape) =>
-            set({ wall: wallOf(shape, params.wall, Math.max(0.2, wallSize(params.wall))) })
-          }
+          onChange={(shape) => {
+            const size = wallSize(params.wall);
+            // A step's corner starts sharp; a flat floor's wall starts at 2 mm.
+            const fallback = shape === 'step' ? 0 : 0.2;
+            set({ wall: wallOf(shape, size === null ? fallback : size) });
+          }}
           options={WALLS}
-          title="How the bottom steps down into each channel"
+          title="The channel's cross-section: step (deepest at the rail-side wall), scoop, wave, or a flat floor between two walls"
         />
       </label>
-      {(params.wall.shape === 'bevel' || params.wall.shape === 'round') && (
+      {SIZE_LABELS[params.wall.shape] && (
         <LenField
-          label={params.wall.shape === 'bevel' ? 'Bevel width' : 'Radius'}
-          valueCm={wallSize(params.wall)}
+          label={SIZE_LABELS[params.wall.shape]!}
+          valueCm={wallSize(params.wall) ?? 0}
           units={units}
-          onCommit={(v) => set({ wall: wallOf(params.wall.shape, params.wall, Math.max(0.05, v)) })}
+          onCommit={(v) =>
+            set({
+              wall: wallOf(
+                params.wall.shape,
+                params.wall.shape === 'step' ? pos(v) : Math.max(0.05, v),
+              ),
+            })
+          }
         />
       )}
     </div>
@@ -203,9 +238,9 @@ export function ChannelPanel({ store, units }: { store: StoreApi<BoardState>; un
       {channels && (
         <>
           <p className="text-xs text-muted-foreground">
-            Tail end and front end are from the tail; from stringer, from rail and land are measured
-            at the tail end. Cut into the 3D view and the STL; volume, the cross-section view and
-            STEP don&apos;t include them yet.
+            Tail end and front end are from the tail; a tail end of 0 runs them out through it. From
+            stringer, from rail and land are measured at the tail end. Cut into the 3D view and the
+            STL; volume, the cross-section view and STEP don&apos;t include them yet.
           </p>
           <Button size="sm" variant="ghost" onClick={() => setChannels(null)}>
             Remove channels

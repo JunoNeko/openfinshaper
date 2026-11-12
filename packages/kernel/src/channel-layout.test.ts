@@ -3,8 +3,10 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { valueAt } from './bezier-spline';
-import { board, getWidthAtPos, type BezierBoard } from './board';
+import { splineFromKnots, valueAt } from './bezier-spline';
+import { board, getLength, getWidthAtPos, type BezierBoard } from './board';
+import { knot, knotFromArray } from './knot';
+import { vec2 } from './vec2';
 import {
   boardChannelProblems,
   boardChannels,
@@ -32,6 +34,8 @@ const P: ChannelParams = {
   inner: 3,
   railMargin: 4,
   land: 1.5,
+  frontSpread: 1,
+  frontWidth: 1,
   wall: { shape: 'square' },
 };
 const typed = (p: Partial<ChannelParams> = {}): BezierBoard => {
@@ -116,5 +120,72 @@ describe('typed-in channels', () => {
       from: 'numbers',
       params: { ...P, depth: 0.25, tailEnd: 30, length: 150, runIn: 40, inner: 4.5, railMargin: 6, land: 2.25 }, // prettier-ignore
     });
+  });
+
+  it('set side by side from the stringer: steps that abut, no land, no inner offset', () => {
+    const b = typed({ inner: 0, land: 0, wall: { shape: 'step', radius: 0 } });
+    const w = wallsAt(b, 20) as [number, number][];
+    const [i1, o1] = w[0]!;
+    const [i2, o2] = w[1]!;
+    expect(i1).toBe(0);
+    expect(i2).toBeCloseTo(o1!, 9);
+    expect(o2).toBeCloseTo(half(15) - 4, 9);
+    const cs = boardChannels(b);
+    expect(channelDepthAt(cs, 20, o1! - 1e-3)).toBeCloseTo(0.5, 2); // deep at the wall
+    expect(channelDepthAt(cs, 20, o1! + 1e-3)).toBeCloseTo(0, 2); // the next starts afresh
+  });
+
+  it('fan out toward the tail and start as points, when asked', () => {
+    const b = typed({ frontSpread: 0.6, frontWidth: 0 });
+    const cs = boardChannels(b);
+    const tail = wallsAt(b, 15) as [number, number][];
+    const front = wallsAt(b, 75) as [number, number][];
+    cs.forEach((_, k) => {
+      const centre = (tail[k]![0] + tail[k]![1]) / 2;
+      expect(front[k]![0]).toBeCloseTo(front[k]![1], 9); // a point
+      expect(front[k]![0]).toBeCloseTo(centre * 0.6, 9); // nearer the stringer
+    });
+    // Halfway, half as much narrower.
+    const mid = wallsAt(b, 45) as [number, number][];
+    expect(mid[0]![1] - mid[0]![0]).toBeCloseTo((tail[0]![1] - tail[0]![0]) / 2, 9);
+    expect(boardChannelProblems(b)).toEqual([]);
+  });
+});
+
+describe('the default channels', () => {
+  it('run out through a tail wide enough, as steps side by side', () => {
+    const L = getLength(shortboard);
+    const third = (ax: number, ay: number, bx: number, by: number): [number, number] => [
+      ax + (bx - ax) / 3,
+      ay + (by - ay) / 3,
+    ];
+    // A swallow 18 cm wide at the tips: wide enough for channels to run out.
+    const swallow = splineFromKnots([
+      knotFromArray([18, 0, 18, 0, ...third(18, 0, 0, 9)], false, false),
+      knotFromArray([0, 9, ...third(0, 9, 18, 0), ...third(0, 9, 90, 23.5)], false, false),
+      knotFromArray([90, 23.5, ...third(90, 23.5, 0, 9), ...third(90, 23.5, L, 0)], false, false),
+      knotFromArray([L, 0, ...third(L, 0, 90, 23.5), L, 0], false, false),
+    ]);
+    const s = shortboard;
+    // The golden deck meets the bottom at the tail; a real tail is a couple of cm thick.
+    const deck = splineFromKnots(
+      s.deck.knots.map((k) =>
+        knot(
+          vec2(k.end.x, k.end.y + 2),
+          vec2(k.tangentToPrev.x, k.tangentToPrev.y + 2),
+          vec2(k.tangentToNext.x, k.tangentToNext.y + 2),
+          k.continuous,
+        ),
+      ),
+    );
+    const fish = board(swallow, s.bottom, deck, s.crossSections, s.interpolationType, s.fins);
+    const p = defaultChannelParams(fish);
+    expect(p.tailEnd).toBe(0);
+    expect(p.wall).toEqual({ shape: 'step', radius: 0 });
+    expect([p.inner, p.land, p.frontWidth]).toEqual([0, 0, 0]);
+    const cut = board(swallow, s.bottom, deck, s.crossSections, s.interpolationType, s.fins, { from: 'numbers', params: p }); // prettier-ignore
+    expect(boardChannelProblems(cut)).toEqual([]);
+    const mesh = tessellateBoard(cut, { lengthSteps: 40, ringSteps: 40 });
+    expect(mesh.positions.every(Number.isFinite)).toBe(true);
   });
 });

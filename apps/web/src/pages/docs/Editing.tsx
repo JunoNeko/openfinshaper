@@ -280,16 +280,24 @@ export default function DocsEditing() {
           </Term>
           <Term name="Tail end, front end, fade in">
             Where they run from and to, measured from the tail; a tail end of 0 runs them out
-            through it. They are full depth from the tail end and fade in smoothly over the last
-            stretch toward the front.
+            through it, as most are built. They are full depth from the tail end and fade in
+            smoothly over the last stretch toward the front.
           </Term>
           <Term name="Spacing">
-            Stringer to first wall, rail to last wall, and the land between neighbouring channels,
-            all measured where the channels end at the tail; the channel width is what is left.
+            From stringer, from rail, and the land between neighbouring channels, all measured where
+            the channels end at the tail; the channel width is what is left. With both 0, the
+            channels sit side by side from the stringer out.
           </Term>
-          <Term name="Walls">
-            Square (a vertical step), bevelled or rounded (over the width or radius you give), or
-            scooped (no step, deepest in the middle).
+          <Term name="Front spread, front width">
+            Each channel&apos;s distance from the stringer and its width at the front end, as a
+            share of the same at the tail end. Spread under 100 % fans the channels out toward the
+            tail; a width of 0 % starts each one as a point.
+          </Term>
+          <Term name="Section">
+            Step: deepest at a steep wall on the rail side, the floor ramping back up to nothing
+            toward the stringer, with an optional corner radius where floor meets wall. Scoop: a
+            concave arc, neighbours meeting in a sharp ridge. Wave: smooth flutes with rounded
+            crests. Or a flat floor between square, bevelled or rounded walls.
           </Term>
         </Terms>
         <p>

@@ -132,3 +132,48 @@ The Channels panel shows them.
 | Rail bands                | Use `loftCrossSection` too                                                                                |
 | STEP (`board-surface.ts`) | Fits through the ladder without channels; needs patches split at the walls (step 5)                       |
 | Native file format and UI | Steps 2–4                                                                                                 |
+
+## Sections as built (owner review, 2026-11)
+
+The first version cut flat-floored channels with lands, parallel or following the
+outline, and its default usually stopped short of the tail. The owner's reference
+drawing (four sections, two channels a side, side by side from the stringer to the rail)
+and photos showed what shapers build:
+
+| Section      | What it is                                                                                                            |
+| ------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Step         | Deepest at a steep wall on the rail side; the floor ramps straight back up to nothing toward the stringer. A sawtooth |
+| Rounded step | The same, with a radius where the floor meets the wall                                                                |
+| Scoop        | Concave arcs meeting in sharp ridges; the stringer is a ridge                                                         |
+| Wave         | Smooth flutes with rounded crests                                                                                     |
+
+The photos add placement: channels exit through the tail, start as points well up the
+board, and fan out toward the tail.
+
+So `ChannelWall` gained `step` (with a corner `radius`, 0 sharp) and `wave`, beside the
+existing `scoop` and the flat-floored `square`, `bevel` and `round`. Depth is now worked
+from each wall separately (`profileShare(dIn, dOut, u)`), so a section can be one-sided:
+
+- **step** is u × a quarter round within `radius` of the outer wall, a vertical drop
+  there;
+- **wave** is (1 − cos 2πu) / 2;
+- a channel centred on the stringer with a step section is a V.
+
+Anchors follow each section:
+
+- a step gets a vertical pair at its wall, points round its corner and a crease at its
+  inner edge;
+- scoops and waves get twelve floor points;
+- no anchor lands on the stringer itself (`OFF_STRINGER`), so channels that start there
+  don't put a second point on the ring's own.
+
+`frontSpread` and `frontWidth` move each channel's centre line and width linearly from
+the tail end to the front end, so walls stay straight in the straight layout. Files from
+before have neither and read as 1 (unchanged).
+
+`defaultChannelParams` is now that common build:
+
+- four steps side by side from the stringer to 3 cm inside the rail;
+- starting as points about two fifths of the way up, with a 70 % spread;
+- running out through the tail wherever it is wide enough for 3 cm channels and thick
+  enough for the 5 mm depth to stay under half of it.

@@ -88,3 +88,37 @@ export function DegField({
     </label>
   );
 }
+
+/** Editable percentage field: shows `share` × 100, commits the share (0–1 for 0–100 %). */
+export function PctField({
+  label,
+  share,
+  onCommit,
+  title,
+}: {
+  label: string;
+  share: number;
+  onCommit: (share: number) => void;
+  title?: string;
+}) {
+  const shown = String(Math.round(share * 100));
+  const [text, setText] = useSyncedText(shown);
+  const commit = () => {
+    const n = Number.parseFloat(text);
+    if (Number.isFinite(n)) onCommit(n / 100);
+    else setText(shown);
+  };
+  return (
+    <label className="flex items-center gap-2" title={title}>
+      <span className="flex-1 text-muted-foreground">{label}</span>
+      <NumericInput
+        value={text}
+        onValueChange={setText}
+        onCommit={commit}
+        onEscape={() => setText(shown)}
+        className="w-20 tabular-nums"
+      />
+      <span className="w-6 text-xs text-muted-foreground">%</span>
+    </label>
+  );
+}

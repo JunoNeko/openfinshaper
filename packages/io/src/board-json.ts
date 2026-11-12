@@ -104,7 +104,9 @@ const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFi
 
 const wallFromJson = (w: unknown, where: string): ChannelWall => {
   if (isObject(w)) {
-    if (w.shape === 'square' || w.shape === 'scoop') return { shape: w.shape };
+    if (w.shape === 'square' || w.shape === 'scoop' || w.shape === 'wave')
+      return { shape: w.shape };
+    if (w.shape === 'step' && finite(w.radius)) return { shape: 'step', radius: w.radius };
     if (w.shape === 'bevel' && finite(w.width)) return { shape: 'bevel', width: w.width };
     if (w.shape === 'round' && finite(w.radius)) return { shape: 'round', radius: w.radius };
   }
@@ -131,6 +133,9 @@ const paramsFromJson = (p: unknown): ChannelParams => {
     inner: n('inner'),
     railMargin: n('railMargin'),
     land: n('land'),
+    // Added after the first channel files: absent means unchanged along the channel.
+    frontSpread: finite(p.frontSpread) ? p.frontSpread : 1,
+    frontWidth: finite(p.frontWidth) ? p.frontWidth : 1,
     wall: wallFromJson(p.wall, 'the channel numbers'),
   };
 };
