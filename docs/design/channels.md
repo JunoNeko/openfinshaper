@@ -87,10 +87,21 @@ matching points on them. Instead:
    Each other station moves the anchors to its own walls; every other point keeps its
    share of the gap it sits in. So anchor j is the same point index in every ring, and a
    wall is an unbroken edge of the mesh rather than a zigzag.
-4. **Anchors that don't fit the bottom are moved onto it.** This happens toward a pointed
-   tail, where the walls are held past the channel's end, and in a swallow's notch. The
-   anchors are scaled in or shifted out, continuously, instead of being clamped: clamping
-   piles them onto one point, which a welded mesh turns into edges shared by four faces.
+4. **Anchors that don't fit the bottom are moved onto it.** This happens where a
+   channel is designed off the bottom near the tail, toward a pointed tail (where walls
+   are held past the channel's end), and in a swallow's notch. Clamping would pile the
+   anchors onto one point, which a welded mesh turns into edges shared by four faces.
+   Instead `ontoBottom` maps them with a strictly increasing function that is continuous
+   along the board:
+   - every anchor short of the last centimetre of the bottom keeps its exact place;
+   - the anchors past it are squeezed smoothly into that band;
+   - only where the anchors run past twice the bottom's reach (a pointed tail) does it
+     blend over to scaling them all in.
+
+   So a channel designed off the rail loses only its own wall there. The first version
+   scaled every anchor in whenever any ran off. On the owner's board, an outer channel
+   11 cm out on a tail 10.6 cm across the half moved the shared wall at 5.5 cm off its
+   place, which smeared it into a 1 cm ramp near the tail: a scallop.
    Where a channel fits, nothing moves.
 
 Both loft paths do this: `loftRing` (ordinary tails, the 3D view) and `tessellateCutout`

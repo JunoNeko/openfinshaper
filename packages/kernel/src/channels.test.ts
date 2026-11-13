@@ -176,6 +176,28 @@ describe("the common sections, side by side (the owner's reference drawing)", ()
   });
 });
 
+describe('a channel designed off the bottom', () => {
+  it("loses its own edge where it runs off, but its neighbour's wall stays exact (owner's tail scallop)", () => {
+    // Two side by side from 5 cm up the golden shortboard's pointed tail, 5 cm wide each:
+    // the outer one's wall, 10 cm out, runs past the bottom there; the shared one fits.
+    const sq: ChannelWall = { shape: 'square' };
+    const pair = [straight(0, 5, 0.5, sq, 40, 60, 5), straight(5, 10, 0.5, sq, 40, 60, 5)];
+    const b = withChannels(shortboard, pair);
+    const x = [...Array(20).keys()]
+      .map((i) => 5 + i * 0.25)
+      .find(
+        (v) => getWidthAtPos(shortboard, v) / 2 < 10.4 && getWidthAtPos(shortboard, v) / 2 > 9,
+      )!;
+    expect(x).toBeDefined();
+    const ring = loftRing(b, x, 64)!.filter((p) => p.y > 0);
+    // The square wall at 5 cm: a point a micron either side of it, as anywhere it fits.
+    for (const y of [5 - SQUARE_WALL_GAP, 5 + SQUARE_WALL_GAP]) {
+      expect(Math.min(...ring.map((p) => Math.abs(p.y - y)))).toBeLessThan(1e-6);
+    }
+    expect(channelProblems(pair, (v) => getWidthAtPos(shortboard, v) / 2, (v) => getThicknessAtPos(shortboard, v)).join()).toMatch(/runs off the bottom/); // prettier-ignore
+  });
+});
+
 describe('channel anchors', () => {
   it('are the same number at every station, sorted, on the walls', () => {
     const c = [straight(4, 10, 0.5), straight(null, 2, 0.3, { shape: 'round', radius: 0.5 })];

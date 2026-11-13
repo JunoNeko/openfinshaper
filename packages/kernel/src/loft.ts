@@ -404,17 +404,44 @@ const bottomFractionAt = (s: LoftedSection, y: number, end: number, map: Lateral
 /** The share of a station's bottom anchors may use; the rest is left for the rail. */
 const ANCHOR_REACH = 0.95;
 
+/** How much of the bottom, at most, just inside its reach takes the anchors that run past it (cm). */
+const SQUEEZE_BAND = 1;
+
+/**
+ * Where an anchor `y` out from the stringer goes on a bottom `reach` wide, the widest
+ * anchor being `widest`. Strictly increasing in `y` and continuous in all three, so the
+ * anchors keep their order, never meet, and move smoothly along the board.
+ *
+ * - Where they all fit, nothing moves.
+ * - Where some run past the reach (a channel designed off the bottom near the tail), the
+ *   anchors inside the last {@link SQUEEZE_BAND} before it, and those past it, are
+ *   squeezed smoothly into that band; every wall short of it stays exactly where it is.
+ * - Where they run far past it (toward a pointed tail, where walls are held past the
+ *   channel's end), squeezing would crowd them to nothing, so they are scaled in
+ *   together instead, blending over from the squeeze as `widest` passes twice the reach.
+ */
+const ontoBottom = (y: number, reach: number, widest: number): number => {
+  if (!(reach > 0)) return 0;
+  const band = Math.min(SQUEEZE_BAND, reach / 4);
+  const knee = reach - band;
+  const squeezed = y <= knee ? y : knee + band * (1 - Math.exp(-(y - knee) / band));
+  const w = Math.min(1, Math.max(0, widest / reach - 2));
+  if (w === 0) return squeezed;
+  const scaled = widest > reach ? (y * reach) / widest : y;
+  return (1 - w) * squeezed + w * scaled;
+};
+
 /**
  * The channel anchors at station `x` as fractions of its profile, never decreasing.
  *
- * Where they don't fit on this station's bottom (toward a pointed tail, where the
- * walls are held past the channel's end, or in a swallow's notch, where the bottom
- * starts off the stringer), they are moved onto it: shifted out to where the bottom
- * starts and scaled in to {@link ANCHOR_REACH} of it. Clamping them instead would pile
- * them onto one point, which a mesh welds into edges shared by four faces. Both moves
- * are continuous in x and do nothing where the channels fit, so walls stay exact
- * wherever they are cut; only where a channel runs off the bottom (a design problem,
- * `channelProblems`) does its wall lose its edge.
+ * Where they don't fit on this station's bottom (a channel designed off the bottom
+ * near the tail; toward a pointed tail, where the walls are held past the channel's
+ * end; in a swallow's notch, where the bottom starts off the stringer), they are moved
+ * onto it: shifted out to where the bottom starts, and those past {@link ANCHOR_REACH}
+ * of it brought inside ({@link ontoBottom}). Clamping them instead would pile them onto
+ * one point, which a mesh welds into edges shared by four faces. Every wall that fits
+ * keeps its exact place, so only a channel that runs off the bottom (a design problem,
+ * `channelProblems`) loses its edge, and its neighbours don't.
  */
 const anchorFractions = (
   b: BezierBoard,
@@ -427,8 +454,7 @@ const anchorFractions = (
   const start = map(loftPoint(s, 0).x);
   const reach = (map(loftPoint(s, end).x) - start) * ANCHOR_REACH;
   const widest = ys.length ? ys[ys.length - 1]! : 0;
-  const k = widest > reach && widest > 0 ? Math.max(0, reach) / widest : 1;
-  const out = ys.map((y) => bottomFractionAt(s, start + y * k, end, map));
+  const out = ys.map((y) => bottomFractionAt(s, start + ontoBottom(y, reach, widest), end, map));
   for (let i = 1; i < out.length; i++) out[i] = Math.max(out[i]!, out[i - 1]!);
   return out;
 };
