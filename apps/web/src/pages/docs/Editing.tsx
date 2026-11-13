@@ -307,6 +307,16 @@ export default function DocsEditing() {
           </Term>
         </Terms>
         <p>
+          <strong>Apply</strong> makes them editable. Each wall and each channel&apos;s depth gets a
+          point at every cross-section the channels pass, shown in green on the cross-section, with
+          their walls drawn on the outline. Drag a point on a wall to move the wall across; drag the
+          point where a channel is deepest to set its depth there. The change eases out to the
+          cross-sections either side, and side-by-side channels keep sharing their wall. The panel
+          shows each channel&apos;s offset, width and depth at the cross-section on show, live as
+          you drag. Add a cross-section to edit them somewhere new. <strong>Reset</strong> goes back
+          to the numbers they were applied from, clearing every edit.
+        </p>
+        <p>
           The panel says when they can&apos;t be cut: running off the bottom, deeper than half the
           board&apos;s thickness, or with no length.
         </p>

@@ -1,12 +1,18 @@
 import { stepExportSupport } from '@openshaper/export';
 import { decodeShareFragment, parseBrd, readBoardJson, writeBoardJson } from '@openshaper/io';
 import {
+  boardChannels,
   channelCut,
+  channelKeys,
+  moveChannelKey,
   loftCrossSection,
   getLength,
   resolveFins,
   type BezierBoard,
   type Spline,
+  type BoardChannels,
+  type ChannelKey,
+  valueAt,
 } from '@openshaper/kernel';
 import { type EditorOverlays, type SimilarityParams } from '@openshaper/render2d';
 import type { Board3DViewProps } from '@openshaper/render3d';
@@ -700,10 +706,60 @@ function AppShell() {
     [specs, foamType, glassSchedule],
   );
 
-  // The channels cut into the cross-section on show, drawn over it.
-  const sectionCut = useMemo(
-    () => (board && activeSectionX !== null ? channelCut(board, activeSectionX) : null),
-    [board, activeSectionX],
+  // The channels cut into the cross-section on show, drawn over it, with the keys of
+  // applied channels to drag.
+  const sectionCut = useMemo(() => {
+    if (!board || activeSectionX === null) return null;
+    const cut = channelCut(board, activeSectionX);
+    if (!cut) return null;
+    const keys = channelKeys(board, activeSectionX).map((k) => ({ id: k.id, p: k.p }));
+    return keys.length ? { ...cut, keys } : cut;
+  }, [board, activeSectionX]);
+  // The channels' walls in plan, on the outline.
+  const channelWalls = useMemo(() => {
+    const cs = board ? boardChannels(board) : [];
+    if (!cs.length) return undefined;
+    const line = (s: Spline) => {
+      const a = s.knots[0]!.end.x;
+      const z = s.knots[s.knots.length - 1]!.end.x;
+      return Array.from({ length: 49 }, (_, i) => {
+        const x = a + ((z - a) * i) / 48;
+        return { x, y: Math.max(0, valueAt(s, x)) };
+      });
+    };
+    return cs.flatMap((c) => (c.inner ? [line(c.inner), line(c.outer)] : [line(c.outer)]));
+  }, [board]);
+  // Dragging a key: the board's channels as the drag found them, so each move is worked
+  // from there (no drift), and the station it is on.
+  const activeXRef = useRef(activeSectionX);
+  activeXRef.current = activeSectionX;
+  const keyDrag = useRef<{
+    channels: Extract<BoardChannels, { from: 'drawn' }>;
+    key: ChannelKey;
+    x: number;
+  } | null>(null);
+  const onChannelKeyDrag = useCallback(
+    (id: string, delta: { x: number; y: number }, phase: 'start' | 'move') => {
+      const b = boardStore.getState().board;
+      const x = activeXRef.current;
+      if (phase === 'start') {
+        const key = b && x !== null ? channelKeys(b, x).find((k) => k.id === id) : undefined;
+        keyDrag.current =
+          key && b?.channels?.from === 'drawn' && x !== null
+            ? { channels: b.channels, key, x }
+            : null;
+        return;
+      }
+      const d = keyDrag.current;
+      if (!d) return;
+      const value = d.key.value + (d.key.part === 'depth' ? delta.y : delta.x);
+      const stations = (b?.crossSections ?? []).slice(1, -1).map((cs) => cs.position);
+      boardStore.getState().setChannels({
+        ...d.channels,
+        channels: moveChannelKey(d.channels.channels, d.x, d.key.k, d.key.part, value, stations, d.key.joined), // prettier-ignore
+      });
+    },
+    [],
   );
 
   const overlaysFor = (kind: EditorKind): EditorOverlays => {
@@ -725,6 +781,7 @@ function AppShell() {
         (kind === 'outline' || kind === 'rocker') && resolvedFins.length ? resolvedFins : undefined,
       finView: kind === 'rocker' ? 'profile' : 'plan',
       channelCut: kind === 'crossSection' && sectionCut ? sectionCut : undefined,
+      channelWalls: kind === 'outline' ? channelWalls : undefined,
     };
   };
 
@@ -1352,6 +1409,7 @@ function AppShell() {
     onAddSectionAt: addSectionAt,
     onScrub: scrubSection,
     overlays: overlaysFor(kind),
+    onChannelKeyDrag,
     onTunniChange: setTunniOverlay,
     ghostSplines: ghostSplinesFor(kind),
     ...(kind === 'crossSection' ? {} : traceProps(kind)),

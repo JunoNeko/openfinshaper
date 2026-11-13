@@ -65,7 +65,9 @@ import {
   arcLengthTable,
   pointAtArcFraction,
   splineFromKnots,
+  valueAt,
   type ArcTable,
+  type Spline,
 } from './bezier-spline';
 import {
   getLength,
@@ -76,6 +78,7 @@ import {
   type BezierBoard,
 } from './board';
 import { boardChannels } from './channel-layout';
+import type { ChannelKeyPart } from './channel-apply';
 import { channelAnchors, channelDepthAt, channelFullDepth, splineSpan } from './channels';
 import { crossSection, scaleCrossSection, type CrossSection } from './cross-section';
 import { knot } from './knot';
@@ -596,6 +599,77 @@ export const channelCut = (b: BezierBoard, x: number): ChannelCut | null => {
   // micron: keep both, in order of depth, so the wall draws as a wall.
   const curve = fs.map(lifted);
   return { curve, points: anchors.map(lifted) };
+};
+
+/** A point on an applied channel at a station, to drag in the cross-section view. */
+export interface ChannelKey {
+  /** Stable within a station: `o1`, `i0`, `d2`. */
+  readonly id: string;
+  /** Which channel (index into `boardChannels`). */
+  readonly k: number;
+  readonly part: ChannelKeyPart;
+  /** The next channel, whose inner wall is this outer one: it moves too. */
+  readonly joined?: number;
+  /** The wall's distance from the stringer, or the depth (cm). */
+  readonly value: number;
+  /** Where it is drawn, in the cross-section's frame (as `loftPoint`). */
+  readonly p: Vec2;
+}
+
+/** How far in from a step's wall its depth key sits, past the lip (cm). */
+const DEPTH_KEY_INSET = 0.05;
+
+/**
+ * The points of drawn channels at station `x`, one on each wall where it meets the
+ * bottom and one where each channel is deepest, for dragging in the cross-section view.
+ * Empty for typed-in channels (apply them first) and where no channel runs.
+ */
+export const channelKeys = (b: BezierBoard, x: number): ChannelKey[] => {
+  if (b.channels?.from !== 'drawn') return [];
+  const channels = boardChannels(b);
+  const s = loftSection(b, x);
+  if (!s) return [];
+  const end = bottomEnd(s);
+  const bottomAt = (y: number) => loftPoint(s, bottomFractionAt(s, y, end, IDENTITY)).y;
+  const out: ChannelKey[] = [];
+  const wallAt = (w: Spline) => Math.max(0, valueAt(w, x));
+  channels.forEach((c, k) => {
+    const [a, z] = splineSpan(c.outer);
+    if (!(x > a && x < z)) return;
+    const yo = wallAt(c.outer);
+    const yi = c.inner ? Math.min(yo, wallAt(c.inner)) : null;
+    const prev = channels[k - 1];
+    const sharedWithPrev =
+      yi !== null && prev && Math.abs(wallAt(prev.outer) - yi) < 1e-6 && x > splineSpan(prev.outer)[0] && x < splineSpan(prev.outer)[1]; // prettier-ignore
+    if (yi !== null && !sharedWithPrev) {
+      out.push({ id: `i${k}`, k, part: 'inner', value: yi, p: vec2(yi, bottomAt(yi)) });
+    }
+    const next = channels[k + 1];
+    const joined = next?.inner && Math.abs(wallAt(next.inner) - yo) < 1e-6 ? k + 1 : undefined;
+    out.push({
+      id: `o${k}`,
+      k,
+      part: 'outer',
+      ...(joined !== undefined ? { joined } : {}),
+      value: yo,
+      p: vec2(yo, bottomAt(yo)),
+    });
+    const lo = yi ?? 0;
+    const yd =
+      c.wall.shape === 'step'
+        ? Math.max(lo, yo - c.wall.lip - DEPTH_KEY_INSET)
+        : yi === null
+          ? 0
+          : (lo + yo) / 2;
+    out.push({
+      id: `d${k}`,
+      k,
+      part: 'depth',
+      value: channelFullDepth(c, x),
+      p: vec2(yd, bottomAt(yd) + channelDepthAt(channels, x, yd)),
+    });
+  });
+  return out;
 };
 
 // --- the same surface, as a curve ----------------------------------------------

@@ -247,7 +247,7 @@ export const Sidebar = memo(function Sidebar({
     ? ''
     : channelSet.from === 'numbers'
       ? `${Math.round(channelSet.params.count)}`
-      : `${channelSet.channels.length * 2} drawn`;
+      : `${channelSet.channels.length * 2}${channelSet.params ? ', applied' : ' drawn'}`;
 
   const overlaysOn = Object.values(overlayToggles).filter(Boolean).length;
   const hasTrace = Boolean(trace.traces.outline || trace.traces.rocker);

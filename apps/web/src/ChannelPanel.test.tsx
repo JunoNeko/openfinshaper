@@ -131,6 +131,27 @@ describe('<ChannelPanel />', () => {
     expect(params(store).station).toBe(store.getState().board!.crossSections[1]!.position);
   });
 
+  it('applies them as editable, shows them at the cross-section, and resets to the numbers', () => {
+    const { store } = setup();
+    add();
+    const numbers = store.getState().board!.channels;
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    const applied = store.getState().board!.channels;
+    expect(applied?.from).toBe('drawn');
+    // The numbers' fields give way to what the channels are at the cross-section on show.
+    expect(screen.queryByLabelText(/^Width/)).toBeNull();
+    const rows = screen.getAllByRole('row');
+    expect(rows).toHaveLength(3); // a header and two channels a side
+    expect(rows[1]!.textContent).toMatch(/^1/);
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(store.getState().board!.channels).toEqual(numbers);
+    expect(store.getState().past.map((h) => h.label)).toEqual([
+      'Add channels',
+      'Apply channels',
+      'Reset channels',
+    ]);
+  });
+
   it('says what is wrong, and removes them', () => {
     const { store } = setup();
     add();

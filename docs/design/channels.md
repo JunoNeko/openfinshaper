@@ -207,27 +207,36 @@ The owner's design for the panel replaced the tail-end layout above it:
 Files saved with the first numbers (tail end, run-in, rail margin, lands) only ever
 came from the print version's test builds. They open without their channels.
 
-### Next: Apply and Reset (owner request, not built)
+### Apply and Reset (`channel-apply.ts`)
 
-The owner asked for two buttons:
+The owner asked for two buttons. **Apply** puts the channels' points on the other
+cross-sections and unlocks them for dragging, the numbers following the drag. **Reset**
+clears every edit.
 
-- **Apply** turns the typed-in channels into editable ones. It puts their points onto the
-  other cross-sections, following the blend and position settings. It unlocks the
-  channel curves, so they can be dragged, and the panel's numbers change as they are
-  dragged.
-- **Reset** clears those edits.
+Nothing is written into the cross-section curves. The loft blends those point by point
+between stations, which would smear the walls, and walls could only stay parallel with a
+station every few centimetres. Instead:
 
-The proposed model keeps the cut in the kernel rather than writing points into the
-cross-section curves. Written into those curves, the loft would blend each wall
-between stations by arc fraction and smear it, and the walls could only stay parallel
-to the stringer with a station at every few centimetres. Instead:
+- **Apply** (`applyChannels`) turns `{from: 'numbers'}` into `{from: 'drawn', params}`:
+  each wall and depth becomes a curve through _keys_ (a point and a slope; Bézier
+  handles a third of the way to each neighbour). There is a key at every real
+  cross-section inside the channels, at their ends, where full depth begins and ends,
+  at the laid-out wall's own knots, and every 8 cm at most. The walls then stay within
+  0.3 mm of the typed-in layout.
+- **The cut** is the drawn channels' own: crisp walls between stations, exactly as before.
+- **The cross-section view** shows the keys at the station on show (`channelKeys`): a
+  point on each wall where it meets the bottom (side-by-side walls share one), and one
+  where each channel is deepest. They are drawn as larger green points and dragged as
+  their own drag mode in `SplineEditor` (one undo step, 'Edit channels').
+  - Dragging a wall key moves the wall across; dragging a depth key sets the depth.
+  - `moveChannelKey` sets the value at the station, adding a key if a new cross-section
+    has none. It moves the keys between it and the cross-sections either side by a
+    smoothstep share (slopes too), so the change eases out from one cross-section to the
+    next.
+  - A shared wall moves both channels.
+- **The panel** shows each channel's offset, width and depth at the cross-section on
+  show, live while dragging. The outline view draws the walls in plan.
+- **Reset** (`resetChannels`) goes back to `params`.
 
-- Apply turns `{from: 'numbers'}` into `{from: 'drawn', params}` and adds a channel
-  profile key (width, depth, offset and radii) at each cross-section the channels pass.
-- The kernel interpolates those keys along the board, the way it already moves walls,
-  so walls stay one crisp edge between stations.
-- The cross-section view draws each key's points as handles. Dragging one changes that
-  station's key, and the panel shows the key of the section on show.
-- The outline view draws the wall curves, and the rocker view the depth, as editable
-  splines: the curved channels.
-- Reset goes back to the numbers kept in `params`.
+Still to come: dragging the walls in the outline view (curved channels drawn in plan)
+and the depth in the rocker view.

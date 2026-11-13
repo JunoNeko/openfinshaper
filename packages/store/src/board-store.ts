@@ -148,7 +148,8 @@ export interface BoardState {
   /** Toggle symmetric port/starboard pair editing. */
   setFinSymmetrical: (symmetrical: boolean) => void;
   /** Add, change or remove (`null`) the bottom channels: one undo step. */
-  setChannels: (channels: BoardChannels | null) => void;
+  /** Set the board's channels; `label` names the undo step (else Add / Edit / Remove). */
+  setChannels: (channels: BoardChannels | null, label?: string) => void;
   /** Patch one fin's parametric spec (distance, inset, base, depth, toe, cant, …). */
   updateFin: (index: number, patch: Partial<FinSpec>) => void;
   /** Re-place a fin from a dropped plan point (2D drag); keeps the fin's side. */
@@ -457,14 +458,15 @@ export const createBoardStore = (): StoreApi<BoardState> =>
         commit(setFinSymmetrical(board, symmetrical), 'Toggle fin symmetry');
       },
 
-      setChannels: (channels) => {
+      setChannels: (channels, label) => {
         const { board } = get();
         if (!board) return;
         const next = withChannels(board, channels ?? undefined);
         if (next.channels === board.channels) return;
         commit(
           next,
-          !channels ? 'Remove channels' : !board.channels ? 'Add channels' : 'Edit channels',
+          label ??
+            (!channels ? 'Remove channels' : !board.channels ? 'Add channels' : 'Edit channels'),
         );
       },
 

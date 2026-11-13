@@ -22,9 +22,15 @@
  */
 import {
   MAX_CHANNELS,
+  applyChannels,
   boardChannelProblems,
+  boardChannels,
+  channelFullDepth,
   defaultChannelParams,
   getLength,
+  resetChannels,
+  splineSpan,
+  valueAt,
   type BezierBoard,
   type ChannelParams,
   type ChannelWall,
@@ -270,6 +276,63 @@ function ChannelFields({
   );
 }
 
+/** Applied (or drawn) channels: what they are at the cross-section on show, live as its points are dragged. */
+function AppliedChannels({
+  board,
+  units,
+  section,
+}: {
+  board: BezierBoard;
+  units: LengthUnit;
+  section: ChannelSectionPick;
+}) {
+  const cs = boardChannels(board);
+  const x = board.crossSections[section.index]?.position;
+  const rows =
+    x === undefined
+      ? []
+      : cs.flatMap((c, i) => {
+          const [a, z] = splineSpan(c.outer);
+          if (!(x > a && x < z)) return [];
+          const yo = Math.max(0, valueAt(c.outer, x));
+          const yi = c.inner ? Math.min(yo, Math.max(0, valueAt(c.inner, x))) : -yo;
+          return [{ i, from: Math.max(0, yi), width: yo - yi, depth: channelFullDepth(c, x) }];
+        });
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs text-muted-foreground">
+        Applied: drag the green points on a cross-section. Each wall point moves the wall across;
+        the point at a channel&apos;s deepest sets its depth.
+      </p>
+      <div className="text-muted-foreground">At cross-section {section.index}</div>
+      {rows.length ? (
+        <table className="w-full text-xs tabular-nums">
+          <thead className="text-muted-foreground">
+            <tr>
+              <th className="text-left font-normal">Channel</th>
+              <th className="text-right font-normal">From stringer</th>
+              <th className="text-right font-normal">Width</th>
+              <th className="text-right font-normal">Depth</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.i}>
+                <td>{r.i + 1}</td>
+                <td className="text-right">{fmtLen(r.from, units)}</td>
+                <td className="text-right">{fmtLen(r.width, units)}</td>
+                <td className="text-right">{fmtLen(r.depth, units)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="text-xs text-muted-foreground">No channels run through it.</p>
+      )}
+    </div>
+  );
+}
+
 /** The Channels panel for the sidebar. */
 export function ChannelPanel({
   store,
@@ -322,11 +385,45 @@ export function ChannelPanel({
           onDragEnd={endEdit}
         />
       )}
+      {channels?.from === 'numbers' && (
+        <div className="space-y-1 pt-1">
+          <Button
+            size="sm"
+            onClick={() =>
+              setChannels(
+                applyChannels(
+                  board,
+                  channels.params,
+                  stations(board).map((s) => s.x),
+                ),
+                'Apply channels',
+              )
+            }
+          >
+            Apply
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Makes them editable: a point on each wall and depth at every cross-section they pass, to
+            drag in the cross-section view.
+          </p>
+        </div>
+      )}
       {channels?.from === 'drawn' && (
-        <p className="text-xs text-muted-foreground">
-          {channels.channels.length} drawn channel{channels.channels.length === 1 ? '' : 's'} each
-          side.
-        </p>
+        <AppliedChannels board={board} units={units} section={section} />
+      )}
+      {channels?.from === 'drawn' && channels.params && (
+        <div className="space-y-1">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setChannels(resetChannels(channels), 'Reset channels')}
+          >
+            Reset
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Back to the numbers they were applied from, clearing every edit.
+          </p>
+        </div>
       )}
       {problems.length > 0 && (
         <ul role="alert" className="space-y-1 text-xs text-destructive">
