@@ -3,17 +3,18 @@
  * Channels panel (print version, owner design 2026-11): bottom channels laid out from a
  * cross-section.
  *
- * The person picks the cross-section where the channels are deepest and adds them
- * there. The numbers are the board's channels (`board.channels`, from 'numbers'); the
+ * The person picks a cross-section and adds the channels there: their widths, offset and
+ * how far they follow the rail are measured at it. The numbers are the board's channels (`board.channels`, from 'numbers'); the
  * kernel makes the wall and depth curves from them and the board each time
  * (`layoutChannels`), so changing a number recuts them.
  *
  * - Number, Type, Width, Depth, the two radii and Stringer offset shape the channels
- *   across, where they are deepest.
+ *   across, at that cross-section.
  * - Align: Centre–Rail is how far the walls follow the outline (Centre: parallel to the
  *   stringer); Tail–Nose is where the channels start and end.
- * - Blend: the white handle is the deepest point, which snaps to a cross-section and
- *   selects it; the depth fades from there to nothing at each green handle.
+ * - Depth blend: the bar is the channels' length, start to end. They are full depth
+ *   between its two handles, and fade to nothing from each handle to its end of the bar;
+ *   the shaded band draws that.
  *
  * Each typed change and each slider drag is one undo step. Length fields follow the
  * editor's unit selector (`units`); positions along the board follow its measurement
@@ -43,7 +44,7 @@ type PanelShape = 'step' | 'scoop' | 'wave';
 /** The sections the panel offers, each drawn as two channels side by side, bottom down. */
 const TYPES: { shape: PanelShape; label: string; path: string }[] = [
   { shape: 'step', label: 'Step', path: 'M2 12 L16 4 L16 12 L30 4 L30 12' },
-  { shape: 'scoop', label: 'Scoop', path: 'M2 12 Q9 0 16 12 Q23 0 30 12' },
+  { shape: 'scoop', label: 'Scoop', path: 'M2 4 Q9 16 16 4 Q23 16 30 4' },
   { shape: 'wave', label: 'Wave', path: 'M2 12 C6 12 5 4 9 4 C13 4 12 12 16 12 C20 12 19 4 23 4 C27 4 26 12 30 12' }, // prettier-ignore
 ];
 
@@ -61,24 +62,18 @@ const wallFor = (shape: PanelShape, from: ChannelWall): ChannelWall =>
       : { shape: 'step', radius: 0, lip: 0.5 }
     : { shape };
 
-/** The closest the start and end, or a fade end and the deepest point, come (cm). */
+/** The closest the start and end come (cm). */
 const MIN_GAP = 1;
 
 /**
- * `p` deepest at `x` instead: the fades move with it, keeping their lengths, and the
- * start or end moves out to keep it inside the channels.
+ * `p` with its start or end moved: full depth keeps to inside them, and a blend handle
+ * that was on the moved end (no fade there) stays on it.
  */
-const movedDeepest = (p: ChannelParams, x: number, L: number): Partial<ChannelParams> => {
-  const dx = x - p.deepest;
-  const fadeTail = Math.max(0, p.fadeTail + dx);
-  const fadeNose = Math.min(L, p.fadeNose + dx);
-  return {
-    deepest: x,
-    fadeTail,
-    fadeNose,
-    start: x < p.start ? Math.min(fadeTail, x) : p.start,
-    end: x > p.end ? Math.max(fadeNose, x) : p.end,
-  };
+const movedEnds = (p: ChannelParams, start: number, end: number): Partial<ChannelParams> => {
+  const clamp = (x: number) => Math.min(end, Math.max(start, x));
+  const fullFrom = p.fullFrom <= p.start ? start : clamp(p.fullFrom);
+  const fullTo = p.fullTo >= p.end ? end : Math.max(fullFrom, clamp(p.fullTo));
+  return { start, end, fullFrom, fullTo };
 };
 
 /** The real cross-sections' positions (not the dummies at either end), with their indices. */
@@ -90,7 +85,6 @@ const stations = (b: BezierBoard) =>
 export interface ChannelSectionPick {
   /** The cross-section shown in the cross-section view. */
   index: number;
-  onSelect: (index: number) => void;
 }
 
 function TypePicker({ value, onChange }: { value: string; onChange: (s: PanelShape) => void }) {
@@ -146,7 +140,12 @@ function ChannelFields({
   const at = (x: number) => fmtLen(longitudinal.toDisplay(x), units) + longitudinal.mark;
   const share = (x: number) => (L > 0 ? Math.min(1, Math.max(0, x / L)) : 0);
   const sts = stations(board);
-  const deepestStation = sts.find((s) => Math.abs(s.x - params.deepest) < 1e-6);
+  const station = sts.find((s) => Math.abs(s.x - params.station) < 1e-6);
+  /** `x` as a share of the channels' length, for the Depth blend bar. */
+  const along = (x: number) =>
+    params.end > params.start
+      ? Math.min(1, Math.max(0, (x - params.start) / (params.end - params.start)))
+      : 0;
 
   return (
     <div className="space-y-1.5">
@@ -225,8 +224,8 @@ function ChannelFields({
           onEnd={onDragEnd}
           onChange={(i, v) => {
             const x = v * L;
-            if (i === 0) set({ start: Math.min(x, params.end - MIN_GAP) });
-            else set({ end: Math.max(x, params.start + MIN_GAP) });
+            if (i === 0) set(movedEnds(params, Math.min(x, params.end - MIN_GAP), params.end));
+            else set(movedEnds(params, params.start, Math.max(x, params.start + MIN_GAP)));
           }}
         />
         <p className="text-xs text-muted-foreground">
@@ -235,56 +234,38 @@ function ChannelFields({
       </div>
 
       <div className="space-y-2 pt-1">
-        <div className="text-muted-foreground">Blend</div>
+        <div className="text-muted-foreground">Depth blend</div>
         <MultiSlider
+          band={{ from: along(params.fullFrom), to: along(params.fullTo) }}
           handles={[
-            { value: share(params.fadeTail), label: 'Tail blend', valueText: at(params.fadeTail) }, // prettier-ignore
-            {
-              value: share(params.deepest),
-              label: 'Deepest point',
-              valueText: at(params.deepest),
-              tone: 'plain',
-              stops: sts.map((s) => share(s.x)),
-            },
-            { value: share(params.fadeNose), label: 'Nose blend', valueText: at(params.fadeNose) }, // prettier-ignore
+            { value: along(params.fullFrom), label: 'Full depth from', valueText: at(params.fullFrom) }, // prettier-ignore
+            { value: along(params.fullTo), label: 'Full depth to', valueText: at(params.fullTo) },
           ]}
           onStart={onDragStart}
           onEnd={onDragEnd}
           onChange={(i, v) => {
-            const x = v * L;
-            if (i === 0) set({ fadeTail: Math.min(x, params.deepest) });
-            else if (i === 2) set({ fadeNose: Math.max(x, params.deepest) });
-            else {
-              // The deepest point is a cross-section: the nearest one, which the
-              // cross-section view then shows. The fades keep their lengths.
-              const near = sts.reduce<(typeof sts)[number] | null>(
-                (best, s) => (!best || Math.abs(s.x - x) < Math.abs(best.x - x) ? s : best),
-                null,
-              );
-              if (!near || near.x === params.deepest) return;
-              section.onSelect(near.index);
-              set(movedDeepest(params, near.x, L));
-            }
+            const x = params.start + v * (params.end - params.start);
+            if (i === 0) set({ fullFrom: Math.min(x, params.fullTo) });
+            else set({ fullTo: Math.max(x, params.fullFrom) });
           }}
         />
         <p className="text-xs text-muted-foreground">
-          Deepest at {at(params.deepest)}
-          {deepestStation ? ` (cross-section ${deepestStation.index})` : ''}, fading out by{' '}
-          {at(params.fadeTail)} and {at(params.fadeNose)}
+          Full depth from {at(params.fullFrom)} to {at(params.fullTo)}
         </p>
-        {section.index !== deepestStation?.index && sts.some((s) => s.index === section.index) && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const s = sts.find((t) => t.index === section.index)!;
-              set(movedDeepest(params, s.x, L));
-            }}
-          >
-            Deepest at cross-section {section.index}
-          </Button>
-        )}
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        Laid out from {station ? `cross-section ${station.index}` : at(params.station)}
+      </p>
+      {section.index !== station?.index && sts.some((s) => s.index === section.index) && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => set({ station: sts.find((t) => t.index === section.index)!.x })}
+        >
+          Lay out from cross-section {section.index}
+        </Button>
+      )}
     </div>
   );
 }
@@ -313,8 +294,8 @@ export function ChannelPanel({
       {!channels && (
         <>
           <p className="text-xs text-muted-foreground">
-            Grooves cut up into the bottom. Select the cross-section where they are deepest, then
-            add them there.
+            Grooves cut up into the bottom. Select the cross-section to lay them out from, then add
+            them there.
           </p>
           <Button
             size="sm"

@@ -1428,7 +1428,6 @@ function AppShell() {
       longitudinal={longitudinal}
       onMeasurementAxisChange={isPhone ? setMeasurementAxis : undefined}
       activeSection={clampedCs}
-      onSelectSection={setCsIndex}
     />
   );
 

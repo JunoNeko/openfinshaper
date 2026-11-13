@@ -32,11 +32,11 @@ const P: ChannelParams = {
   depth: 0.5,
   inner: 3,
   follow: 0,
-  start: 10,
-  end: 80,
-  deepest: 30,
-  fadeTail: 15,
-  fadeNose: 70,
+  start: 15,
+  end: 70,
+  station: 30,
+  fullFrom: 25,
+  fullTo: 40,
 };
 const typed = (p: Partial<ChannelParams> = {}): BezierBoard => {
   const b = shortboard;
@@ -72,36 +72,32 @@ describe('typed-in channels', () => {
     const outer = (follow: number, x: number) => wallsAt(typed({ follow }), x)[1]![1] as number;
     expect(outer(0, 60)).toBeCloseTo(11, 9);
     expect(outer(0, 15)).toBeCloseTo(11, 9);
-    // Following it, each wall keeps its share of the half-width at the deepest point.
+    // Following it, each wall keeps its share of the half-width at the station.
     const share = 11 / half(30);
     expect(outer(1, 60) / half(60)).toBeCloseTo(share, 2);
     expect(outer(1, 15) / half(15)).toBeCloseTo(share, 2);
     expect(outer(0.5, 60)).toBeCloseTo((outer(0, 60) + outer(1, 60)) / 2, 2);
   });
 
-  it('are deepest at the cross-section, fading smoothly to nothing at each blend end', () => {
+  it('are full depth between the blend handles, fading smoothly to nothing at each end', () => {
     const cs = boardChannels(typed());
     const d = (x: number) => channelDepthAt(cs, x, 5);
-    expect(d(30)).toBeCloseTo(0.5, 3);
-    expect(d(15)).toBeCloseTo(0, 3);
-    expect(d(70)).toBeCloseTo(0, 3);
-    expect(d(50)).toBeCloseTo(0.25, 2); // halfway down the nose fade
-    for (let x = 31; x < 70; x += 1) expect(d(x + 1)).toBeLessThanOrEqual(d(x) + 1e-6);
-    for (let x = 15; x < 29; x += 1) expect(d(x + 1)).toBeGreaterThanOrEqual(d(x) - 1e-6);
+    expect(d(25)).toBeCloseTo(0.5, 3);
+    expect(d(32)).toBeCloseTo(0.5, 3);
+    expect(d(40)).toBeCloseTo(0.5, 3);
+    expect(d(15.01)).toBeCloseTo(0, 2);
+    expect(d(69.99)).toBeCloseTo(0, 2);
+    expect(d(55)).toBeCloseTo(0.25, 2); // halfway down the nose fade
+    expect(d(14)).toBe(0);
+    expect(d(71)).toBe(0);
+    for (let x = 40; x < 70; x += 1) expect(d(x + 1)).toBeLessThanOrEqual(d(x) + 1e-6);
+    for (let x = 15; x < 25; x += 1) expect(d(x + 1)).toBeGreaterThanOrEqual(d(x) - 1e-6);
   });
 
-  it('with the tail blend at the deepest point, run full depth back to their start', () => {
-    const cs = boardChannels(typed({ fadeTail: 30, start: 0 }));
+  it('with a blend handle at an end, run full depth out through it', () => {
+    const cs = boardChannels(typed({ start: 0, fullFrom: 0 }));
     expect(channelDepthAt(cs, 0.5, 5)).toBeCloseTo(0.5, 3);
     expect(channelDepthAt(cs, 20, 5)).toBeCloseTo(0.5, 3);
-  });
-
-  it('stop at their start and end, whatever depth the blend has there', () => {
-    const cs = boardChannels(typed({ start: 25, end: 40 }));
-    expect(channelDepthAt(cs, 24, 5)).toBe(0);
-    expect(channelDepthAt(cs, 26, 5)).toBeGreaterThan(0.3);
-    expect(channelDepthAt(cs, 39, 5)).toBeGreaterThan(0.4);
-    expect(channelDepthAt(cs, 41, 5)).toBe(0);
   });
 
   it('say when they run off the bottom, or have no length', () => {
@@ -114,7 +110,7 @@ describe('typed-in channels', () => {
   it('start sensibly from a cross-section, with no problems', () => {
     const b = shortboard;
     const p = defaultChannelParams(b, 40);
-    expect(p.deepest).toBe(40);
+    expect(p.station).toBe(40);
     // The golden shortboard comes to a point: the defaults start where it has width.
     expect(p.start).toBeGreaterThan(0);
     expect(p.wall).toEqual({ shape: 'step', radius: 0, lip: 0.5 });
@@ -134,7 +130,7 @@ describe('typed-in channels', () => {
     const s = scaleBoardChannels({ from: 'numbers', params: P }, 2, 1.5, 0.5);
     expect(s).toEqual({
       from: 'numbers',
-      params: { ...P, width: 6, depth: 0.25, inner: 4.5, start: 20, end: 160, deepest: 60, fadeTail: 30, fadeNose: 140 }, // prettier-ignore
+      params: { ...P, width: 6, depth: 0.25, inner: 4.5, start: 30, end: 140, station: 60, fullFrom: 50, fullTo: 80 }, // prettier-ignore
     });
   });
 });
@@ -184,7 +180,7 @@ describe('the default channels', () => {
     const fish = board(swallow, s.bottom, deck, s.crossSections, s.interpolationType, s.fins);
     const p = defaultChannelParams(fish, 30);
     expect(p.start).toBe(0);
-    expect(p.fadeTail).toBe(p.deepest); // full depth out through the tail
+    expect(p.fullFrom).toBe(0); // full depth out through the tail
     const cut = board(swallow, s.bottom, deck, s.crossSections, s.interpolationType, s.fins, { from: 'numbers', params: p }); // prettier-ignore
     expect(boardChannelProblems(cut)).toEqual([]);
     const mesh = tessellateBoard(cut, { lengthSteps: 40, ringSteps: 40 });

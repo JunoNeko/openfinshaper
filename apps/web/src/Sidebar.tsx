@@ -199,9 +199,8 @@ export interface SidebarProps {
   /** Converts board-length positions (wide point, centre of mass) for display. */
   longitudinal: Longitudinal;
   onMeasurementAxisChange?: (axis: MeasurementAxis) => void;
-  /** The cross-section shown in the cross-section view, and selecting another (Channels). */
+  /** The cross-section shown in the cross-section view (Channels lay out from it). */
   activeSection: number;
-  onSelectSection: (index: number) => void;
 }
 
 /**
@@ -233,7 +232,6 @@ export const Sidebar = memo(function Sidebar({
   longitudinal,
   onMeasurementAxisChange,
   activeSection,
-  onSelectSection,
 }: SidebarProps) {
   const past = useSyncExternalStore(boardStore.subscribe, () => boardStore.getState().past);
   const fins = useSyncExternalStore(
@@ -284,7 +282,7 @@ export const Sidebar = memo(function Sidebar({
         store={boardStore}
         units={units}
         longitudinal={longitudinal}
-        section={{ index: activeSection, onSelect: onSelectSection }}
+        section={{ index: activeSection }}
       />
     ),
     fins: <FinPanel store={boardStore} units={units} />,

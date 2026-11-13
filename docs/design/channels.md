@@ -31,26 +31,27 @@ Each channel is cut on both sides.
 `boardChannels(b)` turns either kind into curves for the loft. Straight channels are
 just straight walls, so there is one shape everywhere downstream.
 
-The numbers (`ChannelParams`) are laid out from one cross-section, where the channels
-are deepest (see "Laid out from a cross-section" below):
+The numbers (`ChannelParams`) are laid out from one cross-section (see "Laid out from a
+cross-section" below):
 
-| Number     | Meaning                                                                     |
-| ---------- | --------------------------------------------------------------------------- |
-| `count`    | Channels across the whole board; an odd count puts one on the stringer      |
-| `wall`     | Section: step (with `radius` top and `lip` bottom), scoop or wave           |
-| `width`    | Each channel's width, side by side, where they are deepest                  |
-| `depth`    | How deep they are cut there                                                 |
-| `inner`    | From the stringer to the first wall, there                                  |
-| `follow`   | 0 walls parallel to the stringer, 1 each keeps its share of the half-width  |
-| `start`    | Where they start toward the tail; 0 runs them out through it                |
-| `end`      | Where they end toward the nose                                              |
-| `deepest`  | Where they are deepest: the cross-section they are laid out from            |
-| `fadeTail` | Where the depth has faded to nothing toward the tail; at `deepest`, no fade |
-| `fadeNose` | Where the depth has faded to nothing toward the nose; at `deepest`, no fade |
+| Number     | Meaning                                                                           |
+| ---------- | --------------------------------------------------------------------------------- |
+| `count`    | Channels across the whole board; an odd count puts one on the stringer            |
+| `wall`     | Section: step (with `radius` top and `lip` bottom), scoop or wave                 |
+| `width`    | Each channel's width, side by side, at the station                                |
+| `depth`    | How deep they are cut                                                             |
+| `inner`    | From the stringer to the first wall, there                                        |
+| `follow`   | 0 walls parallel to the stringer, 1 each keeps its share of the half-width        |
+| `start`    | Where they start toward the tail; 0 runs them out through it                      |
+| `end`      | Where they end toward the nose                                                    |
+| `station`  | The cross-section they are laid out from: width, offset and follow measured there |
+| `fullFrom` | Full depth from here; fading in from nothing at `start` (at `start`, no fade)     |
+| `fullTo`   | Full depth to here; fading out to nothing at `end` (at `end`, no fade)            |
 
 Where a number leaves nothing to cut, `boardChannelProblems` says why.
-`defaultChannelParams(b, x)` starts four 5 cm steps 5 cm off the stringer, deepest at `x`,
-at full depth back through the tail and fading out over the next third of the board.
+`defaultChannelParams(b, x)` starts four 5 cm steps 5 cm off the stringer, laid out from
+`x`, at full depth out through the tail and fading out over the front half of their
+length.
 
 The panel is in the sidebar's Shape tab (`ChannelPanel.tsx`), and every change is one
 undo step (`setChannels`). Channels are saved in the `.board` file (`board-json.ts`, an
@@ -182,18 +183,20 @@ before have neither and read as 1 (unchanged).
 
 The owner's design for the panel replaced the tail-end layout above it:
 
-- **Where they are deepest.** The person selects or adds the cross-section where the
-  channels are deepest, then adds them there. Width, stringer offset and the follow
-  share are all measured at that station.
+- **The cross-section.** The person selects or adds a cross-section, then adds the
+  channels there. Width, stringer offset and the follow share are measured at that
+  station (`station`); the panel offers to lay them out from the one on show instead.
 - **The panel.** Number; Type, picked from icons (step, scoop, wave); Width; Depth;
   Radius top and Radius bottom, for a step; Stringer offset.
 - **Align.** Centre–Rail is `follow`, a blend between parallel walls and walls that keep
   their share of the half-width. Tail–Nose is `start` and `end`.
-- **Blend.** The white handle is `deepest`: it snaps to a cross-section and selects it,
-  and the fades move with it. The green handles are the fade ends. The depth eases
-  (3t² − 2t³) from full at the white handle to nothing at each green one, and the
-  channels are clipped to start and end, so a start at the tail with a tail fade still
-  reaching past it runs them out through the tail at whatever depth they have there.
+- **Depth blend.** The bar is the channels' length, start to end. Its two handles are
+  `fullFrom` and `fullTo`: full depth between them, easing (3t² − 2t³) to nothing from
+  each handle to its end of the bar. A shaded band behind the bar draws it. A handle
+  on an end is no fade there: the default has the tail one on the start, so the
+  channels run out through the tail at full depth. (A first version had a white
+  "deepest point" handle on this bar, the depth fading from it both ways; the owner
+  pointed out the depth is uniform between the blends, so the point said nothing true.)
 - **The step's two radii.** The wall stands `lip` in from the outer edge. A quarter round
   of radius `lip` climbs from the uncut bottom to it; it rises straight; a quarter round of
   radius `radius` turns it into the floor. Each radius is held to the depth at the

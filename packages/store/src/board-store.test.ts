@@ -907,9 +907,9 @@ describe('board store: channels', () => {
     follow: 1,
     start: 25,
     end: 60,
-    deepest: 30,
-    fadeTail: 30,
-    fadeNose: 60,
+    station: 30,
+    fullFrom: 25,
+    fullTo: 40,
   };
 
   it('adds, changes and removes channels, one undo step each', () => {

@@ -27,9 +27,9 @@ import { knot } from './knot';
 import { vec2 } from './vec2';
 
 /**
- * Channels as a shaper types them in, laid out from one cross-section: the channels are
- * deepest at `deepest` (where that section is), with their widths and offsets measured
- * there. Lengths in cm, x from the tail.
+ * Channels as a shaper types them in, laid out from one cross-section (`station`): their
+ * widths and offsets are measured there. Full depth between `fullFrom` and `fullTo`,
+ * fading to nothing at `start` and `end`. Lengths in cm, x from the tail.
  */
 export interface ChannelParams {
   /** How many across the whole board: an odd count puts one on the stringer. */
@@ -50,15 +50,15 @@ export interface ChannelParams {
   readonly start: number;
   /** Where they end toward the nose. */
   readonly end: number;
-  /** Where they are deepest: the cross-section they were laid out from. */
-  readonly deepest: number;
+  /** The cross-section they are laid out from: widths, offset and follow are measured there. */
+  readonly station: number;
   /**
-   * Where the depth has faded to nothing toward the tail. At or past `deepest` there is
-   * no fade: full depth back to `start`.
+   * Where full depth begins: the depth fades in from nothing at `start` to here. At
+   * `start`, no fade: full depth out through the start (the tail, usually).
    */
-  readonly fadeTail: number;
-  /** Where the depth has faded to nothing toward the nose; at or before `deepest`, no fade. */
-  readonly fadeNose: number;
+  readonly fullFrom: number;
+  /** Where full depth ends: from here it fades out to nothing at `end`. */
+  readonly fullTo: number;
 }
 
 /** A board's channels: typed in, or drawn. */
@@ -82,16 +82,16 @@ const DEFAULT_RAIL_ROOM = 3;
 const TAIL_RAIL_ROOM = 1.5;
 
 /**
- * A start for typed-in channels on `b`, deepest at `deepest` (the cross-section they are
- * added from): four steps, 5 cm wide, from 5 cm off the stringer, their lips rounded
- * 5 mm, at full depth back through the tail and fading out over the next third of the
- * board. Narrower where the board is too narrow there for that; following the outline
- * in where a tail is too narrow for them to run out parallel, and starting further up
+ * A start for typed-in channels on `b`, laid out from the cross-section at `station`:
+ * four steps, 5 cm wide, from 5 cm off the stringer, their lips rounded 5 mm, at full
+ * depth out through the tail and fading out over the front half of their length.
+ * Narrower where the board is too narrow there for that; following the outline in
+ * where a tail is too narrow for them to run out parallel, and starting further up
  * where it is too narrow or thin even so (a pin, or the golden boards' pointed tails).
  */
-export const defaultChannelParams = (b: BezierBoard, deepest: number): ChannelParams => {
+export const defaultChannelParams = (b: BezierBoard, station: number): ChannelParams => {
   const L = getLength(b);
-  const at = Math.min(L * 0.9, Math.max(0, deepest));
+  const at = Math.min(L * 0.9, Math.max(0, station));
   const count = 4;
   const perSide = count / 2;
   const depth = 0.6;
@@ -113,7 +113,7 @@ export const defaultChannelParams = (b: BezierBoard, deepest: number): ChannelPa
   const follow = fits(0, 0) ? 0 : 1;
   let start = 0;
   while (start < at && !fits(start, follow)) start += 1;
-  const end = Math.min(L - 1, at + L / 3);
+  const end = Math.min(L - 1, Math.max(at, start) + L / 3);
   return {
     count,
     wall: { shape: 'step', radius: 0, lip: 0.5 },
@@ -123,13 +123,13 @@ export const defaultChannelParams = (b: BezierBoard, deepest: number): ChannelPa
     follow,
     start,
     end,
-    deepest: at,
-    fadeTail: at,
-    fadeNose: end,
+    station: at,
+    fullFrom: start,
+    fullTo: Math.max(Math.min(at, end), start + (end - start) / 2),
   };
 };
 
-/** The walls across the board where they are deepest: [inner or null, outer] per side channel. */
+/** The walls across the board at the station: [inner or null, outer] per side channel. */
 const wallsAcross = (p: ChannelParams): { readonly yi: number | null; readonly yo: number }[] => {
   const n = Math.round(p.count);
   if (!(n >= 1) || !(p.width > 0)) return [];
@@ -169,28 +169,29 @@ const ease = (t: number) => {
   return v * v * (3 - 2 * v);
 };
 
-/** The share of full depth at `x`: 1 at the deepest point, easing to 0 at either fade end. */
+/** The share of full depth at `x`: 1 from `fullFrom` to `fullTo`, easing to 0 at `start` and `end`. */
 export const channelDepthShare = (p: ChannelParams, x: number): number => {
   if (x < p.start || x > p.end) return 0;
-  if (x <= p.deepest) return p.fadeTail < p.deepest ? ease((x - p.fadeTail) / (p.deepest - p.fadeTail)) : 1; // prettier-ignore
-  return p.fadeNose > p.deepest ? ease((p.fadeNose - x) / (p.fadeNose - p.deepest)) : 1;
+  const from = Math.min(p.end, Math.max(p.start, p.fullFrom));
+  const to = Math.min(p.end, Math.max(from, p.fullTo));
+  if (x < from) return ease((x - p.start) / (from - p.start));
+  if (x > to) return ease((p.end - x) / (p.end - to));
+  return 1;
 };
 
-/** Where the channels have depth: from the start or the tail fade, to the end or the nose fade. */
-const span = (p: ChannelParams): readonly [number, number] => [
-  p.fadeTail < p.deepest ? Math.max(p.start, p.fadeTail) : p.start,
-  p.fadeNose > p.deepest ? Math.min(p.end, p.fadeNose) : p.end,
-];
+/** Where the channels are: start to end. */
+const span = (p: ChannelParams): readonly [number, number] => [p.start, p.end];
 
-/** The depth along the board, through the deepest point. */
+/** The depth along the board. */
 const depthCurve = (p: ChannelParams): Spline => {
   const [x0, x1] = span(p);
   const xs = Array.from(
     { length: DEPTH_KNOTS },
     (_, i) => x0 + ((x1 - x0) * i) / (DEPTH_KNOTS - 1),
   );
-  if (p.deepest > x0 && p.deepest < x1 && xs.every((x) => Math.abs(x - p.deepest) > 1e-6)) {
-    xs.push(p.deepest);
+  // Knots where full depth begins and ends, so the fades meet it flat.
+  for (const x of [p.fullFrom, p.fullTo]) {
+    if (x > x0 && x < x1 && xs.every((v) => Math.abs(v - x) > 1e-6)) xs.push(x);
   }
   xs.sort((a, b) => a - b);
   return smoothThrough(xs.map((x) => [x, p.depth * channelDepthShare(p, x)] as const));
@@ -202,11 +203,11 @@ export const layoutChannels = (b: BezierBoard, p: ChannelParams): BottomChannel[
   if (!(x1 > x0) || !(p.depth > 0)) return [];
   const across = wallsAcross(p);
   const half = (x: number) => getWidthAtPos(b, x) / 2;
-  const wRef = half(Math.min(getLength(b), Math.max(0, p.deepest)));
+  const wRef = half(Math.min(getLength(b), Math.max(0, p.station)));
   if (!across.length || !(wRef > 0)) return [];
   const depth = depthCurve(p);
   const follow = Number.isFinite(p.follow) ? Math.min(1, Math.max(0, p.follow)) : 0;
-  /** A wall `y` out from the stringer where the channels are deepest. */
+  /** A wall `y` out from the stringer at the station. */
   const wall = (y: number): Spline => {
     if (follow === 0) {
       return splineFromKnots([
@@ -253,8 +254,6 @@ export const boardChannelProblems = (b: BezierBoard): string[] => {
     if (!(p.depth > 0)) return ['Channels need some depth.'];
     if (!(p.width > 0)) return ['Channels need some width.'];
     if (!(p.end > p.start)) return ['Channels must end further up the board than they start.'];
-    const [x0, x1] = span(p);
-    if (!(x1 > x0)) return ['The blend leaves the channels no depth between their start and end.'];
   }
   return channelProblems(
     boardChannels(b),
@@ -271,9 +270,9 @@ const scaleParams = (p: ChannelParams, fL: number, fW: number, fT: number): Chan
   inner: p.inner * fW,
   start: p.start * fL,
   end: p.end * fL,
-  deepest: p.deepest * fL,
-  fadeTail: p.fadeTail * fL,
-  fadeNose: p.fadeNose * fL,
+  station: p.station * fL,
+  fullFrom: p.fullFrom * fL,
+  fullTo: p.fullTo * fL,
   wall: scaleWall(p.wall, fW),
 });
 

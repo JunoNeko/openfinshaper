@@ -18,17 +18,11 @@ const mm = LENGTH_UNITS.find((u) => u.key === 'mm')!;
 const setup = (index = 2) => {
   const store = createBoardStore();
   act(() => store.getState().load(shortboard()));
-  const picked: number[] = [];
   const longitudinal = longitudinalFor(null, 'x-axis');
   const view = render(
-    <ChannelPanel
-      store={store}
-      units={mm}
-      longitudinal={longitudinal}
-      section={{ index, onSelect: (i) => picked.push(i) }}
-    />,
+    <ChannelPanel store={store} units={mm} longitudinal={longitudinal} section={{ index }} />,
   );
-  return { store, picked, view, longitudinal };
+  return { store, view, longitudinal };
 };
 const params = (store: ReturnType<typeof createBoardStore>) => {
   const c = store.getState().board!.channels;
@@ -43,12 +37,12 @@ const typeInto = (label: RegExp, text: string) => {
 const add = () => fireEvent.click(screen.getByRole('button', { name: 'Add channels' }));
 
 describe('<ChannelPanel />', () => {
-  it('adds four channels deepest at the selected cross-section, one undo step', () => {
+  it('adds four channels laid out from the selected cross-section, one undo step', () => {
     const { store } = setup();
     add();
     const b = store.getState().board!;
     expect(params(store).count).toBe(4);
-    expect(params(store).deepest).toBe(b.crossSections[2]!.position);
+    expect(params(store).station).toBe(b.crossSections[2]!.position);
     expect(boardChannels(b)).toHaveLength(2);
     expect(screen.queryByRole('alert')).toBeNull();
     expect(store.getState().past.map((h) => h.label)).toEqual(['Add channels']);
@@ -91,8 +85,8 @@ describe('<ChannelPanel />', () => {
     expect(params(store).end).toBeLessThan(before.end);
     fireEvent.keyDown(screen.getByRole('slider', { name: 'Follow the rail' }), { key: 'ArrowLeft', shiftKey: true }); // prettier-ignore
     expect(params(store).follow).toBeCloseTo(Math.max(0, before.follow - 0.05), 9);
-    fireEvent.keyDown(screen.getByRole('slider', { name: 'Tail blend' }), { key: 'ArrowLeft' });
-    expect(params(store).fadeTail).toBeLessThan(before.fadeTail);
+    fireEvent.keyDown(screen.getByRole('slider', { name: 'Full depth to' }), { key: 'ArrowLeft' });
+    expect(params(store).fullTo).toBeLessThan(before.fullTo);
     expect(store.getState().past.map((h) => h.label)).toEqual([
       'Add channels',
       'Edit channels',
@@ -101,33 +95,40 @@ describe('<ChannelPanel />', () => {
     ]);
   });
 
-  it('snaps the deepest point to a cross-section and selects it', () => {
-    const { store, picked } = setup();
+  it("draws the depth blend over the channels' length, full depth between its handles", () => {
+    const { store } = setup();
     add();
-    const b = store.getState().board!;
-    const deepest = screen.getByRole('slider', { name: 'Deepest point' });
-    // Far toward the nose: the last real cross-section.
-    for (let i = 0; i < 40; i++) fireEvent.keyDown(deepest, { key: 'ArrowRight' });
-    const last = b.crossSections.length - 2;
-    expect(params(store).deepest).toBe(b.crossSections[last]!.position);
-    expect(picked.at(-1)).toBe(last);
-    // Past where they ended: the end moved out to keep it inside them.
-    expect(params(store).end).toBeGreaterThanOrEqual(params(store).deepest);
+    const p = params(store);
+    const share = (x: number) => Math.round(((x - p.start) / (p.end - p.start)) * 100);
+    const from = screen.getByRole('slider', { name: 'Full depth from' });
+    const to = screen.getByRole('slider', { name: 'Full depth to' });
+    // The default runs full depth out through the start: that handle sits at the bar's end.
+    expect(from.getAttribute('aria-valuenow')).toBe('0');
+    expect(to.getAttribute('aria-valuenow')).toBe(String(share(p.fullTo)));
+    expect(screen.getByTestId('slider-band').getAttribute('style')).toMatch(/linear-gradient/);
+    // The handles can't pass each other.
+    for (let i = 0; i < 40; i++) fireEvent.keyDown(from, { key: 'ArrowRight', shiftKey: true });
+    expect(params(store).fullFrom).toBe(params(store).fullTo);
   });
 
-  it('offers to move the deepest point to the cross-section on show', () => {
+  it('keeps full depth inside the channels as their ends move', () => {
+    const { store } = setup();
+    add();
+    const end = screen.getByRole('slider', { name: 'End' });
+    for (let i = 0; i < 60; i++) fireEvent.keyDown(end, { key: 'ArrowLeft', shiftKey: true });
+    const p = params(store);
+    expect(p.fullTo).toBeLessThanOrEqual(p.end);
+    expect(p.fullFrom).toBe(p.start); // still full depth out through the start
+  });
+
+  it('offers to lay them out from the cross-section on show', () => {
     const { store, view, longitudinal } = setup();
     add();
     view.rerender(
-      <ChannelPanel
-        store={store}
-        units={mm}
-        longitudinal={longitudinal}
-        section={{ index: 1, onSelect: () => {} }}
-      />,
+      <ChannelPanel store={store} units={mm} longitudinal={longitudinal} section={{ index: 1 }} />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Deepest at cross-section 1' }));
-    expect(params(store).deepest).toBe(store.getState().board!.crossSections[1]!.position);
+    fireEvent.click(screen.getByRole('button', { name: 'Lay out from cross-section 1' }));
+    expect(params(store).station).toBe(store.getState().board!.crossSections[1]!.position);
   });
 
   it('says what is wrong, and removes them', () => {

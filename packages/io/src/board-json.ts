@@ -116,15 +116,14 @@ const wallFromJson = (w: unknown, where: string): ChannelWall => {
   throw new BoardJsonError(`Malformed document: ${where} has no valid wall`);
 };
 
-const PARAM_NUMBERS = ['count', 'width', 'depth', 'inner', 'follow', 'start', 'end', 'deepest', 'fadeTail', 'fadeNose'] as const; // prettier-ignore
+const PARAM_NUMBERS = ['count', 'width', 'depth', 'inner', 'follow', 'start', 'end', 'station', 'fullFrom', 'fullTo'] as const; // prettier-ignore
 
 /**
- * The first channel numbers (tail end, run-in, rail margin, lands) were laid out from
- * the tail end, not from a cross-section. They were only ever in the print version's
- * test builds; such a block reads as no channels rather than a board that won't open.
+ * Channel numbers from before this layout (laid out from the tail end, or blended from a
+ * deepest point). They were only ever in the print version's test builds; such a block
+ * reads as no channels rather than a board that won't open.
  */
-const isFirstChannelNumbers = (p: unknown): boolean =>
-  isObject(p) && finite(p.tailEnd) && finite(p.runIn) && !finite(p.deepest);
+const isOlderChannelNumbers = (p: unknown): boolean => isObject(p) && !('station' in p);
 
 const paramsFromJson = (p: unknown): ChannelParams => {
   if (!isObject(p) || !PARAM_NUMBERS.every((k) => finite(p[k]))) {
@@ -140,16 +139,16 @@ const paramsFromJson = (p: unknown): ChannelParams => {
     follow: n('follow'),
     start: n('start'),
     end: n('end'),
-    deepest: n('deepest'),
-    fadeTail: n('fadeTail'),
-    fadeNose: n('fadeNose'),
+    station: n('station'),
+    fullFrom: n('fullFrom'),
+    fullTo: n('fullTo'),
   };
 };
 
 const channelsFromJson = (c: unknown): BoardChannels | undefined => {
   if (c === undefined) return undefined;
   if (isObject(c) && c.from === 'numbers') {
-    if (isFirstChannelNumbers(c.params)) return undefined;
+    if (isOlderChannelNumbers(c.params)) return undefined;
     return { from: 'numbers', params: paramsFromJson(c.params) };
   }
   if (isObject(c) && c.from === 'drawn' && Array.isArray(c.channels)) {
@@ -169,7 +168,7 @@ const channelsFromJson = (c: unknown): BoardChannels | undefined => {
     return {
       from: 'drawn',
       channels,
-      ...(c.params !== undefined && !isFirstChannelNumbers(c.params)
+      ...(c.params !== undefined && !isOlderChannelNumbers(c.params)
         ? { params: paramsFromJson(c.params) }
         : {}),
     };

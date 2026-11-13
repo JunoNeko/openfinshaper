@@ -264,10 +264,10 @@ export default function DocsEditing() {
       <Section id="channels" title="Channels">
         <p>
           Grooves cut up into the bottom, usually running out through the tail. Select the
-          cross-section where they should be deepest, then add them from <strong>Channels</strong>{' '}
-          in the Shape tab of the sidebar. They are drawn on the cross-section, cut into the 3D view
-          and the STL; volume and STEP don&apos;t include them yet. Each change, and each slider
-          drag, is one undo step. They are saved in the <code>.board</code> file, autosave and share
+          cross-section to lay them out from, then add them from <strong>Channels</strong> in the
+          Shape tab of the sidebar. They are drawn on the cross-section, cut into the 3D view and
+          the STL; volume and STEP don&apos;t include them yet. Each change, and each slider drag,
+          is one undo step. They are saved in the <code>.board</code> file, autosave and share
           links; the legacy <code>.brd</code> format has no place for them.
         </p>
         <Terms>
@@ -281,15 +281,17 @@ export default function DocsEditing() {
             smooth flutes with rounded crests.
           </Term>
           <Term name="Width, depth">
-            Each channel&apos;s width, set side by side with no flat between, and how deep it is cut
-            where it is deepest.
+            Each channel&apos;s width, set side by side with no flat between, and how deep it is
+            cut.
           </Term>
           <Term name="Radius top, radius bottom">
             For a step: the radius where its wall meets the floor, and where it meets the uncut
             bottom. 0 leaves the edge sharp.
           </Term>
           <Term name="Stringer offset">
-            From the stringer to the first channel, where they are deepest.
+            From the stringer to the first channel. Width, offset and Centre–Rail are measured at
+            the cross-section the channels were laid out from; the panel offers to lay them out from
+            the one on show instead.
           </Term>
           <Term name="Align">
             Centre–Rail: how far the walls follow the outline. At Centre they run parallel to the
@@ -297,11 +299,11 @@ export default function DocsEditing() {
             rail. Tail–Nose: where the channels start and end; a start at the tail runs them out
             through it.
           </Term>
-          <Term name="Blend">
-            The white handle is where the channels are deepest: it moves between cross-sections and
-            selects the one it is on. The depth fades smoothly from there to nothing at each green
-            handle. A green handle on the white one means no fade on that side: full depth to the
-            start or end.
+          <Term name="Depth blend">
+            The bar is the channels&apos; length, from where they start to where they end. They are
+            full depth between its two handles, and fade smoothly to nothing from each handle to its
+            end of the bar; the shaded band shows it. A handle at the end of the bar means no fade
+            there: full depth out through the tail, say.
           </Term>
         </Terms>
         <p>

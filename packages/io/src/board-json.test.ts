@@ -257,7 +257,7 @@ describe('board-json channels', () => {
     expect(() => readBoardJson(JSON.stringify(doc))).toThrow(/typed in or drawn/);
   });
 
-  it('opens a board saved with the first channel numbers, without them', () => {
+  it('opens a board saved with older channel numbers, without them', () => {
     const doc = JSON.parse(writeBoardJson(sb()));
     doc.channels = {
       from: 'numbers',
