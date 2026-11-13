@@ -27,9 +27,9 @@ import {
   type BoardChannels,
   type ChannelParams,
 } from './channel-layout';
-import { splineSpan, type BottomChannel } from './channels';
+import { channelFullDepth, splineSpan, type BottomChannel } from './channels';
 import { knot } from './knot';
-import { vec2 } from './vec2';
+import { vec2, type Vec2 } from './vec2';
 
 /** A point a curve passes through, and its slope there. */
 interface Key {
@@ -209,5 +209,122 @@ export const moveChannelKey = (
     }
     if (i === joined && c.inner && part === 'outer') return { ...c, inner: set(c.inner) };
     return c;
+  });
+};
+
+/** Where a curve can be dragged along the board: its ends and the cross-sections inside it. */
+const editableXs = (s: Spline, stations: readonly number[]): number[] => {
+  const [a, b] = splineSpan(s);
+  return [a, ...stations.filter((x) => x > a + SAME_X && x < b - SAME_X), b];
+};
+
+/** A point on a channel wall in plan, to drag across the board in the outline view. */
+export interface ChannelPlanKey {
+  /** Stable for the board: `o1@30.48`. */
+  readonly id: string;
+  readonly k: number;
+  readonly part: 'inner' | 'outer';
+  /** The next channel, whose inner wall is this outer one: it moves too. */
+  readonly joined?: number;
+  readonly x: number;
+  /** The wall's distance from the stringer (cm). */
+  readonly value: number;
+}
+
+/**
+ * The points of drawn channels' walls in plan: at each end and at every cross-section
+ * (`stations`) the wall passes, side-by-side walls sharing one.
+ */
+export const channelPlanKeys = (
+  channels: readonly BottomChannel[],
+  stations: readonly number[],
+): ChannelPlanKey[] => {
+  const out: ChannelPlanKey[] = [];
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+  channels.forEach((c, k) => {
+    const next = channels[k + 1];
+    const prev = channels[k - 1];
+    for (const x of editableXs(c.outer, stations)) {
+      const yo = Math.max(0, valueAt(c.outer, x));
+      if (c.inner) {
+        const yi = Math.max(0, valueAt(c.inner, x));
+        const shared = prev && near(Math.max(0, valueAt(prev.outer, x)), yi);
+        if (!shared) out.push({ id: `i${k}@${x}`, k, part: 'inner', x, value: yi });
+      }
+      const joined = next?.inner && near(Math.max(0, valueAt(next.inner, x)), yo) ? k + 1 : undefined; // prettier-ignore
+      out.push({ id: `o${k}@${x}`, k, part: 'outer', ...(joined !== undefined ? { joined } : {}), x, value: yo }); // prettier-ignore
+    }
+  });
+  return out;
+};
+
+/** A point on the channels' depth along the board, to drag in the rocker view. */
+export interface ChannelDepthKey {
+  readonly id: string;
+  readonly x: number;
+  /** The deepest of the channels there (cm). */
+  readonly value: number;
+}
+
+/** The depth points of drawn channels: at the ends and every cross-section they pass. */
+export const channelDepthKeys = (
+  channels: readonly BottomChannel[],
+  stations: readonly number[],
+): ChannelDepthKey[] => {
+  const xs = new Map<string, number>();
+  for (const c of channels) for (const x of editableXs(c.depth, stations)) xs.set(x.toFixed(6), x);
+  return [...xs.values()]
+    .sort((a, b) => a - b)
+    .map((x) => ({
+      id: `d@${x}`,
+      x,
+      value: Math.max(0, ...channels.map((c) => channelFullDepth(c, x))),
+    }));
+};
+
+/**
+ * `channels` with every channel's depth at `x` changed by `delta` (cm), each from its
+ * own, easing out to the cross-sections either side: the rocker view's depth drag.
+ */
+export const moveChannelDepths = (
+  channels: readonly BottomChannel[],
+  x: number,
+  delta: number,
+  stations: readonly number[],
+): BottomChannel[] =>
+  channels.map((c) => {
+    const [a, b] = splineSpan(c.depth);
+    if (x < a - SAME_X || x > b + SAME_X) return c;
+    return { ...c, depth: withKeyAt(c.depth, x, Math.max(0, valueAt(c.depth, x) + delta), stations) }; // prettier-ignore
+  });
+
+/** Points along each wall in plan, from end to end (for drawing). */
+export const channelPlanLines = (channels: readonly BottomChannel[], n = 48): Vec2[][] => {
+  const line = (s: Spline) => {
+    const [a, b] = splineSpan(s);
+    return Array.from({ length: n + 1 }, (_, i) => {
+      const x = a + ((b - a) * i) / n;
+      return vec2(x, Math.max(0, valueAt(s, x)));
+    });
+  };
+  return channels.flatMap((c) => (c.inner ? [line(c.inner), line(c.outer)] : [line(c.outer)]));
+};
+
+/**
+ * The channels' depth along the board as a line above the bottom rocker `bottom(x)`,
+ * the deepest of them at each x (for drawing in the rocker view). Empty without depth.
+ */
+export const channelDepthLine = (
+  channels: readonly BottomChannel[],
+  bottom: (x: number) => number,
+  n = 120,
+): Vec2[] => {
+  if (!channels.length) return [];
+  const spans = channels.map((c) => splineSpan(c.depth));
+  const a = Math.min(...spans.map((s) => s[0]));
+  const b = Math.max(...spans.map((s) => s[1]));
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const x = a + ((b - a) * i) / n;
+    return vec2(x, bottom(x) + Math.max(0, ...channels.map((c) => channelFullDepth(c, x))));
   });
 };

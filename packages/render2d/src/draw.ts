@@ -368,18 +368,55 @@ export interface EditorOverlays {
   channelCut?: {
     curve: readonly Vec2[];
     points: readonly Vec2[];
-    /** Points that can be dragged (applied channels' keys), by id. */
-    keys?: readonly { id: string; p: Vec2 }[];
   };
-  /** Bottom channels' walls in plan, each a polyline (outline pane; mirrored with it). */
-  channelWalls?: readonly (readonly Vec2[])[];
+  /**
+   * Bottom channels drawn as lines: walls in plan on the outline, the depth above the
+   * bottom on the rocker. Mirrored with the pane.
+   */
+  channelLines?: readonly (readonly Vec2[])[];
+  /**
+   * Points of applied channels that can be dragged, by id (`SplineEditor`'s
+   * `onChannelKeyDrag`). Drawn on both halves of a mirrored pane.
+   */
+  channelKeys?: readonly { id: string; p: Vec2 }[];
 }
+
+/** Draw draggable channel points: green with a dark ring, on each half of a mirrored pane. */
+export const drawChannelKeys = (
+  ctx: CanvasRenderingContext2D,
+  keys: readonly { id: string; p: Vec2 }[],
+  vp: Viewport,
+  mirror: Mirror = {},
+): void => {
+  ctx.save();
+  for (const f of reflections(mirror)) {
+    for (const k of keys) {
+      const s = worldToScreen(vp, f(k.p));
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, CHANNEL_KEY_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = CHANNEL_CUT_COLOR;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#0B1220';
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+};
+
+/** The reflections of a mirrored pane, as signs on x and y: the drawn halves. */
+export const mirrorSigns = (m: Mirror): { x: number; y: number }[] => {
+  const out = [{ x: 1, y: 1 }];
+  if (m.mirrorY) out.push({ x: 1, y: -1 });
+  if (m.mirrorX) out.push({ x: -1, y: 1 });
+  return out;
+};
 
 /** Screen radius of a channel key (px). */
 export const CHANNEL_KEY_RADIUS = 5;
 
-/** Draw channel walls in plan: thin green lines, mirrored with the pane. */
-export const drawChannelWalls = (
+/** Draw channel lines (walls in plan, depth in profile): thin green, mirrored with the pane. */
+export const drawChannelLines = (
   ctx: CanvasRenderingContext2D,
   walls: readonly (readonly Vec2[])[],
   vp: Viewport,
@@ -429,16 +466,6 @@ export const drawChannelCut = (
   for (const p of cut.points) {
     const s = worldToScreen(vp, p);
     dot(ctx, s.x, s.y, 2.5, CHANNEL_CUT_COLOR);
-  }
-  for (const k of cut.keys ?? []) {
-    const s = worldToScreen(vp, k.p);
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, CHANNEL_KEY_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = CHANNEL_CUT_COLOR;
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#0B1220';
-    ctx.stroke();
   }
   ctx.restore();
 };

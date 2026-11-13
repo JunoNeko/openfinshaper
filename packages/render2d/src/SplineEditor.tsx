@@ -35,7 +35,9 @@ import {
   drawFinsPlan,
   drawFinsProfile,
   drawChannelCut,
-  drawChannelWalls,
+  drawChannelLines,
+  drawChannelKeys,
+  mirrorSigns,
   CHANNEL_KEY_RADIUS,
   hitFin,
   drawGhostSpline,
@@ -234,7 +236,16 @@ type DragState =
   // Dragging a fin to re-place it (plan pane).
   | { mode: 'fin'; index: number; grab: Vec2; downAt: ScreenPoint; started: boolean }
   // Dragging a channel key (cross-section pane).
-  | { mode: 'channel'; id: string; from: Vec2; downAt: ScreenPoint; started: boolean }
+  // `sign`: which half of a mirrored pane it was grabbed on, so the drag moves it the
+  // way the pointer goes there.
+  | {
+      mode: 'channel';
+      id: string;
+      from: Vec2;
+      sign: { x: number; y: number };
+      downAt: ScreenPoint;
+      started: boolean;
+    }
   // Middle-button / Space+left pan.
   | { mode: 'pan'; lastX: number; lastY: number }
   // Right button: a tap opens the context menu, a drag pans (tracked via `moved`).
@@ -750,8 +761,8 @@ export function SplineEditor({
     if (overlays?.distribution) drawDistribution(ctx, overlays.distribution, vp, size.h);
     if (overlays?.verticalMarkers)
       drawVerticalMarkers(ctx, overlays.verticalMarkers, vp, size.h, turned);
-    if (overlays?.channelWalls?.length) {
-      drawChannelWalls(ctx, overlays.channelWalls, vp, { mirrorX, mirrorY });
+    if (overlays?.channelLines?.length) {
+      drawChannelLines(ctx, overlays.channelLines, vp, { mirrorX, mirrorY });
     }
     if (overlays?.fins && overlays.fins.length > 0) {
       if (overlays.finView === 'profile') drawFinsProfile(ctx, overlays.fins, vp, selectedFin);
@@ -800,6 +811,9 @@ export function SplineEditor({
       drawSpline(ctx, spline, vp, style, { mirrorX, mirrorY });
       if (i === 0 && overlays?.channelCut) {
         drawChannelCut(ctx, overlays.channelCut, vp, { mirrorX, mirrorY });
+      }
+      if (i === targets.length - 1 && overlays?.channelKeys?.length) {
+        drawChannelKeys(ctx, overlays.channelKeys, vp, { mirrorX, mirrorY });
       }
       if (tunniEnabled) drawTunniControls(ctx, spline, vp);
       const sel = selection && sameTarget(selection.target, t) ? selection.index : null;
@@ -1107,14 +1121,16 @@ export function SplineEditor({
       }
       onFocusSection?.(null);
       // A channel key, before the section's own points: it sits on the curve.
-      const keys = onChannelKeyDrag ? overlays?.channelCut?.keys : undefined;
+      const keys = onChannelKeyDrag ? overlays?.channelKeys : undefined;
       if (keys?.length) {
         const tol = (touch ? TOUCH_HIT_TOL_PX : HIT_TOL_PX) + CHANNEL_KEY_RADIUS / 2;
-        let best: { id: string; d: number } | null = null;
-        for (const k of keys) {
-          const s = worldToScreen(vp, k.p);
-          const d = Math.hypot(s.x - p.x, s.y - p.y);
-          if (d <= tol && (!best || d < best.d)) best = { id: k.id, d };
+        let best: { id: string; d: number; sign: { x: number; y: number } } | null = null;
+        for (const sign of mirrorSigns({ mirrorX, mirrorY })) {
+          for (const k of keys) {
+            const s = worldToScreen(vp, { x: k.p.x * sign.x, y: k.p.y * sign.y });
+            const d = Math.hypot(s.x - p.x, s.y - p.y);
+            if (d <= tol && (!best || d < best.d)) best = { id: k.id, d, sign };
+          }
         }
         if (best) {
           store.getState().select(null);
@@ -1122,6 +1138,7 @@ export function SplineEditor({
             mode: 'channel',
             id: best.id,
             from: screenToWorld(vp, p),
+            sign: best.sign,
             downAt: p,
             started: false,
           };
@@ -1400,7 +1417,11 @@ export function SplineEditor({
           d.started = true;
           onChannelKeyDrag?.(d.id, { x: 0, y: 0 }, 'start');
         }
-        onChannelKeyDrag?.(d.id, { x: world.x - d.from.x, y: world.y - d.from.y }, 'move');
+        onChannelKeyDrag?.(
+          d.id,
+          { x: (world.x - d.from.x) * d.sign.x, y: (world.y - d.from.y) * d.sign.y },
+          'move',
+        );
         return;
       }
       if (d.mode === 'traceMove') {

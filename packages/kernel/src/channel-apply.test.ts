@@ -5,7 +5,16 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { valueAt } from './bezier-spline';
 import { board, type BezierBoard } from './board';
-import { applyChannels, moveChannelKey, resetChannels } from './channel-apply';
+import {
+  applyChannels,
+  channelDepthKeys,
+  channelDepthLine,
+  channelPlanKeys,
+  channelPlanLines,
+  moveChannelDepths,
+  moveChannelKey,
+  resetChannels,
+} from './channel-apply';
 import {
   boardChannelProblems,
   boardChannels,
@@ -135,5 +144,48 @@ describe('channel keys at a cross-section', () => {
     const b = withChannels({ from: 'drawn', channels: moved, params: P });
     const mesh = tessellateBoard(b, { lengthSteps: 40, ringSteps: 40 });
     expect(mesh.positions.every(Number.isFinite)).toBe(true);
+  });
+});
+
+describe('channel points in plan and along the board', () => {
+  const cs = boardChannels(applied);
+
+  it('put a point on each wall at its ends and every cross-section, shared walls once', () => {
+    const keys = channelPlanKeys(cs, stations);
+    const xs = [P.start, ...inside, P.end];
+    // Channel 0: inner and outer (shared with channel 1's inner); channel 1: outer.
+    expect(keys).toHaveLength(xs.length * 3);
+    const shared = keys.filter((k) => k.k === 0 && k.part === 'outer');
+    expect(shared.every((k) => k.joined === 1)).toBe(true);
+    expect(keys.some((k) => k.k === 1 && k.part === 'inner')).toBe(false);
+    const k = keys.find((q) => q.k === 1 && q.part === 'outer' && q.x === inside[0])!;
+    expect(k.value).toBeCloseTo(valueAt(cs[1]!.outer, inside[0]!), 9);
+  });
+
+  it('move a wall at its tail end, easing out to the first cross-section', () => {
+    const before = valueAt(cs[1]!.outer, P.start);
+    const moved = moveChannelKey(cs, P.start, 1, 'outer', before + 2, stations);
+    expect(valueAt(moved[1]!.outer, P.start)).toBeCloseTo(before + 2, 9);
+    expect(valueAt(moved[1]!.outer, inside[0]!)).toBeCloseTo(valueAt(cs[1]!.outer, inside[0]!), 9);
+  });
+
+  it("put a depth point at the ends and each cross-section, and move every channel's", () => {
+    const keys = channelDepthKeys(cs, stations);
+    expect(keys.map((k) => k.x)).toEqual([P.start, ...inside, P.end]);
+    const x = inside[0]!;
+    const moved = moveChannelDepths(cs, x, 0.2, stations);
+    for (let i = 0; i < cs.length; i++) {
+      expect(valueAt(moved[i]!.depth, x)).toBeCloseTo(valueAt(cs[i]!.depth, x) + 0.2, 9);
+    }
+  });
+
+  it('draw the walls in plan and the depth above the bottom', () => {
+    const lines = channelPlanLines(cs);
+    expect(lines).toHaveLength(4);
+    expect(lines[0]![0]!.x).toBeCloseTo(P.start, 9);
+    const line = channelDepthLine(cs, () => 10);
+    const mid = line.find((p) => p.x >= 40)!;
+    expect(mid.y).toBeCloseTo(10.5, 3); // full depth over a flat bottom at 10
+    expect(channelDepthLine([], () => 0)).toEqual([]);
   });
 });

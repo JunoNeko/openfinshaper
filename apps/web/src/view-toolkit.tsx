@@ -597,7 +597,7 @@ export function EditorPane({
           readout={makeReadout(kind, units, longitudinal)}
           measureCursor={kind === 'crossSection'}
           overlays={overlays}
-          onChannelKeyDrag={kind === 'crossSection' ? onChannelKeyDrag : undefined}
+          onChannelKeyDrag={onChannelKeyDrag}
           onTunniChange={onTunniChange}
           ghostSplines={ghostSplines}
           background={background}

@@ -151,8 +151,9 @@ export const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
     id: 'channels',
     title: 'Channels',
     tab: 'shape',
-    // Laid out from a cross-section, drawn on it, and cut into the 3D view.
-    relevantTo: ['crossSection', '3d', 'quad'],
+    // Laid out from a cross-section, drawn and edited on it, on the outline (walls) and
+    // the rocker (depth), and cut into the 3D view: every view.
+    relevantTo: 'all',
     defaultOpen: false,
   },
 

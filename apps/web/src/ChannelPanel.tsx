@@ -301,8 +301,10 @@ function AppliedChannels({
   return (
     <div className="space-y-1.5">
       <p className="text-xs text-muted-foreground">
-        Applied: drag the green points on a cross-section. Each wall point moves the wall across;
-        the point at a channel&apos;s deepest sets its depth.
+        Applied: drag the green points. On a cross-section, a wall point moves the wall across and
+        the point at a channel&apos;s deepest sets its depth. On the outline, a point moves its wall
+        in plan; on the rocker, a point sets the depth of every channel there. Each change eases out
+        to the cross-sections either side.
       </p>
       <div className="text-muted-foreground">At cross-section {section.index}</div>
       {rows.length ? (

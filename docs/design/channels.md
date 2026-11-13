@@ -238,5 +238,19 @@ station every few centimetres. Instead:
   show, live while dragging. The outline view draws the walls in plan.
 - **Reset** (`resetChannels`) goes back to `params`.
 
-Still to come: dragging the walls in the outline view (curved channels drawn in plan)
-and the depth in the rocker view.
+### Editing in plan and in profile (`use-channel-editing.ts`)
+
+The outline and rocker views edit applied channels too. `SplineEditor` takes draggable
+channel points in any pane (`overlays.channelKeys`), drawn and hit on both halves of a
+mirrored pane; a drag on the mirrored half is flipped back.
+
+| View          | Draws                                  | Points                                            | Dragging one                                                |
+| ------------- | -------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------- |
+| Cross-section | The cut                                | Each wall where it meets the bottom; each deepest | Moves the wall across / sets that channel's depth           |
+| Outline       | The walls in plan (`channelPlanLines`) | Each wall at its ends and every cross-section     | Moves the wall across there: curved channels, drawn in plan |
+| Rocker        | The deepest depth above the bottom     | At the ends and every cross-section               | Deepens every channel there (`moveChannelDepths`)           |
+
+Every edit goes through the same keyed curves and eases out to the cross-sections either
+side. To edit somewhere new, add a cross-section there. Points can't yet move along the
+board (a channel's start and end), and the rocker's vertical scale makes fine depth
+edits easier zoomed in or on the cross-section.
