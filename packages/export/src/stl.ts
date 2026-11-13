@@ -1,5 +1,6 @@
 import {
   boardChannels,
+  triangulatePolygon,
   buildFinBladeMesh,
   channelLift,
   getLength,
@@ -185,8 +186,20 @@ const stlFacets = (board: BezierBoard, opts: StlOptions): number[] => {
       }
     }
   };
-  cap(rings[0], false);
-  cap(rings[rings.length - 1], true);
+  // With channels running out through an end, its outline is notched and a fan would
+  // web over the channels' mouths: cover exactly the outline (both sides) instead.
+  const capFlat = (ring: P3[] | undefined, noseEnd: boolean): void => {
+    if (!ring || ring.length < 2) return;
+    const full: P3[] = [...ring];
+    for (let r = ring.length - 2; r >= 1; r--) full.push({ ...ring[r]!, y: -ring[r]!.y });
+    for (const [a, b, c] of triangulatePolygon(full.map((p) => ({ x: p.y, y: p.z })))) {
+      if (noseEnd) writeFacet(out, full[a]!, full[b]!, full[c]!);
+      else writeFacet(out, full[c]!, full[b]!, full[a]!);
+    }
+  };
+  const channelled = boardChannels(board).length > 0;
+  (channelled ? capFlat : cap)(rings[0], false);
+  (channelled ? capFlat : cap)(rings[rings.length - 1], true);
 
   // Foiled fin blade solids (same coordinate frame as the hull: X length, Y width, Z up).
   if (opts.includeFins !== false) {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { getLength, getMaxThickness, getMaxWidth, getWidthAtPos, type BezierBoard } from './board';
 import { boardChannels } from './channel-layout';
+import { triangulatePolygon } from './polygon';
 import {
   MIN_DIM,
   channelLift,
@@ -134,10 +135,19 @@ export const tessellateBoard = (board: BezierBoard, opts: TessellateOptions = {}
   // inset that used to be applied unconditionally guarded `getInterpolatedCrossSection`,
   // which the mesh has not gone through since the loft became point-blended.)
   const eps = Math.min(0.5, length * 1e-3);
-  const pointed0 = getWidthAtPos(board, 0) < MIN_DIM;
-  const pointed1 = getWidthAtPos(board, length) < MIN_DIM;
-  const x0 = pointed0 ? eps : 0;
-  const x1 = pointed1 ? length - eps : length;
+  const channelled = boardChannels(board).length > 0;
+  // A square end drawn with a vertical edge has no width at the tip itself (the outline
+  // there is a vertical line), only a hair inside it. With channels running out through
+  // it, fanning that end to an apex webs over their mouths, so (on such a board) it is
+  // capped flat at the inset station instead. Boards without channels keep their meshes.
+  const squareEdge = (tip: number, inset: number) =>
+    channelled && getWidthAtPos(board, tip) < MIN_DIM && getWidthAtPos(board, inset) >= MIN_DIM;
+  const square0 = squareEdge(0, eps);
+  const square1 = squareEdge(length, length - eps);
+  const pointed0 = getWidthAtPos(board, 0) < MIN_DIM && !square0;
+  const pointed1 = getWidthAtPos(board, length) < MIN_DIM && !square1;
+  const x0 = pointed0 || square0 ? eps : 0;
+  const x1 = pointed1 || square1 ? length - eps : length;
 
   const positions: number[] = [];
   const indices: number[] = [];
@@ -195,8 +205,19 @@ export const tessellateBoard = (board: BezierBoard, opts: TessellateOptions = {}
     }
   };
 
-  capEnd(rings[0]!, pointed0 ? 0 : x0, true);
-  capEnd(rings[rings.length - 1]!, pointed1 ? length : x1, false);
+  // A blunt end with channels running out through it: its outline is notched, and a fan
+  // would web over the channels' mouths. Cover exactly the outline instead.
+  const capFlat = (ring: number[], reverse: boolean): void => {
+    const pts = ring.map((vi) => ({ x: positions[vi * 3 + 1]!, y: positions[vi * 3 + 2]! }));
+    for (const [a, b, c] of triangulatePolygon(pts)) {
+      if (reverse) indices.push(ring[c]!, ring[b]!, ring[a]!);
+      else indices.push(ring[a]!, ring[b]!, ring[c]!);
+    }
+  };
+  if (channelled && !pointed0) capFlat(rings[0]!, true);
+  else capEnd(rings[0]!, pointed0 ? 0 : x0, true);
+  if (channelled && !pointed1) capFlat(rings[rings.length - 1]!, false);
+  else capEnd(rings[rings.length - 1]!, pointed1 ? length : x1, false);
 
   return finalizeMesh(positions, indices);
 };
@@ -446,8 +467,20 @@ const tessellateCutout = (
   stitch(leftRows, true);
 
   // Fan a half's end ring (rail + wall) to its centroid so the pod tube is capped.
+  // With channels running out through the tail, the end is notched and a fan would web
+  // over the channels' mouths: cover exactly its outline instead (the row is one station,
+  // so it lies in a plane of constant x).
+  const channelled = boardChannels(board).length > 0;
   const capRow = (row: number[] | null, reverse: boolean): void => {
     if (!row || row.length < 3) return;
+    if (channelled) {
+      const pts = row.map((vi) => ({ x: positions[vi * 3 + 1]!, y: positions[vi * 3 + 2]! }));
+      for (const [a, b, c] of triangulatePolygon(pts)) {
+        if (reverse) indices.push(row[c]!, row[b]!, row[a]!);
+        else indices.push(row[a]!, row[b]!, row[c]!);
+      }
+      return;
+    }
     let sx = 0;
     let sy = 0;
     let sz = 0;

@@ -115,6 +115,28 @@ Measured on the golden shortboard, exporting STL at the default 0.5 cm face size
 | Four square channels            | 108 ms | 9.1 MB    |
 | The swallow, one curved channel | 131 ms | 8.4 MB    |
 
+### Closing the ends (owner's tail_web, 2026-11)
+
+Channels that run out through a blunt tail leave its outline notched. Every end used to
+be closed with a fan: from a hub at the centroid, or to an apex at the tip when the end
+looked pointed. A fan covers only a convex outline, so its triangles crossed the
+channels' mouths in a web. On a board with channels, blunt ends are now closed by
+`triangulatePolygon` (ear clipping, `polygon.ts`) in all three places that cap them:
+`tessellateBoard`, the cutout path's half rows, and the STL writer. Boards without
+channels keep their fans, so their meshes are unchanged byte for byte.
+
+Two more things showed on the owner's square tail:
+
+- **A vertical tail edge.** A square tail drawn with a vertical edge has no width at
+  x = 0 (the outline there is a vertical line), only a hair inside. The mesh took it for
+  pointed and coned it to an apex. On a board with channels, such an end is now capped
+  flat at the inset station. `boardChannelProblems` also reads the width just inside,
+  so a channel running out through it no longer reads as off the bottom.
+- **Corner points of a faded step.** A step's corner points were spaced by its radii
+  held to the station's depth. Past the channel's end the depth is nothing, so they all
+  landed on the wall, and the mesh welded them into edges shared by up to 24 faces. They
+  are now spaced by the radii as set, held only to the width.
+
 ## Checks (`channelProblems`)
 
 - Each wall runs along the board, one point across it at each station.

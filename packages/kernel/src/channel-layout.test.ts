@@ -16,7 +16,7 @@ import {
   type ChannelParams,
 } from './channel-layout';
 import { channelAnchors, channelDepthAt } from './channels';
-import { channelCut, loftSection, loftPoint } from './loft';
+import { channelCut, loftPoint, loftSection } from './loft';
 import { tessellateBoard } from './tessellate';
 import { parseBrdGeometry } from './test-support/brd-geometry';
 
@@ -186,4 +186,82 @@ describe('the default channels', () => {
     const mesh = tessellateBoard(cut, { lengthSteps: 40, ringSteps: 40 });
     expect(mesh.positions.every(Number.isFinite)).toBe(true);
   });
+});
+
+describe('channels out through a square tail', () => {
+  it.each([
+    ['leaning a touch aft (the cutout path)', [-0.2, 7]],
+    ['drawn dead vertical (no width at the tip itself)', [0, 7]],
+  ] as const)(
+    'are left open at the tail, its edge %s: the cap covers the notched outline only',
+    (_, corner) => {
+      const L = getLength(shortboard);
+      const third = (ax: number, ay: number, bx: number, by: number): [number, number] => [
+        ax + (bx - ax) / 3,
+        ay + (by - ay) / 3,
+      ];
+      // A square tail 21 cm across, like the owner's board.
+      const square = splineFromKnots([
+        knotFromArray([0, 0, 0, 0, ...third(0, 0, 0, 10.5)], false, false),
+        knotFromArray([0, 10.5, ...corner, ...third(0, 10.5, 90, 23.5)], false, false),
+        knotFromArray(
+          [90, 23.5, ...third(90, 23.5, 0, 10.5), ...third(90, 23.5, L, 0)],
+          false,
+          false,
+        ),
+        knotFromArray([L, 0, ...third(L, 0, 90, 23.5), L, 0], false, false),
+      ]);
+      const s = shortboard;
+      const deck = splineFromKnots(
+        s.deck.knots.map((k) =>
+          knot(
+            vec2(k.end.x, k.end.y + 2),
+            vec2(k.tangentToPrev.x, k.tangentToPrev.y + 2),
+            vec2(k.tangentToNext.x, k.tangentToNext.y + 2),
+            k.continuous,
+          ),
+        ),
+      );
+      const params: ChannelParams = { ...P, wall: { shape: 'step', radius: 0, lip: 0 }, width: 4.5, inner: 0, start: 0, fullFrom: 0, fullTo: 30, end: 60, station: 30 }; // prettier-ignore
+      const b = board(square, s.bottom, deck, s.crossSections, s.interpolationType, s.fins, { from: 'numbers', params }); // prettier-ignore
+      expect(boardChannelProblems(b).join(' | ')).toBe('');
+      expect(getWidthAtPos(b, 0.1) / 2).toBeGreaterThan(10);
+      const mesh = tessellateBoard(b, { lengthSteps: 40, ringSteps: 48 });
+      const P3 = (i: number) => ({ x: mesh.positions[i * 3]!, y: mesh.positions[i * 3 + 1]!, z: mesh.positions[i * 3 + 2]! }); // prettier-ignore
+      // The cap: the triangles in the first ring's plane (the loft has none exactly on the
+      // tail's dummy station).
+      let x0 = Infinity;
+      for (let i = 0; i < mesh.positions.length; i += 3) x0 = Math.min(x0, mesh.positions[i]!);
+      expect(x0).toBeLessThan(0.5);
+      const cap: number[][] = [];
+      for (let t = 0; t < mesh.indices.length; t += 3) {
+        const tri = [mesh.indices[t]!, mesh.indices[t + 1]!, mesh.indices[t + 2]!];
+        if (tri.every((i) => Math.abs(P3(i).x - x0) < 1e-6)) cap.push(tri);
+      }
+      const signed = (tri: number[]) => {
+        const [a, c, d] = tri.map(P3) as [ReturnType<typeof P3>, ReturnType<typeof P3>, ReturnType<typeof P3>]; // prettier-ignore
+        return ((c.y - a.y) * (d.z - a.z) - (c.z - a.z) * (d.y - a.y)) / 2;
+      };
+      // Its outline has notches deeper than 3 mm: the channels' mouths.
+      const zs = [...new Set(cap.flat())].map((i) => P3(i));
+      const bottom = Math.min(...zs.map((p) => p.z));
+      expect(zs.some((p) => Math.abs(p.y) < 9 && p.z > bottom + 0.3 && p.z < bottom + 1)).toBe(
+        true,
+      );
+      // Covered exactly: every triangle wound the same way (a fan across a notch folds back
+      // over it), and no hub point added.
+      // (Slivers along a step's straight floor, ~1e-7 cm², take either sign in float32; a
+      // fan's web is a tenth of a square centimetre or more.)
+      const areas = cap.map(signed).filter((a) => Math.abs(a) > 1e-5);
+      expect(areas.every((a) => a > 0) || areas.every((a) => a < 0)).toBe(true);
+      // No hub: every point of the cap is a point of the hull's first ring too.
+      const capSet = new Set(cap.map((t) => t.join()));
+      const hull = new Set<number>();
+      for (let t = 0; t < mesh.indices.length; t += 3) {
+        const tri = [mesh.indices[t]!, mesh.indices[t + 1]!, mesh.indices[t + 2]!];
+        if (!capSet.has(tri.join())) tri.forEach((i) => hull.add(i));
+      }
+      expect(cap.flat().every((i) => hull.has(i))).toBe(true);
+    },
+  );
 });

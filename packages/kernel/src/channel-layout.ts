@@ -71,6 +71,9 @@ export type BoardChannels =
       readonly params?: ChannelParams;
     };
 
+/** How far inside a square end its width is read, past a vertical edge (cm). */
+const EDGE_INSET = 0.05;
+
 /** Most channels the panel offers. */
 export const MAX_CHANNELS = 9;
 
@@ -255,11 +258,12 @@ export const boardChannelProblems = (b: BezierBoard): string[] => {
     if (!(p.width > 0)) return ['Channels need some width.'];
     if (!(p.end > p.start)) return ['Channels must end further up the board than they start.'];
   }
-  return channelProblems(
-    boardChannels(b),
-    (x) => getWidthAtPos(b, x) / 2,
-    (x) => getThicknessAtPos(b, x),
-  );
+  // A square end drawn with a vertical edge has no width at the tip itself, only a hair
+  // inside: measure there, or a channel running out through it reads as off the bottom.
+  const L = getLength(b);
+  const half = (x: number) =>
+    Math.max(getWidthAtPos(b, x), getWidthAtPos(b, Math.min(L, Math.max(0, x + (x < L / 2 ? EDGE_INSET : -EDGE_INSET))))) / 2; // prettier-ignore
+  return channelProblems(boardChannels(b), half, (x) => getThicknessAtPos(b, x));
 };
 
 /** `p` on a board scaled by `fL` along, `fW` across and `fT` in thickness. */

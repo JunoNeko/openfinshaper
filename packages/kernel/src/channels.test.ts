@@ -211,6 +211,17 @@ describe('channel anchors', () => {
     expect(ys).toContain(10 + SQUARE_WALL_GAP);
   });
 
+  it("of a rounded step stay apart where its depth has faded to nothing (owner's tail_web)", () => {
+    const c = [
+      straight(0, 5, 0.6, { shape: 'step', radius: 0.6, lip: 0.2 }),
+      straight(5, 10, 0.6, { shape: 'step', radius: 0.6, lip: 0.2 }),
+    ];
+    for (const x of [20, 59.9, 61, 100]) {
+      const ys = channelAnchors(c, x);
+      for (let i = 1; i < ys.length; i++) expect(ys[i]! - ys[i - 1]!).toBeGreaterThan(5e-5);
+    }
+  });
+
   it('never land on the stringer, where the ring already has a point', () => {
     const c = [straight(0, 6, 0.4, { shape: 'step', radius: 0, lip: 0 })];
     expect(Math.min(...channelAnchors(c, 20))).toBeGreaterThan(0);

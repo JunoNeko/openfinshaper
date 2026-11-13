@@ -241,19 +241,23 @@ const ARC_STEPS = [Math.PI / 8, Math.PI / 4, (3 * Math.PI) / 8] as const;
 
 /**
  * Offsets (cm) in from the outer and inner walls that need a ring point, for a channel
- * of this section `w` wide and `d` deep at the station. How many never depends on `w` or
- * `d`, only on the section, so every ring along the board has the same points.
+ * of this section `w` wide at the station. How many never depends on `w`, only on the
+ * section, so every ring along the board has the same points.
  */
 const wallStops = (
   wall: ChannelWall,
   w: number,
-  d: number,
 ): { outer: readonly number[]; inner: readonly number[] } => {
   switch (wall.shape) {
     case 'step': {
       // Round the lip, the vertical wall (a pair of points 1 µm apart), round its top,
       // and a crease at the inner edge.
-      const { lip, top } = stepRadii(wall, Math.max(d, 0), w);
+      // Spaced by the radii as set (held to the width only), not to this station's depth:
+      // where the depth fades to nothing they would all land on the wall, and a mesh
+      // welds points on top of each other into edges shared by many faces. At the
+      // shallow end of a fade they sit a little off the shrunken corners, which is where
+      // there is next to nothing to cut.
+      const { lip, top } = stepRadii(wall, Infinity, w);
       const outer: number[] = [];
       // No point where the lip meets the bottom: it meets it tangent, and side by side
       // that is the next channel's inner edge, which has one already.
@@ -297,7 +301,7 @@ export const channelAnchors = (channels: readonly BottomChannel[], x: number): n
     const { yi, yo } = wallsAt(c, x);
     const lo = yi ?? 0;
     const inside = (y: number) => Math.min(yo + SQUARE_WALL_GAP, Math.max(lo - SQUARE_WALL_GAP, y));
-    const stops = wallStops(c.wall, yo - lo, channelFullDepth(c, x));
+    const stops = wallStops(c.wall, yo - lo);
     for (const s of stops.outer) ys.push(inside(yo - s));
     if (yi !== null) for (const s of stops.inner) ys.push(inside(yi + s));
     const n =
