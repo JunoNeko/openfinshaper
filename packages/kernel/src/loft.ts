@@ -76,7 +76,7 @@ import {
   type BezierBoard,
 } from './board';
 import { boardChannels } from './channel-layout';
-import { channelAnchors, channelDepthAt, splineSpan } from './channels';
+import { channelAnchors, channelDepthAt, channelFullDepth, splineSpan } from './channels';
 import { crossSection, scaleCrossSection, type CrossSection } from './cross-section';
 import { knot } from './knot';
 import { vec2, type Vec2 } from './vec2';
@@ -560,6 +560,42 @@ export const loftRing = (b: BezierBoard, x: number, ringSteps: number): Vert3[] 
 
   if (ring.length < 3) return null;
   return ring;
+};
+
+/** Samples across a station's bottom when drawing its channel cut. */
+const CUT_SAMPLES = 160;
+
+/** A station's channel cut, for drawing on its cross-section (one side, +y). */
+export interface ChannelCut {
+  /** The cut bottom from the stringer to the rail, as (out from the centreline, height above the bottom). */
+  readonly curve: readonly Vec2[];
+  /** The points the mesh puts on the channels: on the walls, round corners and over the floors. */
+  readonly points: readonly Vec2[];
+}
+
+/**
+ * The board's channels cut into the station at `x`: the cut bottom and the points on
+ * it, in the frame of its cross-section (as `loftPoint`). Null where there are no
+ * channels with depth at `x`.
+ */
+export const channelCut = (b: BezierBoard, x: number): ChannelCut | null => {
+  const channels = boardChannels(b);
+  if (!channels.length || !channels.some((c) => channelFullDepth(c, x) > 0)) return null;
+  const s = loftSection(b, x);
+  if (!s) return null;
+  const end = bottomEnd(s);
+  const lifted = (f: number): Vec2 => {
+    const p = loftPoint(s, f);
+    return vec2(p.x, p.y + channelDepthAt(channels, x, p.x));
+  };
+  const anchors = anchorFractions(b, s, x, end, IDENTITY);
+  const fs = [...anchors];
+  for (let i = 0; i <= CUT_SAMPLES; i++) fs.push((end * i) / CUT_SAMPLES);
+  fs.sort((p, q) => p - q);
+  // The two points either side of a vertical wall are at the same fraction to within a
+  // micron: keep both, in order of depth, so the wall draws as a wall.
+  const curve = fs.map(lifted);
+  return { curve, points: anchors.map(lifted) };
 };
 
 // --- the same surface, as a curve ----------------------------------------------

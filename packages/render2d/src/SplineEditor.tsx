@@ -34,6 +34,7 @@ import {
   MEASURE_COLORS,
   drawFinsPlan,
   drawFinsProfile,
+  drawChannelCut,
   hitFin,
   drawGhostSpline,
   drawSectionMarkers,
@@ -779,6 +780,9 @@ export function SplineEditor({
           : {}),
       };
       drawSpline(ctx, spline, vp, style, { mirrorX, mirrorY });
+      if (i === 0 && overlays?.channelCut) {
+        drawChannelCut(ctx, overlays.channelCut, vp, { mirrorX, mirrorY });
+      }
       if (tunniEnabled) drawTunniControls(ctx, spline, vp);
       const sel = selection && sameTarget(selection.target, t) ? selection.index : null;
       const hovered =

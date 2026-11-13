@@ -107,7 +107,7 @@ describe("the common sections, side by side (the owner's reference drawing)", ()
   const d = (wall: ChannelWall, y: number) => channelDepthAt(pair(wall), 20, y);
 
   it('steps: deepest at the rail-side wall, ramping straight back to nothing at the stringer side', () => {
-    const step: ChannelWall = { shape: 'step', radius: 0 };
+    const step: ChannelWall = { shape: 'step', radius: 0, lip: 0 };
     expect(d(step, 0.001)).toBeCloseTo(0, 3);
     expect(d(step, 3)).toBeCloseTo(0.2, 9);
     expect(d(step, 5.999)).toBeCloseTo(0.4, 3);
@@ -116,12 +116,25 @@ describe("the common sections, side by side (the owner's reference drawing)", ()
     expect(d(step, 9)).toBeCloseTo(0.2, 9);
   });
 
-  it('steps with a rounded corner: still a vertical drop, the corner eased into the floor', () => {
-    const rounded: ChannelWall = { shape: 'step', radius: 0.5 };
-    expect(d(rounded, 6)).toBeCloseTo(0, 9); // the wall's top
-    expect(d(rounded, 5.75)).toBeLessThan(d({ shape: 'step', radius: 0 }, 5.75));
-    expect(d(rounded, 5.75)).toBeGreaterThan(0.3);
+  it('steps with a rounded top: a vertical wall, its top eased into the floor', () => {
+    const rounded: ChannelWall = { shape: 'step', radius: 0.2, lip: 0 };
+    const sharp: ChannelWall = { shape: 'step', radius: 0, lip: 0 };
+    expect(d(rounded, 5.9999999)).toBeCloseTo(0.2, 3); // the wall stands 0.4 - 0.2
+    expect(d(rounded, 5.9)).toBeLessThan(d(sharp, 5.9));
+    expect(d(rounded, 5.9)).toBeGreaterThan(0.3);
     expect(d(rounded, 5)).toBeCloseTo((5 / 6) * 0.4, 9); // past the radius: the plain ramp
+  });
+
+  it('steps with a rounded lip: the wall stands in from the edge, rounded into the bottom', () => {
+    const lipped: ChannelWall = { shape: 'step', radius: 0, lip: 0.1 };
+    expect(d(lipped, 5.9999)).toBeCloseTo(0, 3); // tangent to the uncut bottom
+    // Halfway round the lip: 1 - cos 30°... its height at 0.05 in from the edge.
+    expect(d(lipped, 5.95)).toBeCloseTo(0.1 - Math.sqrt(0.01 - 0.0025), 9);
+    expect(d(lipped, 5.90001)).toBeCloseTo(0.1, 2); // the wall's foot
+    expect(d(lipped, 5.8999)).toBeCloseTo(0.4, 2); // its top
+    // Shallower than its radius (the end of a fade), the lip is the whole wall.
+    const shallow = [straight(0, 6, 0.05, lipped)];
+    expect(channelDepthAt(shallow, 20, 5.95)).toBeCloseTo(0.05, 6);
   });
 
   it('scoops: arcs deepest midway, meeting in a sharp ridge', () => {
@@ -143,7 +156,7 @@ describe("the common sections, side by side (the owner's reference drawing)", ()
   });
 
   it('a centred step is a V: nothing on the stringer, full depth at both walls', () => {
-    const v = [straight(null, 6, 0.4, { shape: 'step', radius: 0 })];
+    const v = [straight(null, 6, 0.4, { shape: 'step', radius: 0, lip: 0 })];
     expect(channelDepthAt(v, 20, 0)).toBeCloseTo(0, 9);
     expect(channelDepthAt(v, 20, 3)).toBeCloseTo(0.2, 9);
     expect(channelDepthAt(v, 20, -5.999)).toBeCloseTo(0.4, 3);
@@ -151,8 +164,8 @@ describe("the common sections, side by side (the owner's reference drawing)", ()
 
   it('cuts all four into a watertight hull', () => {
     for (const wall of [
-      { shape: 'step', radius: 0 },
-      { shape: 'step', radius: 0.4 },
+      { shape: 'step', radius: 0, lip: 0 },
+      { shape: 'step', radius: 0.15, lip: 0.1 },
       { shape: 'scoop' },
       { shape: 'wave' },
     ] as ChannelWall[]) {
@@ -177,7 +190,7 @@ describe('channel anchors', () => {
   });
 
   it('never land on the stringer, where the ring already has a point', () => {
-    const c = [straight(0, 6, 0.4, { shape: 'step', radius: 0 })];
+    const c = [straight(0, 6, 0.4, { shape: 'step', radius: 0, lip: 0 })];
     expect(Math.min(...channelAnchors(c, 20))).toBeGreaterThan(0);
   });
 });

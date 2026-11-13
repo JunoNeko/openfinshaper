@@ -1,6 +1,7 @@
 import { stepExportSupport } from '@openshaper/export';
 import { decodeShareFragment, parseBrd, readBoardJson, writeBoardJson } from '@openshaper/io';
 import {
+  channelCut,
   loftCrossSection,
   getLength,
   resolveFins,
@@ -699,6 +700,12 @@ function AppShell() {
     [specs, foamType, glassSchedule],
   );
 
+  // The channels cut into the cross-section on show, drawn over it.
+  const sectionCut = useMemo(
+    () => (board && activeSectionX !== null ? channelCut(board, activeSectionX) : null),
+    [board, activeSectionX],
+  );
+
   const overlaysFor = (kind: EditorKind): EditorOverlays => {
     const longitudinal = kind === 'outline' || kind === 'rocker';
     const verticalMarkers: { x: number; color: string; label?: string }[] = [];
@@ -717,6 +724,7 @@ function AppShell() {
       fins:
         (kind === 'outline' || kind === 'rocker') && resolvedFins.length ? resolvedFins : undefined,
       finView: kind === 'rocker' ? 'profile' : 'plan',
+      channelCut: kind === 'crossSection' && sectionCut ? sectionCut : undefined,
     };
   };
 
@@ -1419,6 +1427,8 @@ function AppShell() {
       onUnitChange={isPhone ? setUnitKey : undefined}
       longitudinal={longitudinal}
       onMeasurementAxisChange={isPhone ? setMeasurementAxis : undefined}
+      activeSection={clampedCs}
+      onSelectSection={setCsIndex}
     />
   );
 

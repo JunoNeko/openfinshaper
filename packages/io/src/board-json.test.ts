@@ -219,7 +219,7 @@ describe('board-json channels', () => {
     const b = sb();
     return board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, channels); // prettier-ignore
   };
-  const params = () => ({ ...defaultChannelParams(sb()), count: 5, layout: 'outline' as const });
+  const params = () => ({ ...defaultChannelParams(sb(), 40), count: 5, follow: 0.5 });
 
   it('round-trips typed-in channels exactly', () => {
     const original = withChannels({ from: 'numbers', params: params() });
@@ -255,5 +255,14 @@ describe('board-json channels', () => {
     expect(() => readBoardJson(JSON.stringify(doc))).toThrow(BoardJsonError);
     doc.channels = { from: 'sketched' };
     expect(() => readBoardJson(JSON.stringify(doc))).toThrow(/typed in or drawn/);
+  });
+
+  it('opens a board saved with the first channel numbers, without them', () => {
+    const doc = JSON.parse(writeBoardJson(sb()));
+    doc.channels = {
+      from: 'numbers',
+      params: { count: 4, layout: 'parallel', depth: 0.5, tailEnd: 0, length: 80, runIn: 20, inner: 0, railMargin: 3, land: 0, wall: { shape: 'step', radius: 0 } }, // prettier-ignore
+    };
+    expect(readBoardJson(JSON.stringify(doc)).board.channels).toBeUndefined();
   });
 });

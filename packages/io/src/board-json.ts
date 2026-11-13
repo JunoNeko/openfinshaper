@@ -106,43 +106,52 @@ const wallFromJson = (w: unknown, where: string): ChannelWall => {
   if (isObject(w)) {
     if (w.shape === 'square' || w.shape === 'scoop' || w.shape === 'wave')
       return { shape: w.shape };
-    if (w.shape === 'step' && finite(w.radius)) return { shape: 'step', radius: w.radius };
+    if (w.shape === 'step' && finite(w.radius)) {
+      // Steps from before the lip was rounded have none: a sharp lip.
+      return { shape: 'step', radius: w.radius, lip: finite(w.lip) ? w.lip : 0 };
+    }
     if (w.shape === 'bevel' && finite(w.width)) return { shape: 'bevel', width: w.width };
     if (w.shape === 'round' && finite(w.radius)) return { shape: 'round', radius: w.radius };
   }
   throw new BoardJsonError(`Malformed document: ${where} has no valid wall`);
 };
 
-const PARAM_NUMBERS = ['count', 'depth', 'tailEnd', 'length', 'runIn', 'inner', 'railMargin', 'land'] as const; // prettier-ignore
+const PARAM_NUMBERS = ['count', 'width', 'depth', 'inner', 'follow', 'start', 'end', 'deepest', 'fadeTail', 'fadeNose'] as const; // prettier-ignore
+
+/**
+ * The first channel numbers (tail end, run-in, rail margin, lands) were laid out from
+ * the tail end, not from a cross-section. They were only ever in the print version's
+ * test builds; such a block reads as no channels rather than a board that won't open.
+ */
+const isFirstChannelNumbers = (p: unknown): boolean =>
+  isObject(p) && finite(p.tailEnd) && finite(p.runIn) && !finite(p.deepest);
 
 const paramsFromJson = (p: unknown): ChannelParams => {
   if (!isObject(p) || !PARAM_NUMBERS.every((k) => finite(p[k]))) {
     throw new BoardJsonError('Malformed document: the channel numbers are incomplete');
   }
-  if (p.layout !== 'parallel' && p.layout !== 'outline') {
-    throw new BoardJsonError('Malformed document: the channel layout is not known');
-  }
   const n = (k: (typeof PARAM_NUMBERS)[number]) => p[k] as number;
   return {
     count: n('count'),
-    layout: p.layout,
-    depth: n('depth'),
-    tailEnd: n('tailEnd'),
-    length: n('length'),
-    runIn: n('runIn'),
-    inner: n('inner'),
-    railMargin: n('railMargin'),
-    land: n('land'),
-    // Added after the first channel files: absent means unchanged along the channel.
-    frontSpread: finite(p.frontSpread) ? p.frontSpread : 1,
-    frontWidth: finite(p.frontWidth) ? p.frontWidth : 1,
     wall: wallFromJson(p.wall, 'the channel numbers'),
+    width: n('width'),
+    depth: n('depth'),
+    inner: n('inner'),
+    follow: n('follow'),
+    start: n('start'),
+    end: n('end'),
+    deepest: n('deepest'),
+    fadeTail: n('fadeTail'),
+    fadeNose: n('fadeNose'),
   };
 };
 
 const channelsFromJson = (c: unknown): BoardChannels | undefined => {
   if (c === undefined) return undefined;
-  if (isObject(c) && c.from === 'numbers') return { from: 'numbers', params: paramsFromJson(c.params) }; // prettier-ignore
+  if (isObject(c) && c.from === 'numbers') {
+    if (isFirstChannelNumbers(c.params)) return undefined;
+    return { from: 'numbers', params: paramsFromJson(c.params) };
+  }
   if (isObject(c) && c.from === 'drawn' && Array.isArray(c.channels)) {
     const channels = c.channels.map((ch: unknown, i) => {
       const where = `channel ${i + 1}`;
@@ -160,7 +169,9 @@ const channelsFromJson = (c: unknown): BoardChannels | undefined => {
     return {
       from: 'drawn',
       channels,
-      ...(c.params !== undefined ? { params: paramsFromJson(c.params) } : {}),
+      ...(c.params !== undefined && !isFirstChannelNumbers(c.params)
+        ? { params: paramsFromJson(c.params) }
+        : {}),
     };
   }
   throw new BoardJsonError('Malformed document: the channels are not typed in or drawn');

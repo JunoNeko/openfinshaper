@@ -900,17 +900,16 @@ describe('board store: handle-angle locks', () => {
 describe('board store: channels', () => {
   const params = {
     count: 2,
-    layout: 'outline' as const,
-    depth: 0.5,
-    tailEnd: 25,
-    length: 60,
-    runIn: 10,
-    inner: 2,
-    railMargin: 3,
-    land: 1,
-    frontSpread: 1,
-    frontWidth: 1,
     wall: { shape: 'square' as const },
+    width: 3,
+    depth: 0.5,
+    inner: 2,
+    follow: 1,
+    start: 25,
+    end: 60,
+    deepest: 30,
+    fadeTail: 30,
+    fadeNose: 60,
   };
 
   it('adds, changes and removes channels, one undo step each', () => {
@@ -938,7 +937,7 @@ describe('board store: channels', () => {
     store.getState().setChannels({ from: 'numbers', params });
     const outer = (b: BezierBoard) => valueAt(boardChannels(b)[0]!.outer, 40);
     const before = outer(store.getState().board!);
-    store.getState().moveControlPoint({ kind: 'outline' }, 1, vec2(50, 30));
+    store.getState().moveControlPoint({ kind: 'outline' }, 1, vec2(70, 30));
     const b = store.getState().board!;
     expect(b.channels).toEqual({ from: 'numbers', params });
     expect(outer(b)).not.toBeCloseTo(before, 3);

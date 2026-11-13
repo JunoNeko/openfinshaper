@@ -31,25 +31,26 @@ Each channel is cut on both sides.
 `boardChannels(b)` turns either kind into curves for the loft. Straight channels are
 just straight walls, so there is one shape everywhere downstream.
 
-The numbers (`ChannelParams`):
+The numbers (`ChannelParams`) are laid out from one cross-section, where the channels
+are deepest (see "Laid out from a cross-section" below):
 
-| Number       | Meaning                                                                                     |
-| ------------ | ------------------------------------------------------------------------------------------- |
-| `count`      | Channels across the whole board; an odd count puts one on the stringer, as wide as the rest |
-| `layout`     | `parallel` (straight walls) or `outline` (each wall keeps its share of the half-width)      |
-| `depth`      | How deep they are cut                                                                       |
-| `tailEnd`    | Where they end at the tail, from the tail                                                   |
-| `length`     | Where they end at the front, from the tail                                                  |
-| `runIn`      | The length over which the depth fades in at the front, with flat ends (no kink)             |
-| `inner`      | From the stringer to the first wall                                                         |
-| `railMargin` | From the rail to the last wall                                                              |
-| `land`       | The flat bottom between neighbouring channels                                               |
-| `wall`       | Wall shape and size                                                                         |
+| Number     | Meaning                                                                     |
+| ---------- | --------------------------------------------------------------------------- |
+| `count`    | Channels across the whole board; an odd count puts one on the stringer      |
+| `wall`     | Section: step (with `radius` top and `lip` bottom), scoop or wave           |
+| `width`    | Each channel's width, side by side, where they are deepest                  |
+| `depth`    | How deep they are cut there                                                 |
+| `inner`    | From the stringer to the first wall, there                                  |
+| `follow`   | 0 walls parallel to the stringer, 1 each keeps its share of the half-width  |
+| `start`    | Where they start toward the tail; 0 runs them out through it                |
+| `end`      | Where they end toward the nose                                              |
+| `deepest`  | Where they are deepest: the cross-section they are laid out from            |
+| `fadeTail` | Where the depth has faded to nothing toward the tail; at `deepest`, no fade |
+| `fadeNose` | Where the depth has faded to nothing toward the nose; at `deepest`, no fade |
 
-`inner`, `railMargin` and `land` are measured at the tail end; the channel width is
-whatever is left. Where nothing is left, no channels are made and
-`boardChannelProblems` says why. `defaultChannelParams` starts four channels where the
-tail has some width, which matters on a pointed tail.
+Where a number leaves nothing to cut, `boardChannelProblems` says why.
+`defaultChannelParams(b, x)` starts four 5 cm steps 5 cm off the stringer, deepest at `x`,
+at full depth back through the tail and fading out over the next third of the board.
 
 The panel is in the sidebar's Shape tab (`ChannelPanel.tsx`), and every change is one
 undo step (`setChannels`). Channels are saved in the `.board` file (`board-json.ts`, an
@@ -125,13 +126,12 @@ The Channels panel shows them.
 
 ## Not yet
 
-| Gap                       | Why it matters                                                                                            |
-| ------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Volume and specs          | They integrate the cross-sections, so they leave channels out: a few tenths of a litre on the test boards |
-| 2D cross-section view     | Uses `loftCrossSection`, so it doesn't show channels                                                      |
-| Rail bands                | Use `loftCrossSection` too                                                                                |
-| STEP (`board-surface.ts`) | Fits through the ladder without channels; needs patches split at the walls (step 5)                       |
-| Native file format and UI | Steps 2–4                                                                                                 |
+| Gap                       | Why it matters                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Volume and specs          | They integrate the cross-sections, so they leave channels out: a few tenths of a litre on the test boards                      |
+| 2D cross-section view     | Draws the cut over the section (`channelCut`); the scrubbed section between stations, from `loftCrossSection`, doesn't show it |
+| Rail bands                | Use `loftCrossSection` too                                                                                                     |
+| STEP (`board-surface.ts`) | Fits through the ladder without channels; needs patches split at the walls (step 5)                                            |
 
 ## Sections as built (owner review, 2026-11)
 
@@ -177,3 +177,54 @@ before have neither and read as 1 (unchanged).
 - starting as points about two fifths of the way up, with a 70 % spread;
 - running out through the tail wherever it is wide enough for 3 cm channels and thick
   enough for the 5 mm depth to stay under half of it.
+
+## Laid out from a cross-section (owner design, 2026-11)
+
+The owner's design for the panel replaced the tail-end layout above it:
+
+- **Where they are deepest.** The person selects or adds the cross-section where the
+  channels are deepest, then adds them there. Width, stringer offset and the follow
+  share are all measured at that station.
+- **The panel.** Number; Type, picked from icons (step, scoop, wave); Width; Depth;
+  Radius top and Radius bottom, for a step; Stringer offset.
+- **Align.** Centre–Rail is `follow`, a blend between parallel walls and walls that keep
+  their share of the half-width. Tail–Nose is `start` and `end`.
+- **Blend.** The white handle is `deepest`: it snaps to a cross-section and selects it,
+  and the fades move with it. The green handles are the fade ends. The depth eases
+  (3t² − 2t³) from full at the white handle to nothing at each green one, and the
+  channels are clipped to start and end, so a start at the tail with a tail fade still
+  reaching past it runs them out through the tail at whatever depth they have there.
+- **The step's two radii.** The wall stands `lip` in from the outer edge. A quarter round
+  of radius `lip` climbs from the uncut bottom to it; it rises straight; a quarter round of
+  radius `radius` turns it into the floor. Each radius is held to the depth at the
+  station, so a fading step's lip becomes the whole wall.
+- **The cross-section view.** It draws the cut over the section on show
+  (`channelCut`): the lifted bottom in green, with the mesh's points on it.
+
+Files saved with the first numbers (tail end, run-in, rail margin, lands) only ever
+came from the print version's test builds. They open without their channels.
+
+### Next: Apply and Reset (owner request, not built)
+
+The owner asked for two buttons:
+
+- **Apply** turns the typed-in channels into editable ones. It puts their points onto the
+  other cross-sections, following the blend and position settings. It unlocks the
+  channel curves, so they can be dragged, and the panel's numbers change as they are
+  dragged.
+- **Reset** clears those edits.
+
+The proposed model keeps the cut in the kernel rather than writing points into the
+cross-section curves. Written into those curves, the loft would blend each wall
+between stations by arc fraction and smear it, and the walls could only stay parallel
+to the stringer with a station at every few centimetres. Instead:
+
+- Apply turns `{from: 'numbers'}` into `{from: 'drawn', params}` and adds a channel
+  profile key (width, depth, offset and radii) at each cross-section the channels pass.
+- The kernel interpolates those keys along the board, the way it already moves walls,
+  so walls stay one crisp edge between stations.
+- The cross-section view draws each key's points as handles. Dragging one changes that
+  station's key, and the panel shows the key of the section on show.
+- The outline view draws the wall curves, and the rocker view the depth, as editable
+  splines: the curved channels.
+- Reset goes back to the numbers kept in `params`.

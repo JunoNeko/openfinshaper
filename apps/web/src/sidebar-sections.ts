@@ -151,8 +151,8 @@ export const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
     id: 'channels',
     title: 'Channels',
     tab: 'shape',
-    // Cut into the 3D view; the 2D views don't draw them yet.
-    relevantTo: ['3d', 'quad'],
+    // Laid out from a cross-section, drawn on it, and cut into the 3D view.
+    relevantTo: ['crossSection', '3d', 'quad'],
     defaultOpen: false,
   },
 

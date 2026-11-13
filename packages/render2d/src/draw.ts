@@ -361,7 +361,42 @@ export interface EditorOverlays {
   fins?: readonly ResolvedFin[];
   /** How to draw fins: `'plan'` (footprint + box, default) or `'profile'` (blade silhouette). */
   finView?: 'plan' | 'profile';
+  /**
+   * Bottom channels cut into the cross-section on show (print version): the cut bottom,
+   * one side, and the points on it. Drawn on both sides when the pane mirrors.
+   */
+  channelCut?: { curve: readonly Vec2[]; points: readonly Vec2[] };
 }
+
+/** The channel cut's colour: green, as the owner's design draws it. */
+export const CHANNEL_CUT_COLOR = '#4ADE80';
+
+/** Draw bottom channels cut into a cross-section: the cut on both sides, its points on one. */
+export const drawChannelCut = (
+  ctx: CanvasRenderingContext2D,
+  cut: NonNullable<EditorOverlays['channelCut']>,
+  vp: Viewport,
+  mirror: Mirror = {},
+): void => {
+  if (cut.curve.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = CHANNEL_CUT_COLOR;
+  ctx.lineWidth = 1.5;
+  for (const f of reflections(mirror)) {
+    ctx.beginPath();
+    cut.curve.forEach((p, i) => {
+      const s = worldToScreen(vp, f(p));
+      if (i === 0) ctx.moveTo(s.x, s.y);
+      else ctx.lineTo(s.x, s.y);
+    });
+    ctx.stroke();
+  }
+  for (const p of cut.points) {
+    const s = worldToScreen(vp, p);
+    dot(ctx, s.x, s.y, 2.5, CHANNEL_CUT_COLOR);
+  }
+  ctx.restore();
+};
 
 /** A cross-section's longitudinal position, shown as a pickable line on the outline. */
 export interface SectionMarker {

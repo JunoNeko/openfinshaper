@@ -48,9 +48,10 @@ export type ChannelWall =
   /**
    * Deepest at a steep wall on the rail side, the floor ramping straight back up to
    * nothing on the stringer side: a sawtooth, set side by side. `radius` (cm) rounds the
-   * corner where the floor meets the wall; 0 leaves it sharp.
+   * top of the wall, the inside corner where the floor meets it; `lip` (cm) rounds its
+   * bottom, the edge where it meets the uncut bottom. 0 leaves either sharp.
    */
-  | { readonly shape: 'step'; readonly radius: number }
+  | { readonly shape: 'step'; readonly radius: number; readonly lip: number }
   /** A concave arc, deepest in the middle, meeting its neighbours in a sharp ridge. */
   | { readonly shape: 'scoop' }
   /** A smooth flute: no edge anywhere, its neighbours meeting in a rounded crest. */
@@ -121,24 +122,63 @@ const quarterRound = (d: number, r: number): number => {
 };
 
 /**
- * The share of full depth at a point `dIn` (cm) out from the inner edge and `dOut` in
- * from the outer wall, `u` = dIn / (dIn + dOut) across the channel.
+ * A step's two radii where it is `d` deep and `w` wide: the lip first, each held to what
+ * the step has room for (a shallow end of a fade has less wall to round).
  */
-const profileShare = (wall: ChannelWall, dIn: number, dOut: number, u: number): number => {
+const stepRadii = (wall: { radius: number; lip: number }, d: number, w: number) => {
+  const lip = Math.max(0, Math.min(wall.lip, d, w / 2));
+  const top = Math.max(0, Math.min(wall.radius, d - lip, w / 2));
+  return { lip, top };
+};
+
+/**
+ * A step's depth (cm) `dIn` out from its inner edge and `dOut` in from its outer wall,
+ * `d` deep at the wall. The wall stands `lip` in from the outer edge: a quarter round of
+ * radius `lip` climbs from the uncut bottom to it, it rises straight, and a quarter round
+ * of radius `radius` turns it into the floor, which ramps back down to nothing at the
+ * inner edge.
+ */
+const stepDepth = (
+  wall: { radius: number; lip: number },
+  d: number,
+  dIn: number,
+  dOut: number,
+): number => {
+  const w = dIn + dOut;
+  if (!(w > 0) || !(d > 0)) return 0;
+  const { lip, top } = stepRadii(wall, d, w);
+  if (dOut < lip) return lip - Math.sqrt(Math.max(0, lip * lip - dOut * dOut));
+  const floor = d * Math.min(1, Math.max(0, dIn / (w - lip)));
+  const dw = dOut - lip;
+  if (dw < top) return floor - top + Math.sqrt(Math.max(0, top * top - (top - dw) * (top - dw)));
+  return floor;
+};
+
+/**
+ * The depth (cm) of a channel `d` deep at a point `dIn` (cm) out from its inner edge and
+ * `dOut` in from its outer wall, `u` = dIn / (dIn + dOut) across it.
+ */
+const profileDepth = (
+  wall: ChannelWall,
+  d: number,
+  dIn: number,
+  dOut: number,
+  u: number,
+): number => {
   const v = Math.min(1, Math.max(0, u));
   switch (wall.shape) {
     case 'step':
-      return v * quarterRound(dOut, wall.radius);
+      return stepDepth(wall, d, dIn, dOut);
     case 'scoop':
-      return Math.sin(Math.PI * v);
+      return d * Math.sin(Math.PI * v);
     case 'wave':
-      return (1 - Math.cos(2 * Math.PI * v)) / 2;
+      return (d * (1 - Math.cos(2 * Math.PI * v))) / 2;
     case 'square':
-      return 1;
+      return d;
     case 'bevel':
-      return wall.width > 0 ? Math.min(1, Math.min(dIn, dOut) / wall.width) : 1;
+      return wall.width > 0 ? d * Math.min(1, Math.min(dIn, dOut) / wall.width) : d;
     case 'round':
-      return quarterRound(Math.min(dIn, dOut), wall.radius);
+      return d * quarterRound(Math.min(dIn, dOut), wall.radius);
   }
 };
 
@@ -160,18 +200,18 @@ export const channelDepthAt = (
   for (const c of channels) {
     const { yi, yo, depth } = at(c, x);
     if (depth <= 0) continue;
-    let share: number;
+    let cut: number;
     if (yi === null) {
       if (ay > yo || yo <= 0) continue;
-      share =
+      cut =
         c.wall.shape === 'step'
-          ? profileShare(c.wall, ay, yo - ay, ay / yo)
-          : profileShare(c.wall, yo + ay, yo - ay, 0.5 + (0.5 * ay) / yo);
+          ? profileDepth(c.wall, depth, ay, yo - ay, ay / yo)
+          : profileDepth(c.wall, depth, yo + ay, yo - ay, 0.5 + (0.5 * ay) / yo);
     } else {
       if (ay < yi || ay > yo || yo - yi <= 0) continue;
-      share = profileShare(c.wall, ay - yi, yo - ay, (ay - yi) / (yo - yi));
+      cut = profileDepth(c.wall, depth, ay - yi, yo - ay, (ay - yi) / (yo - yi));
     }
-    out = Math.max(out, depth * share);
+    out = Math.max(out, cut);
   }
   return out;
 };
@@ -196,19 +236,34 @@ const OFF_STRINGER = 1e-3;
 /** Where a rounded corner gets points, as shares of its radius in from the wall. */
 const ROUND_STOPS = [0, 0.05, 0.2, 0.45, 1] as const;
 
-/** Offsets (cm) in from the outer and inner walls that need a ring point, for the shape. */
-const wallStops = (wall: ChannelWall): { outer: readonly number[]; inner: readonly number[] } => {
+/** Angles round a quarter round at which it gets points, besides its ends. */
+const ARC_STEPS = [Math.PI / 8, Math.PI / 4, (3 * Math.PI) / 8] as const;
+
+/**
+ * Offsets (cm) in from the outer and inner walls that need a ring point, for a channel
+ * of this section `w` wide and `d` deep at the station. How many never depends on `w` or
+ * `d`, only on the section, so every ring along the board has the same points.
+ */
+const wallStops = (
+  wall: ChannelWall,
+  w: number,
+  d: number,
+): { outer: readonly number[]; inner: readonly number[] } => {
   switch (wall.shape) {
-    case 'step':
-      // A vertical drop at the outer wall, then its rounded corner; a crease at the inner edge.
-      return {
-        outer: [
-          -SQUARE_WALL_GAP,
-          SQUARE_WALL_GAP,
-          ...ROUND_STOPS.slice(1).map((s) => s * wall.radius),
-        ],
-        inner: [0],
-      };
+    case 'step': {
+      // Round the lip, the vertical wall (a pair of points 1 µm apart), round its top,
+      // and a crease at the inner edge.
+      const { lip, top } = stepRadii(wall, Math.max(d, 0), w);
+      const outer: number[] = [];
+      // No point where the lip meets the bottom: it meets it tangent, and side by side
+      // that is the next channel's inner edge, which has one already.
+      if (wall.lip > 0) outer.push(...ARC_STEPS.map((a) => lip * Math.sin(a)));
+      outer.push(lip - SQUARE_WALL_GAP, lip + SQUARE_WALL_GAP);
+      if (wall.radius > 0) {
+        outer.push(...[...ARC_STEPS, Math.PI / 2].map((a) => lip + top * (1 - Math.cos(a))));
+      }
+      return { outer, inner: [0] };
+    }
     case 'scoop':
     case 'wave':
       return { outer: [0], inner: [0] };
@@ -242,7 +297,7 @@ export const channelAnchors = (channels: readonly BottomChannel[], x: number): n
     const { yi, yo } = wallsAt(c, x);
     const lo = yi ?? 0;
     const inside = (y: number) => Math.min(yo + SQUARE_WALL_GAP, Math.max(lo - SQUARE_WALL_GAP, y));
-    const stops = wallStops(c.wall);
+    const stops = wallStops(c.wall, yo - lo, channelFullDepth(c, x));
     for (const s of stops.outer) ys.push(inside(yo - s));
     if (yi !== null) for (const s of stops.inner) ys.push(inside(yi + s));
     const n =
@@ -307,9 +362,11 @@ export const channelProblems = (
 export const scaleWall = (w: ChannelWall, fW: number): ChannelWall =>
   w.shape === 'bevel'
     ? { shape: 'bevel', width: w.width * fW }
-    : w.shape === 'round' || w.shape === 'step'
-      ? { ...w, radius: w.radius * fW }
-      : w;
+    : w.shape === 'round'
+      ? { shape: 'round', radius: w.radius * fW }
+      : w.shape === 'step'
+        ? { shape: 'step', radius: w.radius * fW, lip: w.lip * fW }
+        : w;
 
 /** `channels` on a board scaled by `fL` along, `fW` across and `fT` in thickness. */
 export const scaleChannels = (

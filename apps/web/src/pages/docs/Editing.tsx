@@ -263,46 +263,50 @@ export default function DocsEditing() {
 
       <Section id="channels" title="Channels">
         <p>
-          Grooves cut up into the bottom, usually running out toward the tail. Add them from{' '}
-          <strong>Channels</strong> in the Shape tab of the sidebar. They are cut into the 3D view
-          and the STL; volume, the cross-section view and STEP don&apos;t include them yet. Each
-          change is one undo step. They are saved in the <code>.board</code> file, autosave and
-          share links; the legacy <code>.brd</code> format has no place for them.
+          Grooves cut up into the bottom, usually running out through the tail. Select the
+          cross-section where they should be deepest, then add them from <strong>Channels</strong>{' '}
+          in the Shape tab of the sidebar. They are drawn on the cross-section, cut into the 3D view
+          and the STL; volume and STEP don&apos;t include them yet. Each change, and each slider
+          drag, is one undo step. They are saved in the <code>.board</code> file, autosave and share
+          links; the legacy <code>.brd</code> format has no place for them.
         </p>
         <Terms>
-          <Term name="How many">
+          <Term name="Number">
             Across the whole board. An even count puts half each side of the stringer; an odd count
             puts one on the stringer as wide as the others.
           </Term>
-          <Term name="Layout">
-            Straight, parallel to the stringer, or following the outline: each wall keeps its share
-            of the board&apos;s width, so the channels follow the rail and change with the outline.
-          </Term>
-          <Term name="Tail end, front end, fade in">
-            Where they run from and to, measured from the tail; a tail end of 0 runs them out
-            through it, as most are built. They are full depth from the tail end and fade in
-            smoothly over the last stretch toward the front.
-          </Term>
-          <Term name="Spacing">
-            From stringer, from rail, and the land between neighbouring channels, all measured where
-            the channels end at the tail; the channel width is what is left. With both 0, the
-            channels sit side by side from the stringer out.
-          </Term>
-          <Term name="Front spread, front width">
-            Each channel&apos;s distance from the stringer and its width at the front end, as a
-            share of the same at the tail end. Spread under 100 % fans the channels out toward the
-            tail; a width of 0 % starts each one as a point.
-          </Term>
-          <Term name="Section">
+          <Term name="Type">
             Step: deepest at a steep wall on the rail side, the floor ramping back up to nothing
-            toward the stringer, with an optional corner radius where floor meets wall. Scoop: a
-            concave arc, neighbours meeting in a sharp ridge. Wave: smooth flutes with rounded
-            crests. Or a flat floor between square, bevelled or rounded walls.
+            toward the stringer. Scoop: a concave arc, neighbours meeting in a sharp ridge. Wave:
+            smooth flutes with rounded crests.
+          </Term>
+          <Term name="Width, depth">
+            Each channel&apos;s width, set side by side with no flat between, and how deep it is cut
+            where it is deepest.
+          </Term>
+          <Term name="Radius top, radius bottom">
+            For a step: the radius where its wall meets the floor, and where it meets the uncut
+            bottom. 0 leaves the edge sharp.
+          </Term>
+          <Term name="Stringer offset">
+            From the stringer to the first channel, where they are deepest.
+          </Term>
+          <Term name="Align">
+            Centre–Rail: how far the walls follow the outline. At Centre they run parallel to the
+            stringer; at Rail each keeps its share of the board&apos;s width, so they follow the
+            rail. Tail–Nose: where the channels start and end; a start at the tail runs them out
+            through it.
+          </Term>
+          <Term name="Blend">
+            The white handle is where the channels are deepest: it moves between cross-sections and
+            selects the one it is on. The depth fades smoothly from there to nothing at each green
+            handle. A green handle on the white one means no fade on that side: full depth to the
+            start or end.
           </Term>
         </Terms>
         <p>
-          The panel says when they don&apos;t fit: running off the bottom, deeper than half the
-          board&apos;s thickness, or too many for the width.
+          The panel says when they can&apos;t be cut: running off the bottom, deeper than half the
+          board&apos;s thickness, or with no length.
         </p>
       </Section>
 
