@@ -76,11 +76,27 @@ describe('fin box cavities', () => {
       const f = fins[c.fin]!;
       expect(c.origin.x).toBeCloseTo(f.center.x, 6);
       expect(Math.abs(c.origin.y)).toBeCloseTo(Math.abs(f.center.y), 6);
-      expect(c.origin.z).toBeCloseTo(bottomZAt(b, c.origin.x, c.origin.y), 9);
+      expect(c.origin.z).toBeCloseTo(bottomZAt(b, c.origin.x, Math.abs(c.origin.y)), 9);
       expect(Math.hypot(c.along.x, c.along.y)).toBeCloseTo(1, 9);
       expect(c.along.x).toBeGreaterThan(0.95); // toward the nose, toed a few degrees
       expect(Math.hypot(c.axis.x, c.axis.y, c.axis.z)).toBeCloseTo(1, 9);
       expect(c.axis.z).toBeGreaterThan(0.95);
+    }
+  });
+
+  it("mirror exactly: a left fin's cavity sits as deep as its right twin (owner report)", () => {
+    for (const setup of ['thruster', 'quad'] as const) {
+      const b = withFins(setup, 'futures');
+      const cs = finCavities(b);
+      for (const c of cs.filter((q) => q.origin.y < -1e-6)) {
+        const twin = cs.find((q) => Math.abs(q.origin.y + c.origin.y) < 1e-6 && Math.abs(q.origin.x - c.origin.x) < 1e-6)!; // prettier-ignore
+        expect(twin).toBeDefined();
+        expect(c.origin.z).toBeCloseTo(twin.origin.z, 9);
+        expect(c.origin.z).toBeCloseTo(bottomZAt(b, c.origin.x, -c.origin.y), 9);
+        expect(c.axis.x).toBeCloseTo(twin.axis.x, 9);
+        expect(c.axis.y).toBeCloseTo(-twin.axis.y, 9);
+        expect(c.axis.z).toBeCloseTo(twin.axis.z, 9);
+      }
     }
   });
 

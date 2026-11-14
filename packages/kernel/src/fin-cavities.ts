@@ -207,12 +207,17 @@ export const finCavities = (
     const x = (fore.x + aft.x) / 2;
     const y = (fore.y + aft.y) / 2;
     // Square to the uncut bottom (a channel wall nearby would tip it), at the height
-    // the bottom is cut to.
-    const zx = (bottomZAt(b, x + SLOPE_STEP, y) - bottomZAt(b, x - SLOPE_STEP, y)) / (2 * SLOPE_STEP); // prettier-ignore
-    const zy = (bottomZAt(b, x, y + SLOPE_STEP) - bottomZAt(b, x, y - SLOPE_STEP)) / (2 * SLOPE_STEP); // prettier-ignore
+    // the bottom is cut to. The board is symmetric and the surface is read on the +y
+    // side (`bottomZAt` is defined there only), then mirrored: read at a negative y it
+    // gave the left fins' cavities the wrong height, ~1.5 mm shallow (owner report).
+    const ay = Math.abs(y);
+    const side = y < 0 ? -1 : 1;
+    const zAt = (px: number, py: number) => bottomZAt(b, px, Math.abs(py));
+    const zx = (zAt(x + SLOPE_STEP, ay) - zAt(x - SLOPE_STEP, ay)) / (2 * SLOPE_STEP);
+    const zy = side * ((zAt(x, ay + SLOPE_STEP) - zAt(x, Math.max(0, ay - SLOPE_STEP))) / (ay + SLOPE_STEP - Math.max(0, ay - SLOPE_STEP))); // prettier-ignore
     const n = Math.hypot(zx, zy, 1);
     const axis = { x: -zx / n, y: -zy / n, z: 1 / n };
-    const origin = { x, y, z: bottomZAt(b, x, y) + channelDepthAt(channels, x, y) };
+    const origin = { x, y, z: zAt(x, ay) + channelDepthAt(channels, x, ay) };
     if (system === 'fcs-ii') {
       const steps = [{ outline: FCS2_PLUG, depth: s.fcs2Depth, grow: s.clearance }];
       return { fin: i, kind: 'FCS II', origin, along, axis, steps };
