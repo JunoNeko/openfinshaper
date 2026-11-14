@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest';
 import { splineFromKnots } from './bezier-spline';
 import { board, type BezierBoard } from './board';
 import { crossSection } from './cross-section';
+import { STATION_EASE } from './loft';
 import { knot, type Knot } from './knot';
 import { polylineSpline } from './test-support/synthetic-boards';
 import { tessellateBoard } from './tessellate';
@@ -75,8 +76,13 @@ const makeBoard = (): BezierBoard => {
   );
 };
 
-/** Which station interval x falls in; ring triples that straddle a boundary are excluded. */
+/**
+ * Which straight run x falls in, or -1 within a station's ease (where the loft
+ * deliberately curves from one run into the next): ring triples that straddle a
+ * boundary or touch an ease are excluded from the straight-sweep checks.
+ */
 const intervalOf = (x: number): number => {
+  if (STATIONS.slice(1, -1).some((p) => Math.abs(x - p) < STATION_EASE)) return -1;
   for (let i = 0; i < STATIONS.length - 1; i++) if (x < STATIONS[i + 1]!) return i;
   return STATIONS.length - 2;
 };
@@ -122,7 +128,8 @@ describe('tessellateBoard: correspondence smoothness between differing stations'
   it('sweeps ring vertices near-linearly within a station interval', () => {
     let maxD2 = 0;
     for (let r = 1; r < lengthSteps - 1; r++) {
-      if (intervalOf(xOf(r - 1)) !== intervalOf(xOf(r + 1))) continue; // straddles a station
+      const run = intervalOf(xOf(r - 1));
+      if (run < 0 || run !== intervalOf(xOf(r + 1))) continue; // straddles a station or an ease
       for (let i = 0; i < ringLen; i++) {
         const [ay, az] = yz(r - 1, i);
         const [by, bz] = yz(r, i);
@@ -151,11 +158,38 @@ describe('tessellateBoard: correspondence smoothness between differing stations'
       return Math.hypot(cy - 2 * by + ay, cz - 2 * bz + az);
     };
     for (let r = 1; r < lengthSteps - 2; r++) {
-      if (intervalOf(xOf(r - 1)) !== intervalOf(xOf(r + 2))) continue;
+      const run = intervalOf(xOf(r - 1));
+      if (run < 0 || run !== intervalOf(xOf(r + 2))) continue;
       for (let i = 0; i < ringLen; i++) {
         maxJitter = Math.max(maxJitter, Math.abs(d2(r + 1, i) - d2(r, i)));
       }
     }
     expect(maxJitter).toBeLessThan(1e-5);
+  });
+
+  /**
+   * ...and no crease where one straight run meets the next, at a station. There the
+   * straight blend turns a corner: each ring vertex changes direction at once, and
+   * the hull carries a crease across the board at every station. The loft eases one
+   * run into the next instead, so the worst second difference anywhere, stations
+   * included, stays of the order of the straight runs' own.
+   *
+   * Measured on this fixture (max over all ring vertices, cm):
+   *   straight blend, at a station   5.2e-3
+   *   eased (current)                3.1e-4
+   *
+   * The bound sits five times under the corner and three over the current figure.
+   */
+  it('turns no corner at a station', () => {
+    let maxD2 = 0;
+    for (let r = 1; r < lengthSteps - 1; r++) {
+      for (let i = 0; i < ringLen; i++) {
+        const [ay, az] = yz(r - 1, i);
+        const [by, bz] = yz(r, i);
+        const [cy, cz] = yz(r + 1, i);
+        maxD2 = Math.max(maxD2, Math.hypot(cy - 2 * by + ay, cz - 2 * bz + az));
+      }
+    }
+    expect(maxD2).toBeLessThan(1e-3);
   });
 });

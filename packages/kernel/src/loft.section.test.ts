@@ -11,7 +11,8 @@
  * of the two stations it blends.
  *
  * The oracle is the **exact** blend: the two bracketing profiles sampled by true
- * arc length (`pointByS`, adaptive, no table) and lerped. That is what `loftPoint`
+ * arc length (`pointByS`, adaptive, no table) and lerped, eased into the next run
+ * near a station as `loftSection` documents. That is what `loftPoint`
  * approximates with its fixed-resolution table, so measuring the rebuilt curve against
  * it prices the table and the rebuild together, which is what a caller actually gets.
  */
@@ -29,7 +30,14 @@ import {
   type BezierBoard,
 } from './board';
 import { scaleCrossSection } from './cross-section';
-import { loftCrossSection, loftPoint, loftSection, MIN_DIM } from './loft';
+import {
+  loftCrossSection,
+  loftPoint,
+  loftSection,
+  MIN_DIM,
+  STATION_EASE,
+  STATION_EASE_SHARE,
+} from './loft';
 import { railFacetStations } from './rail-facets';
 import { applyRailProfile, RAIL_PRESETS } from './rail-profile';
 import { bottomZAt, deckZAt } from './surface';
@@ -82,9 +90,27 @@ const exactBlendPoint = (b: BezierBoard, x: number, f: number): Vec2 => {
 
   const thickness = Math.max(MIN_DIM, getThicknessAtPos(b, x));
   const width = Math.max(MIN_DIM, getWidthAtPos(b, x));
-  const a = pointByS(scaleCrossSection(cs[index]!, thickness, width).spline, f);
-  const c = pointByS(scaleCrossSection(cs[nextIndex]!, thickness, width).spline, f);
-  return vec2(a.x + (c.x - a.x) * d, a.y + (c.y - a.y) * d);
+  const at = (i: number) => pointByS(scaleCrossSection(cs[i]!, thickness, width).spline, f);
+  const lerp = (p: Vec2, q: Vec2, t: number) => vec2(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t);
+  const straight = lerp(at(index), at(nextIndex), d);
+
+  // Near a real station k the straight runs either side are eased into each other:
+  // each carried past k, mixed by a smoothstep over ±reach.
+  const real = (i: number) => i >= 1 && i <= cs.length - 2;
+  const pos = (i: number) => cs[i]!.position;
+  for (const k of [index, nextIndex]) {
+    if (!real(k) || (!real(k - 1) && !real(k + 1))) continue;
+    const gapBefore = real(k - 1) ? pos(k) - pos(k - 1) : Infinity;
+    const gapAfter = real(k + 1) ? pos(k + 1) - pos(k) : Infinity;
+    const reach = Math.min(STATION_EASE, STATION_EASE_SHARE * gapBefore, STATION_EASE_SHARE * gapAfter); // prettier-ignore
+    const u = (x - pos(k)) / reach;
+    if (!(reach > 0) || Math.abs(u) >= 1) continue;
+    const arriving = real(k - 1) ? lerp(at(k - 1), at(k), (x - pos(k - 1)) / gapBefore) : at(k);
+    const leaving = real(k + 1) ? lerp(at(k), at(k + 1), (x - pos(k)) / gapAfter) : at(k);
+    const t = (u + 1) / 2;
+    return lerp(arriving, leaving, t * t * (3 - 2 * t));
+  }
+  return straight;
 };
 
 /** Densely sampled points of a rebuilt section, for nearest-point comparison. */
