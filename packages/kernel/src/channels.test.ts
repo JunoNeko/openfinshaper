@@ -16,7 +16,7 @@ import {
   type ChannelWall,
 } from './channels';
 import { knotFromArray } from './knot';
-import { loftRing } from './loft';
+import { loftRing, loftSection, ringFractions, ringHalf, stationRing } from './loft';
 import { hasTailCutout } from './outline-cutout';
 import { bottomZAt } from './surface';
 import { tessellateBoard, type BoardMesh } from './tessellate';
@@ -195,6 +195,23 @@ describe('a channel designed off the bottom', () => {
       expect(Math.min(...ring.map((p) => Math.abs(p.y - y)))).toBeLessThan(1e-6);
     }
     expect(channelProblems(pair, (v) => getWidthAtPos(shortboard, v) / 2, (v) => getThicknessAtPos(shortboard, v)).join()).toMatch(/runs off the bottom/); // prettier-ignore
+  });
+});
+
+describe('the rail past the last channel wall', () => {
+  it('is sampled as on a board without channels (no facets on the rail)', () => {
+    const b = withChannels(shortboard, [straight(0, 5, 0.5), straight(5, 10, 0.5)]);
+    const half = ringHalf(64);
+    const plain = ringFractions(b, half);
+    // Where the outer wall sits about where it does at the reference station (the middle
+    // of the channels), the rail and deck from just past it are the plain ladder exactly.
+    // (Where it has moved far, up the golden board's pointed tail or past the channels'
+    // end, the ring blends over to the plain stretch.)
+    const deck = plain.filter((f) => f > 0.6);
+    for (const x of [30, 45]) {
+      const fs = stationRing(b, loftSection(b, x)!, x, half).fs;
+      fs.slice(fs.length - deck.length).forEach((f, i) => expect(f).toBeCloseTo(deck[i]!, 12));
+    }
   });
 });
 

@@ -469,7 +469,40 @@ const anchorFractions = (
 interface RingPlan {
   readonly k: readonly number[];
   readonly t: readonly number[];
+  /** The last anchor at the reference station, or null without anchors. */
+  readonly lastRef: number | null;
 }
+
+/** The least span (profile fraction) past the last anchor over which the rail's points are eased back to their own places. */
+const RAIL_EASE = 0.1;
+
+/**
+ * Where a ring point past the last anchor goes: `fRef` is its own place on the board's
+ * ladder (where it is at the reference station, and on a board without channels), `a`
+ * the last anchor here and `aRef` there.
+ *
+ * Stretching the whole span from the last anchor to the deck centreline with it (as
+ * every other span is) slid the rail's points, which the ladder packs where the rail
+ * curves tightest, off that curve wherever the anchor sits elsewhere than at the
+ * reference: near a tail that faceted the rail by up to 0.4 mm (owner report, 2026-11).
+ * So only the points near the anchor move with it, easing back to their own places by
+ * `D` past it, and the rail and deck are sampled exactly as without channels. Strictly
+ * increasing in `fRef` and continuous in `a`; where the anchor has moved too far for
+ * that (a pointed tail), it blends over to the plain stretch.
+ */
+const pastLastAnchor = (fRef: number, a: number, aRef: number): number => {
+  const shift = a - aRef;
+  const span = 1 - aRef;
+  const stretched = a + ((fRef - aRef) * (1 - a)) / (span || 1);
+  if (!(span > 0)) return stretched;
+  const D = Math.min(span, Math.max(RAIL_EASE, 2 * Math.abs(shift)));
+  const u = Math.min(1, Math.max(0, (fRef - aRef) / D));
+  const eased = fRef + shift * (1 - u * u * (3 - 2 * u));
+  // Its slope is at least 1 - 1.5 |shift| / D: blend to the stretch before that nears 0.
+  const steep = (1.5 * Math.abs(shift)) / D;
+  const lambda = Math.min(1, Math.max(0, (steep - 0.5) / 0.5));
+  return (1 - lambda) * eased + lambda * stretched;
+};
 
 const PLAN_CACHE = new WeakMap<BezierBoard, Map<number, RingPlan | null>>();
 
@@ -504,7 +537,11 @@ const buildPlan = (
   ref.forEach((f, j) => entries.push({ f, k: j + 1, t: 0 }));
   // Stable: a ladder point and an anchor at the same place keep this order everywhere.
   entries.sort((p, q) => p.f - q.f || p.k - q.k || p.t - q.t);
-  return { k: entries.map((e) => e.k), t: entries.map((e) => e.t) };
+  return {
+    k: entries.map((e) => e.k),
+    t: entries.map((e) => e.t),
+    lastRef: ref.length ? ref[ref.length - 1]! : null,
+  };
 };
 
 /** A station's ring: fractions along its profile, and where its bottom ends. */
@@ -539,9 +576,15 @@ export const stationRing = (
   const end = bottomEnd(s);
   if (!plan) return { fs: ringFractions(b, half), bottomEnd: end };
   const knots = [0, ...anchorFractions(b, s, x, end, mapAt(x)), 1];
+  const last = knots.length - 2;
+  const { lastRef } = plan;
   const fs = plan.k.map((k, i) => {
     const lo = knots[k]!;
-    return lo + (knots[k + 1]! - lo) * plan.t[i]!;
+    const t = plan.t[i]!;
+    if (k === last && lastRef !== null && t > 0 && t < 1) {
+      return pastLastAnchor(lastRef + (1 - lastRef) * t, lo, lastRef);
+    }
+    return lo + (knots[k + 1]! - lo) * t;
   });
   return { fs, bottomEnd: end };
 };

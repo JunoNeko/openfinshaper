@@ -137,6 +137,19 @@ Two more things showed on the owner's square tail:
   landed on the wall, and the mesh welded them into edges shared by up to 24 faces. They
   are now spaced by the radii as set, held only to the width.
 
+### The rail past the last wall (owner report, 2026-11)
+
+`stationRing` stretched every span of the ladder between anchors, including the last
+one: from the outermost wall to the deck centreline. Wherever that wall sits elsewhere
+than at the reference station, the stretch slid the rail's points off the tight curve
+the ladder packs them onto. Near the owner's tail that faceted the rail: STL triangles
+up to 0.42 mm off the true surface, 0.16 mm at the 99th percentile. The same board
+without channels gives 0.23 and 0.08.
+
+Points past the last anchor now ease from moving with it back to their own ladder
+places within a short span (`pastLastAnchor`), so the rail and deck are sampled as
+without channels: 0.31 and 0.10.
+
 ## Checks (`channelProblems`)
 
 - Each wall runs along the board, one point across it at each station.
