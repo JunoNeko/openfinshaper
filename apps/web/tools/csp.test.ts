@@ -29,7 +29,14 @@ describe('buildCsp', () => {
     const scriptSrc = csp.split('; ').find((d) => d.startsWith('script-src '))!;
     expect(scriptSrc).toContain("'sha256-A' 'sha256-B'");
     expect(scriptSrc.match(/sha256-B/g)).toHaveLength(1);
-    expect(scriptSrc).not.toContain('unsafe');
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
+    expect(scriptSrc).not.toContain("'unsafe-eval'");
+  });
+
+  it('lets the page compile WebAssembly, and run no other generated code', () => {
+    const scriptSrc = csp.split('; ').find((d) => d.startsWith('script-src '))!;
+    expect(scriptSrc).toContain("'wasm-unsafe-eval'");
+    expect(scriptSrc.replace("'wasm-unsafe-eval'", '')).not.toContain('unsafe');
   });
 
   it('forbids plugins, base rewriting and framing by other sites', () => {

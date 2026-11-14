@@ -44,7 +44,10 @@ export function buildCsp(hashes: Iterable<string>): string {
   const unique = [...new Set(hashes)].sort();
   return [
     "default-src 'self'",
-    `script-src 'self' ${[...unique, POSTHOG_SCRIPTS].join(' ')}`,
+    // 'wasm-unsafe-eval' lets the page compile WebAssembly (the print-blank export's
+    // solid modeller), and nothing else: unlike 'unsafe-eval', it allows no eval() and
+    // no new Function() of JavaScript.
+    `script-src 'self' ${[...unique, POSTHOG_SCRIPTS, "'wasm-unsafe-eval'"].join(' ')}`,
     // Prerendered markup carries style attributes, and offline.html has its own
     // <style>. Styles can't run code, so this is the usual trade.
     "style-src 'self' 'unsafe-inline'",
