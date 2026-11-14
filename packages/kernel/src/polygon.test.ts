@@ -43,6 +43,23 @@ describe('triangulatePolygon', () => {
     expect(sum).toBeLessThan(0);
   });
 
+  it('joins points on a straight run across the outline, not into zero-area slivers', () => {
+    // A step's straight floor: nine points on one line, then the wall and the deck.
+    // Listed from the middle of the run, where taking the first ear found clipped a sliver.
+    const run: P2[] = [
+      ...Array.from({ length: 8 }, (_, i) => ({ x: i + 1, y: (i + 1) * 0.1 })),
+      { x: 8, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 3 },
+      { x: 0, y: 3 },
+      { x: 0, y: 0 },
+    ];
+    const tris = triangulatePolygon(run);
+    expect(tris).toHaveLength(run.length - 2);
+    for (const [a, b, c] of tris)
+      expect(Math.abs(area(run[a]!, run[b]!, run[c]!))).toBeGreaterThan(1e-6);
+  });
+
   it('needs three points', () => {
     expect(
       triangulatePolygon([

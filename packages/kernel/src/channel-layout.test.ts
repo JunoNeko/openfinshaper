@@ -15,8 +15,8 @@ import {
   scaleBoardChannels,
   type ChannelParams,
 } from './channel-layout';
-import { channelAnchors, channelDepthAt } from './channels';
-import { channelCut, loftPoint, loftSection } from './loft';
+import { SQUARE_WALL_GAP, channelAnchors, channelDepthAt } from './channels';
+import { channelCut, loftPoint, loftRing, loftSection } from './loft';
 import { tessellateBoard } from './tessellate';
 import { parseBrdGeometry } from './test-support/brd-geometry';
 
@@ -222,10 +222,19 @@ describe('channels out through a square tail', () => {
           ),
         ),
       );
-      const params: ChannelParams = { ...P, wall: { shape: 'step', radius: 0, lip: 0 }, width: 4.5, inner: 0, start: 0, fullFrom: 0, fullTo: 30, end: 60, station: 30 }; // prettier-ignore
+      const params: ChannelParams = { ...P, wall: { shape: 'step', radius: 0, lip: 0 }, width: 4.8, inner: 0, start: 0, fullFrom: 0, fullTo: 30, end: 60, station: 30 }; // prettier-ignore
       const b = board(square, s.bottom, deck, s.crossSections, s.interpolationType, s.fins, { from: 'numbers', params }); // prettier-ignore
       expect(boardChannelProblems(b).join(' | ')).toBe('');
       expect(getWidthAtPos(b, 0.1) / 2).toBeGreaterThan(10);
+      // The outer wall, 9.6 cm out on a tail 10.5 across the half (as the owner's, 10 on
+      // 10.85): close to the rail but on the bottom, so exact right to the tail, a vertical pair a micron apart (owner's
+      // Triangles_missing: a band too wide moved it, and the hull folded at the corner).
+      for (const x of [0.2, 0.5, 1]) {
+        const ys = loftRing(b, x, 48)!.map((v) => v.y);
+        for (const y of [9.6 - SQUARE_WALL_GAP, 9.6 + SQUARE_WALL_GAP]) {
+          expect(Math.min(...ys.map((v) => Math.abs(v - y)))).toBeLessThan(1e-6);
+        }
+      }
       const mesh = tessellateBoard(b, { lengthSteps: 40, ringSteps: 48 });
       const P3 = (i: number) => ({ x: mesh.positions[i * 3]!, y: mesh.positions[i * 3 + 1]!, z: mesh.positions[i * 3 + 2]! }); // prettier-ignore
       // The cap: the triangles in the first ring's plane (the loft has none exactly on the

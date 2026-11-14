@@ -33,12 +33,13 @@ const inside = (p: P2, a: P2, b: P2, c: P2, eps: number) =>
 
 /**
  * Triangles covering the simple polygon `pts` (closed implicitly, either direction), as
- * index triples wound the same way as the polygon runs. O(n²): fine for a hull's end
- * ring, a few hundred points.
+ * index triples wound the same way as the polygon runs. O(n³): fine for a hull's end
+ * ring, a few hundred points, closed twice a mesh.
  *
  * Points a hair apart (a channel's vertical wall is two points 1 µm apart) and points on
- * a straight run are handled: such an ear is clipped as a sliver, which is what the
- * outline is there.
+ * a straight run are handled: the best-shaped ear goes first, so they end up joined to
+ * points across the outline rather than in zero-area slivers (owner's
+ * Triangles_missing: slivers along a step's straight floor faced either way).
  */
 export const triangulatePolygon = (pts: readonly P2[]): [number, number, number][] => {
   const n = pts.length;
@@ -53,48 +54,49 @@ export const triangulatePolygon = (pts: readonly P2[]): [number, number, number]
   const out: [number, number, number][] = [];
   const emit = (a: number, b: number, c: number) => out.push(ccw ? [a, b, c] : [c, b, a]);
 
-  let guard = n * n;
-  while (idx.length > 3 && guard-- > 0) {
+  // Clip the best-shaped ear each time (the widest angle at its tip), not the first
+  // found: a vertex on a straight run (a step's straight floor) then goes last, joined
+  // to a vertex across the outline, rather than clipped as a zero-area sliver that faces
+  // either way.
+  const sine = (a: P2, b: P2, c: P2) =>
+    cross(a, b, c) / (Math.hypot(b.x - a.x, b.y - a.y) * Math.hypot(c.x - b.x, c.y - b.y) || 1);
+  while (idx.length > 3) {
     const m = idx.length;
-    let clipped = false;
+    let best = -1;
+    let bestSine = -Infinity;
     for (let k = 0; k < m; k++) {
-      const ia = idx[(k + m - 1) % m]!;
-      const ib = idx[k]!;
-      const ic = idx[(k + 1) % m]!;
-      const a = at(ia);
-      const b = at(ib);
-      const c = at(ic);
+      const a = at(idx[(k + m - 1) % m]!);
+      const b = at(idx[k]!);
+      const c = at(idx[(k + 1) % m]!);
       if (cross(a, b, c) < -eps) continue; // reflex
+      const q = sine(a, b, c);
+      if (q <= bestSine) continue;
       let blocked = false;
       for (const j of idx) {
-        if (j === ia || j === ib || j === ic) continue;
+        if (j === idx[(k + m - 1) % m] || j === idx[k] || j === idx[(k + 1) % m]) continue;
         if (inside(at(j), a, b, c, eps)) {
           blocked = true;
           break;
         }
       }
       if (blocked) continue;
-      emit(ia, ib, ic);
-      idx.splice(k, 1);
-      clipped = true;
-      break;
+      best = k;
+      bestSine = q;
     }
-    if (!clipped) {
+    if (best < 0) {
       // Numerically stuck (it shouldn't be on a simple polygon): clip the least reflex
       // corner, so the cap still closes.
-      let best = 0;
       let bestCross = -Infinity;
-      for (let k = 0; k < idx.length; k++) {
-        const c = cross(at(idx[(k + idx.length - 1) % idx.length]!), at(idx[k]!), at(idx[(k + 1) % idx.length]!)); // prettier-ignore
+      for (let k = 0; k < m; k++) {
+        const c = cross(at(idx[(k + m - 1) % m]!), at(idx[k]!), at(idx[(k + 1) % m]!));
         if (c > bestCross) {
           bestCross = c;
           best = k;
         }
       }
-      const m2 = idx.length;
-      emit(idx[(best + m2 - 1) % m2]!, idx[best]!, idx[(best + 1) % m2]!);
-      idx.splice(best, 1);
     }
+    emit(idx[(best + m - 1) % m]!, idx[best]!, idx[(best + 1) % m]!);
+    idx.splice(best, 1);
   }
   if (idx.length === 3) emit(idx[0]!, idx[1]!, idx[2]!);
   return out;

@@ -404,8 +404,8 @@ const bottomFractionAt = (s: LoftedSection, y: number, end: number, map: Lateral
 /** The share of a station's bottom anchors may use; the rest is left for the rail. */
 const ANCHOR_REACH = 0.95;
 
-/** How much of the bottom, at most, just inside its reach takes the anchors that run past it (cm). */
-const SQUEEZE_BAND = 1;
+/** How much of the bottom, at most, just inside its reach takes the anchors that run past it (cm): narrow, so a wall that fits close to the rail keeps its place. */
+const SQUEEZE_BAND = 0.25;
 
 /**
  * Where an anchor `y` out from the stringer goes on a bottom `reach` wide, the widest
