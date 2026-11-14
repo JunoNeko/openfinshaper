@@ -34,6 +34,11 @@ import {
   MEASURE_COLORS,
   drawFinsPlan,
   drawFinsProfile,
+  drawChannelCut,
+  drawChannelLines,
+  drawChannelKeys,
+  mirrorSigns,
+  CHANNEL_KEY_RADIUS,
   hitFin,
   drawGhostSpline,
   drawSectionMarkers,
@@ -120,6 +125,12 @@ export interface SplineEditorProps {
   measureCursor?: boolean;
   /** Toggleable analysis overlays (curvature comb, CoM marker, distribution). */
   overlays?: EditorOverlays;
+  /**
+   * A channel key (`overlays.channelCut.keys`) dragged: `delta` is how far the pointer has
+   * moved in world units since the press. `'start'` comes once, before the first move,
+   * inside the drag's undo step ('Edit channels').
+   */
+  onChannelKeyDrag?: (id: string, delta: Vec2, phase: 'start' | 'move') => void;
   /**
    * Turn the Tunni-controls overlay on or off; the owner holds the flag in `overlays`.
    * When present, the context menu offers a "Show Tunni controls" checkbox.
@@ -224,6 +235,17 @@ type DragState =
   | { mode: 'section'; index: number; started: boolean; handle: SectionHandle; grab: number }
   // Dragging a fin to re-place it (plan pane).
   | { mode: 'fin'; index: number; grab: Vec2; downAt: ScreenPoint; started: boolean }
+  // Dragging a channel key (cross-section pane).
+  // `sign`: which half of a mirrored pane it was grabbed on, so the drag moves it the
+  // way the pointer goes there.
+  | {
+      mode: 'channel';
+      id: string;
+      from: Vec2;
+      sign: { x: number; y: number };
+      downAt: ScreenPoint;
+      started: boolean;
+    }
   // Middle-button / Space+left pan.
   | { mode: 'pan'; lastX: number; lastY: number }
   // Right button: a tap opens the context menu, a drag pans (tracked via `moved`).
@@ -250,7 +272,11 @@ type DragState =
 
 /** Whether a drag holds the store's grouped edit open (a section drag only once it moved). */
 const holdsEdit = (d: DragState): boolean =>
-  (d?.mode === 'tunni' || d?.mode === 'edit' || d?.mode === 'fin' || d?.mode === 'section') &&
+  (d?.mode === 'tunni' ||
+    d?.mode === 'edit' ||
+    d?.mode === 'fin' ||
+    d?.mode === 'section' ||
+    d?.mode === 'channel') &&
   d.started;
 
 /**
@@ -451,6 +477,7 @@ export function SplineEditor({
   readout,
   measureCursor = false,
   overlays,
+  onChannelKeyDrag,
   onTunniChange,
   ghostSplines,
   background,
@@ -734,6 +761,9 @@ export function SplineEditor({
     if (overlays?.distribution) drawDistribution(ctx, overlays.distribution, vp, size.h);
     if (overlays?.verticalMarkers)
       drawVerticalMarkers(ctx, overlays.verticalMarkers, vp, size.h, turned);
+    if (overlays?.channelLines?.length) {
+      drawChannelLines(ctx, overlays.channelLines, vp, { mirrorX, mirrorY });
+    }
     if (overlays?.fins && overlays.fins.length > 0) {
       if (overlays.finView === 'profile') drawFinsProfile(ctx, overlays.fins, vp, selectedFin);
       else drawFinsPlan(ctx, overlays.fins, vp, selectedFin);
@@ -779,6 +809,12 @@ export function SplineEditor({
           : {}),
       };
       drawSpline(ctx, spline, vp, style, { mirrorX, mirrorY });
+      if (i === 0 && overlays?.channelCut) {
+        drawChannelCut(ctx, overlays.channelCut, vp, { mirrorX, mirrorY });
+      }
+      if (i === targets.length - 1 && overlays?.channelKeys?.length) {
+        drawChannelKeys(ctx, overlays.channelKeys, vp, { mirrorX, mirrorY });
+      }
       if (tunniEnabled) drawTunniControls(ctx, spline, vp);
       const sel = selection && sameTarget(selection.target, t) ? selection.index : null;
       const hovered =
@@ -1084,6 +1120,32 @@ export function SplineEditor({
         return;
       }
       onFocusSection?.(null);
+      // A channel key, before the section's own points: it sits on the curve.
+      const keys = onChannelKeyDrag ? overlays?.channelKeys : undefined;
+      if (keys?.length) {
+        const tol = (touch ? TOUCH_HIT_TOL_PX : HIT_TOL_PX) + CHANNEL_KEY_RADIUS / 2;
+        let best: { id: string; d: number; sign: { x: number; y: number } } | null = null;
+        for (const sign of mirrorSigns({ mirrorX, mirrorY })) {
+          for (const k of keys) {
+            const s = worldToScreen(vp, { x: k.p.x * sign.x, y: k.p.y * sign.y });
+            const d = Math.hypot(s.x - p.x, s.y - p.y);
+            if (d <= tol && (!best || d < best.d)) best = { id: k.id, d, sign };
+          }
+        }
+        if (best) {
+          store.getState().select(null);
+          drag.current = {
+            mode: 'channel',
+            id: best.id,
+            from: screenToWorld(vp, p),
+            sign: best.sign,
+            downAt: p,
+            started: false,
+          };
+          setCursor('grabbing');
+          return;
+        }
+      }
       const picked = hitAny(p, touch ? TOUCH_HIT_TOL_PX : HIT_TOL_PX);
       if (picked) {
         store
@@ -1175,6 +1237,7 @@ export function SplineEditor({
       onMoveSection,
       onDeleteSection,
       overlays,
+      onChannelKeyDrag,
       cancelLongPress,
       targets,
       mirrorX,
@@ -1343,6 +1406,24 @@ export function SplineEditor({
         onMoveSection?.(d.index, world.x + d.grab);
         return;
       }
+      if (d.mode === 'channel') {
+        if (d.started && !store.getState().editing) {
+          drag.current = null;
+          return;
+        }
+        if (!d.started) {
+          if (p.x === d.downAt.x && p.y === d.downAt.y) return;
+          store.getState().beginEdit('Edit channels');
+          d.started = true;
+          onChannelKeyDrag?.(d.id, { x: 0, y: 0 }, 'start');
+        }
+        onChannelKeyDrag?.(
+          d.id,
+          { x: (world.x - d.from.x) * d.sign.x, y: (world.y - d.from.y) * d.sign.y },
+          'move',
+        );
+        return;
+      }
       if (d.mode === 'traceMove') {
         setLiveTrace({
           ...d.start,
@@ -1410,7 +1491,7 @@ export function SplineEditor({
       if (d.hit.kind === 'end') store.getState().moveControlPoint(d.target, d.hit.index, held);
       else store.getState().moveTangent(d.target, d.hit.index, d.hit.kind, held);
     },
-    [localPoint, vp, store, cancelLongPress, onMoveSection],
+    [localPoint, vp, store, cancelLongPress, onMoveSection, onChannelKeyDrag],
   );
 
   const onPointerUp = useCallback(
@@ -1445,6 +1526,7 @@ export function SplineEditor({
       }
       if (holdsEdit(d)) store.getState().endEdit();
       if (d?.mode === 'section') setDraggingSection(null);
+      if (d?.mode === 'channel') setCursor('crosshair');
       // A right-button tap (no pan) opens the context menu at the cursor.
       if (d?.mode === 'rightpan' && !d.moved && vp && board) {
         const p = localPoint(e);

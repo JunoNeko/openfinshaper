@@ -18,6 +18,7 @@ export default function DocsEditing() {
         { id: 'sections', label: 'Cross-sections' },
         { id: 'rails', label: 'Rail presets' },
         { id: 'tail', label: 'Concave tails' },
+        { id: 'channels', label: 'Channels' },
         { id: 'undo', label: 'Undo & history' },
       ]}
     >
@@ -257,6 +258,69 @@ export default function DocsEditing() {
         <p>
           One shape is not supported: a single notch only, so batwing tails with two cutouts cannot
           be described.
+        </p>
+      </Section>
+
+      <Section id="channels" title="Channels">
+        <p>
+          Grooves cut up into the bottom, usually running out through the tail. Select the
+          cross-section to lay them out from, then add them from <strong>Channels</strong> in the
+          Shape tab of the sidebar. They are drawn on the cross-section, cut into the 3D view and
+          the STL; volume and STEP don&apos;t include them yet. Each change, and each slider drag,
+          is one undo step. They are saved in the <code>.board</code> file, autosave and share
+          links; the legacy <code>.brd</code> format has no place for them.
+        </p>
+        <Terms>
+          <Term name="Number">
+            Across the whole board. An even count puts half each side of the stringer; an odd count
+            puts one on the stringer as wide as the others.
+          </Term>
+          <Term name="Type">
+            Step: deepest at a steep wall on the rail side, the floor ramping back up to nothing
+            toward the stringer. Scoop: a concave arc, neighbours meeting in a sharp ridge. Wave:
+            smooth flutes with rounded crests.
+          </Term>
+          <Term name="Width, depth">
+            Each channel&apos;s width, set side by side with no flat between, and how deep it is
+            cut.
+          </Term>
+          <Term name="Radius top, radius bottom">
+            For a step: the radius where its wall meets the floor, and where it meets the uncut
+            bottom. 0 leaves the edge sharp.
+          </Term>
+          <Term name="Stringer offset">
+            From the stringer to the first channel. Width, offset and Centre–Rail are measured at
+            the cross-section the channels were laid out from; the panel offers to lay them out from
+            the one on show instead.
+          </Term>
+          <Term name="Align">
+            Centre–Rail: how far the walls follow the outline. At Centre they run parallel to the
+            stringer; at Rail each keeps its share of the board&apos;s width, so they follow the
+            rail. Tail–Nose: where the channels start and end; a start at the tail runs them out
+            through it.
+          </Term>
+          <Term name="Depth blend">
+            The bar is the channels&apos; length, from where they start to where they end. They are
+            full depth between its two handles, and fade smoothly to nothing from each handle to its
+            end of the bar; the shaded band shows it. A handle at the end of the bar means no fade
+            there: full depth out through the tail, say.
+          </Term>
+        </Terms>
+        <p>
+          <strong>Apply</strong> makes them editable: green points you can drag, at every
+          cross-section the channels pass and at their ends. On a cross-section, drag a point on a
+          wall to move the wall across, or the point where a channel is deepest to set its depth. On
+          the outline, where the walls are drawn in plan, drag a point to move its wall: this is how
+          curved channels are drawn. On the rocker, where the depth is drawn above the bottom, drag
+          a point to deepen every channel there. The change eases out to the cross-sections either
+          side, and side-by-side channels keep sharing their wall. The panel shows each
+          channel&apos;s offset, width and depth at the cross-section on show, live as you drag. Add
+          a cross-section to edit them somewhere new. <strong>Reset</strong> goes back to the
+          numbers they were applied from, clearing every edit.
+        </p>
+        <p>
+          The panel says when they can&apos;t be cut: running off the bottom, deeper than half the
+          board&apos;s thickness, or with no length.
         </p>
       </Section>
 

@@ -44,6 +44,7 @@ import {
   downloadPdf1to1,
   downloadRailBands,
   downloadStep,
+  downloadPrintBlank,
   exportBoard,
   openBoardFile,
   sourceExtension,
@@ -64,6 +65,8 @@ import { ImportWarningsDialog } from './ImportWarningsDialog';
 import type { ImportWarning } from '@openshaper/io';
 import { ExportPdf1to1Dialog } from './ExportPdf1to1Dialog';
 import { ExportStepDialog } from './ExportStepDialog';
+import { ExportPrintBlankDialog } from './ExportPrintBlankDialog';
+import { loadPrintBlank, savePrintBlank, type PrintBlankSettings } from './print-blank-settings';
 import { ExportRailBandsDialog } from './ExportRailBandsDialog';
 import { loadPdf1to1, savePdf1to1, type Pdf1to1Settings } from './pdf-export-settings';
 import { loadStep, saveStep, type StepSettings } from './step-export-settings';
@@ -96,6 +99,7 @@ import { Sidebar, type OverlayToggles, type ResizeFields } from './Sidebar';
 import { applyViewChange, DEFAULT_SIDEBAR_STATE, type SidebarState } from './sidebar-sections';
 import sampleBrd from './sample-board.brd?raw';
 import { boardStore } from './store';
+import { useChannelEditing } from './use-channel-editing';
 import { SUPPORT_URL } from './support';
 import { BOARD_TEMPLATES } from './templates';
 import { clampSectionIndex, nearestMidpointSection } from './section-index';
@@ -547,6 +551,10 @@ function AppShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [stepDialogOpen, setStepDialogOpen] = useState(false);
+  const [printBlankOpen, setPrintBlankOpen] = useState(false);
+  const [printBlankSettings, setPrintBlankSettings] = useState<PrintBlankSettings>(() =>
+    loadPrintBlank(),
+  );
   const [shareOpen, setShareOpen] = useState(false);
   const [stepSettings, setStepSettings] = useState<StepSettings>(() => loadStep());
   const [railBandsDialogOpen, setRailBandsDialogOpen] = useState(false);
@@ -699,6 +707,11 @@ function AppShell() {
     [specs, foamType, glassSchedule],
   );
 
+  // Channels in the 2D views: the cut, the walls and depth as lines, and the points of
+  // applied channels to drag.
+  const channelEditing = useChannelEditing(board, activeSectionX);
+  const { onChannelKeyDrag } = channelEditing;
+
   const overlaysFor = (kind: EditorKind): EditorOverlays => {
     const longitudinal = kind === 'outline' || kind === 'rocker';
     const verticalMarkers: { x: number; color: string; label?: string }[] = [];
@@ -717,6 +730,9 @@ function AppShell() {
       fins:
         (kind === 'outline' || kind === 'rocker') && resolvedFins.length ? resolvedFins : undefined,
       finView: kind === 'rocker' ? 'profile' : 'plan',
+      channelCut: kind === 'crossSection' ? (channelEditing.sectionCut ?? undefined) : undefined,
+      channelLines: channelEditing.linesFor(kind),
+      channelKeys: channelEditing.keysFor(kind),
     };
   };
 
@@ -1104,6 +1120,13 @@ function AppShell() {
     })),
     {
       kind: 'action',
+      label: 'STL blank for printing…',
+      disabled: !board,
+      title: 'The board with a cavity for each fin box or plug, and no fins',
+      onSelect: () => setPrintBlankOpen(true),
+    },
+    {
+      kind: 'action',
       label: 'STEP (surfaces)…',
       disabled: !board || stepSupport?.ok === false,
       title: stepSupport?.ok === false ? stepSupport.reason : undefined,
@@ -1344,6 +1367,7 @@ function AppShell() {
     onAddSectionAt: addSectionAt,
     onScrub: scrubSection,
     overlays: overlaysFor(kind),
+    onChannelKeyDrag,
     onTunniChange: setTunniOverlay,
     ghostSplines: ghostSplinesFor(kind),
     ...(kind === 'crossSection' ? {} : traceProps(kind)),
@@ -1419,6 +1443,7 @@ function AppShell() {
       onUnitChange={isPhone ? setUnitKey : undefined}
       longitudinal={longitudinal}
       onMeasurementAxisChange={isPhone ? setMeasurementAxis : undefined}
+      activeSection={clampedCs}
     />
   );
 
@@ -1754,6 +1779,23 @@ function AppShell() {
             markExport();
           }}
           onClose={() => setStepDialogOpen(false)}
+        />
+      )}
+
+      {printBlankOpen && board && (
+        <ExportPrintBlankDialog
+          board={board}
+          units={units}
+          settings={printBlankSettings}
+          onExport={async (s) => {
+            savePrintBlank(s);
+            setPrintBlankSettings(s);
+            const r = await downloadPrintBlank(board, s, meta);
+            track('export_board', { format: 'stl-blank' });
+            markExport();
+            return r;
+          }}
+          onClose={() => setPrintBlankOpen(false)}
         />
       )}
 

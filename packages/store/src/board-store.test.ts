@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   board,
+  boardChannels,
   crossSection,
   csCenterThickness,
   csWidth,
@@ -893,5 +894,52 @@ describe('board store: handle-angle locks', () => {
     expect(k.tangentToNext.x).toBeCloseTo(62, 12);
     expect(k.tangentToNext.y).toBeCloseTo(20, 12);
     expect(store.getState().past.at(-1)!.label).toBe('Set handle length');
+  });
+});
+
+describe('board store: channels', () => {
+  const params = {
+    count: 2,
+    wall: { shape: 'square' as const },
+    width: 3,
+    depth: 0.5,
+    inner: 2,
+    follow: 1,
+    start: 25,
+    end: 60,
+    station: 30,
+    fullFrom: 25,
+    fullTo: 40,
+  };
+
+  it('adds, changes and removes channels, one undo step each', () => {
+    const store = createBoardStore();
+    store.getState().load(makeBoard());
+    store.getState().setChannels({ from: 'numbers', params });
+    store.getState().setChannels({ from: 'numbers', params: { ...params, depth: 0.3 } });
+    store.getState().setChannels(null);
+    expect(store.getState().past.map((h) => h.label)).toEqual([
+      'Add channels',
+      'Edit channels',
+      'Remove channels',
+    ]);
+    expect(store.getState().board!.channels).toBeUndefined();
+    store.getState().undo();
+    expect(store.getState().board!.channels).toEqual({
+      from: 'numbers',
+      params: { ...params, depth: 0.3 },
+    });
+  });
+
+  it('keeps typed-in channels through an outline edit, following the new outline', () => {
+    const store = createBoardStore();
+    store.getState().load(makeBoard());
+    store.getState().setChannels({ from: 'numbers', params });
+    const outer = (b: BezierBoard) => valueAt(boardChannels(b)[0]!.outer, 40);
+    const before = outer(store.getState().board!);
+    store.getState().moveControlPoint({ kind: 'outline' }, 1, vec2(70, 30));
+    const b = store.getState().board!;
+    expect(b.channels).toEqual({ from: 'numbers', params });
+    expect(outer(b)).not.toBeCloseTo(before, 3);
   });
 });
