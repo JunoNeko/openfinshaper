@@ -57,7 +57,7 @@ export default {
     const url = new URL(request.url);
     const canonical = canonicalRedirect(request, url);
     if (canonical) return canonical;
-    // `/` → `/fin` is public/_redirects' job, applied by the assets layer.
+    // `/` → `/app` is public/_redirects' job, applied by the assets layer.
     const isProxied = url.pathname === PROXY_PREFIX || url.pathname.startsWith(`${PROXY_PREFIX}/`);
     return isProxied ? proxy(request, url, ctx) : env.ASSETS.fetch(request);
   },
