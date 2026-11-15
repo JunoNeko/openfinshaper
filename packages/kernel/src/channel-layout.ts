@@ -59,6 +59,16 @@ export interface ChannelParams {
   readonly fullFrom: number;
   /** Where full depth ends: from here it fades out to nothing at `end`. */
   readonly fullTo: number;
+  /**
+   * The walls meet at the stringer: from `station` they curve in, to reach it at `end`.
+   * Absent or false: they keep their width to the end.
+   */
+  readonly meet?: boolean;
+  /**
+   * Where meeting walls curve in, 0 to 1: 0 early, closing steadily from `station`; 1
+   * late, holding their width and turning in near `end`. Absent: 0.5.
+   */
+  readonly curve?: number;
 }
 
 /** A board's channels: typed in, or drawn. */
@@ -152,6 +162,20 @@ const wallsAcross = (p: ChannelParams): { readonly yi: number | null; readonly y
 
 /** Knots along a wall that follows the outline, and along the depth curve. */
 const WALL_KNOTS = 13;
+/** Knots from the station to the end along walls that meet at the stringer. */
+const MEET_KNOTS = 24;
+
+/**
+ * The share of its width a meeting wall keeps, `t` of the way from the station (0) to
+ * the end (1): 1 − tⁿ. Flat at the station, so it leaves the run before it without a
+ * kink; 0 at the end, met at an angle, a point like a gothic arch. `curve` sets n: 1.5
+ * closes early and steadily, 5 holds wide and turns in late.
+ */
+export const meetShare = (t: number, curve: number): number => {
+  const n = 1.5 + 3.5 * Math.min(1, Math.max(0, curve));
+  const v = Math.min(1, Math.max(0, t));
+  return 1 - Math.pow(v, n);
+};
 const DEPTH_KNOTS = 25;
 
 /** A smooth curve through `pts` (Catmull-Rom tangents as Bézier handles). */
@@ -210,8 +234,28 @@ export const layoutChannels = (b: BezierBoard, p: ChannelParams): BottomChannel[
   if (!across.length || !(wRef > 0)) return [];
   const depth = depthCurve(p);
   const follow = Number.isFinite(p.follow) ? Math.min(1, Math.max(0, p.follow)) : 0;
+  // Meeting walls close from the station (the start, if the station is outside) to the end.
+  const meet = p.meet === true;
+  const from = p.station > x0 && p.station < x1 ? p.station : x0;
+  const curve = p.curve ?? 0.5;
+  const share = (x: number) => (meet ? meetShare((x - from) / (x1 - from), curve) : 1);
   /** A wall `y` out from the stringer at the station. */
   const wall = (y: number): Spline => {
+    if (meet) {
+      const xs: number[] = [];
+      if (from > x0) {
+        const n = follow === 0 ? 1 : Math.max(2, Math.round((WALL_KNOTS * (from - x0)) / (x1 - x0))); // prettier-ignore
+        for (let i = 0; i < n; i++) xs.push(x0 + ((from - x0) * i) / n);
+      }
+      // Closer together toward the end, where the wall turns in.
+      for (let i = 0; i <= MEET_KNOTS; i++) {
+        const u = i / MEET_KNOTS;
+        xs.push(from + (x1 - from) * (1 - (1 - u) * (1 - u)));
+      }
+      return smoothThrough(
+        xs.map((x) => [x, Math.max(0, y * (1 + (half(x) / wRef - 1) * follow) * share(x))]),
+      );
+    }
     if (follow === 0) {
       return splineFromKnots([
         knot(vec2(x0, y), vec2(x0, y), vec2(x0 + (x1 - x0) / 3, y), true),

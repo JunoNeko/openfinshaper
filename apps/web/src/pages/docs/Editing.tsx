@@ -277,8 +277,10 @@ export default function DocsEditing() {
           </Term>
           <Term name="Type">
             Step: deepest at a steep wall on the rail side, the floor ramping back up to nothing
-            toward the stringer. Scoop: a concave arc, neighbours meeting in a sharp ridge. Wave:
-            smooth flutes with rounded crests.
+            toward the stringer. The second step is turned round: deepest on the stringer side, the
+            floor ramping up to nothing at the outer wall; two of them from the stringer meet there
+            in a V, deepest down the middle. Scoop: a concave arc, neighbours meeting in a sharp
+            ridge. Wave: smooth flutes with rounded crests.
           </Term>
           <Term name="Width, depth">
             Each channel&apos;s width, set side by side with no flat between, and how deep it is
@@ -298,6 +300,12 @@ export default function DocsEditing() {
             stringer; at Rail each keeps its share of the board&apos;s width, so they follow the
             rail. Tail–Nose: where the channels start and end; a start at the tail runs them out
             through it.
+          </Term>
+          <Term name="Meet at the stringer">
+            Curved channels whose walls close to a point: they keep their width to the cross-section
+            they were laid out from, then curve in to meet the stringer where the channels end. The
+            Early–Late slider sets how: early closes them steadily, late holds them wide and turns
+            them in near the end. The depth still follows the Depth blend.
           </Term>
           <Term name="Depth blend">
             The bar is the channels&apos; length, from where they start to where they end. They are

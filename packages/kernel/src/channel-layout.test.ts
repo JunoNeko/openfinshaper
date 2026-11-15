@@ -126,6 +126,38 @@ describe('typed-in channels', () => {
     expect(tessellateBoard(drawn, opts).positions).toEqual(tessellateBoard(b, opts).positions);
   });
 
+  it('meeting at the stringer: walls hold to the station, then curve in to meet it at the end', () => {
+    const b = typed({ meet: true, curve: 0.5 });
+    const cs = boardChannels(b);
+    for (const c of cs) {
+      const yo = valueAt(c.outer, P.station);
+      // Flat leaving the station, no kink; nothing left at the end.
+      expect(valueAt(c.outer, P.station + 0.5)).toBeCloseTo(yo, 2);
+      expect(valueAt(c.outer, P.end)).toBeCloseTo(0, 9);
+      // Narrowing all the way: never wider again.
+      let last = Infinity;
+      for (let x = P.station; x <= P.end; x += 1) {
+        const y = valueAt(c.outer, x);
+        expect(y).toBeLessThanOrEqual(last + 1e-3); // the spline may ripple a micron
+        last = y;
+      }
+    }
+    // The outermost wall at the station is where it was laid out.
+    expect(valueAt(cs[cs.length - 1]!.outer, P.station)).toBeCloseTo(P.inner + 2 * P.width, 6);
+    expect(boardChannelProblems(b)).toEqual([]);
+  });
+
+  it('meeting late holds them wider through the middle than meeting early', () => {
+    const mid = (P.station + P.end) / 2;
+    const outer = (curve: number) => {
+      const cs = boardChannels(typed({ meet: true, curve }));
+      return valueAt(cs[cs.length - 1]!.outer, mid);
+    };
+    expect(outer(1)).toBeGreaterThan(outer(0.5));
+    expect(outer(0.5)).toBeGreaterThan(outer(0));
+    expect(outer(0)).toBeGreaterThan(0);
+  });
+
   it('scale with the board', () => {
     const s = scaleBoardChannels({ from: 'numbers', params: P }, 2, 1.5, 0.5);
     expect(s).toEqual({

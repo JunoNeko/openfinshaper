@@ -228,6 +228,13 @@ describe('board-json channels', () => {
     expect(boardChannels(restored)).toEqual(boardChannels(original));
   });
 
+  it('round-trips curved channels: walls meeting at the stringer, a step deepest there', () => {
+    const p = { ...params(), count: 2, inner: 0, meet: true, curve: 0.7, wall: { shape: 'step' as const, radius: 0.2, lip: 0.3, deepAt: 'stringer' as const } }; // prettier-ignore
+    const original = withChannels({ from: 'numbers', params: p });
+    const { board: restored } = readBoardJson(writeBoardJson(original));
+    expect(restored.channels).toEqual(original.channels);
+  });
+
   it('round-trips drawn channels, a centred one too, and the numbers they came from', () => {
     const typed = withChannels({ from: 'numbers', params: params() });
     const drawn = withChannels({

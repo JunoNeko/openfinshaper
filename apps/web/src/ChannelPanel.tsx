@@ -45,11 +45,12 @@ import { fmtLen, type LengthUnit } from './format';
 import type { Longitudinal } from './longitudinal';
 import { Sel } from './view-toolkit';
 
-type PanelShape = 'step' | 'scoop' | 'wave';
+type PanelShape = 'step' | 'step-in' | 'scoop' | 'wave';
 
 /** The sections the panel offers, each drawn as two channels side by side, bottom down. */
 const TYPES: { shape: PanelShape; label: string; path: string }[] = [
-  { shape: 'step', label: 'Step', path: 'M2 12 L16 4 L16 12 L30 4 L30 12' },
+  { shape: 'step', label: 'Step, deepest at the rail side', path: 'M2 12 L16 4 L16 12 L30 4 L30 12' }, // prettier-ignore
+  { shape: 'step-in', label: 'Step, deepest at the stringer side', path: 'M30 12 L16 4 L16 12 L2 4 L2 12' }, // prettier-ignore
   { shape: 'scoop', label: 'Scoop', path: 'M2 4 Q9 16 16 4 Q23 16 30 4' },
   { shape: 'wave', label: 'Wave', path: 'M2 12 C6 12 5 4 9 4 C13 4 12 12 16 12 C20 12 19 4 23 4 C27 4 26 12 30 12' }, // prettier-ignore
 ];
@@ -60,13 +61,18 @@ const COUNTS = Array.from({ length: MAX_CHANNELS }, (_, i) => {
   return { value: String(n), label };
 });
 
-/** A step keeps its radii when the type changes away and back; others have none. */
-const wallFor = (shape: PanelShape, from: ChannelWall): ChannelWall =>
-  shape === 'step'
-    ? from.shape === 'step'
-      ? from
-      : { shape: 'step', radius: 0, lip: 0.5 }
-    : { shape };
+/** A step keeps its radii when the type changes away and back, or turns round; others have none. */
+const wallFor = (shape: PanelShape, from: ChannelWall): ChannelWall => {
+  if (shape !== 'step' && shape !== 'step-in') return { shape };
+  const radii = from.shape === 'step' ? { radius: from.radius, lip: from.lip } : { radius: 0, lip: 0.5 }; // prettier-ignore
+  return shape === 'step-in'
+    ? { shape: 'step', ...radii, deepAt: 'stringer' }
+    : { shape: 'step', ...radii };
+};
+
+/** The type the picker shows for a wall. */
+const shapeOf = (w: ChannelWall): string =>
+  w.shape === 'step' && w.deepAt === 'stringer' ? 'step-in' : w.shape;
 
 /** The closest the start and end come (cm). */
 const MIN_GAP = 1;
@@ -167,7 +173,7 @@ function ChannelFields({
       <div className="flex items-center gap-2">
         <span className="flex-1 text-muted-foreground">Type</span>
         <TypePicker
-          value={params.wall.shape}
+          value={shapeOf(params.wall)}
           onChange={(shape) => set({ wall: wallFor(shape, params.wall) })}
         />
       </div>
@@ -237,6 +243,37 @@ function ChannelFields({
         <p className="text-xs text-muted-foreground">
           From {at(params.start)} to {at(params.end)}
         </p>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={params.meet === true}
+            onChange={(e) => set({ meet: e.target.checked })}
+          />
+          <span>Meet at the stringer</span>
+        </label>
+        {params.meet === true && (
+          <>
+            <MultiSlider
+              ends={['Early', 'Late']}
+              handles={[
+                {
+                  value: Math.min(1, Math.max(0, params.curve ?? 0.5)),
+                  label: 'Curve in',
+                  valueText: `${Math.round((params.curve ?? 0.5) * 100)} %`,
+                },
+              ]}
+              onStart={onDragStart}
+              onEnd={onDragEnd}
+              onChange={(_, v) => set({ curve: v })}
+            />
+            <p className="text-xs text-muted-foreground">
+              The walls keep their width to{' '}
+              {station ? `cross-section ${station.index}` : at(params.station)}, then curve in to
+              meet the stringer at {at(params.end)}: early closes them steadily, late holds them
+              wide and turns them in near the end.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="space-y-2 pt-1">

@@ -108,7 +108,12 @@ const wallFromJson = (w: unknown, where: string): ChannelWall => {
       return { shape: w.shape };
     if (w.shape === 'step' && finite(w.radius)) {
       // Steps from before the lip was rounded have none: a sharp lip.
-      return { shape: 'step', radius: w.radius, lip: finite(w.lip) ? w.lip : 0 };
+      return {
+        shape: 'step',
+        radius: w.radius,
+        lip: finite(w.lip) ? w.lip : 0,
+        ...(w.deepAt === 'stringer' ? { deepAt: 'stringer' as const } : {}),
+      };
     }
     if (w.shape === 'bevel' && finite(w.width)) return { shape: 'bevel', width: w.width };
     if (w.shape === 'round' && finite(w.radius)) return { shape: 'round', radius: w.radius };
@@ -142,6 +147,9 @@ const paramsFromJson = (p: unknown): ChannelParams => {
     station: n('station'),
     fullFrom: n('fullFrom'),
     fullTo: n('fullTo'),
+    // Added with curved channels: older files have neither, and keep their width.
+    ...(p.meet === true ? { meet: true } : {}),
+    ...(finite(p.curve) ? { curve: Math.min(1, Math.max(0, p.curve)) } : {}),
   };
 };
 

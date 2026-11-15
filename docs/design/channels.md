@@ -300,3 +300,28 @@ Every edit goes through the same keyed curves and eases out to the cross-section
 side. To edit somewhere new, add a cross-section there. Points can't yet move along the
 board (a channel's start and end), and the rocker's vertical scale makes fine depth
 edits easier zoomed in or on the cross-section.
+
+## Curved channels: walls meeting the stringer (owner design, 2026-11)
+
+The owner's reference photo: two channels from the stringer, deepest down the middle,
+their outer walls sweeping from near the rail at the tail to meet the stringer at a
+point about 60% up the board, the depth fading toward the nose.
+
+- **A step turned round** (`deepAt: 'stringer'` on the step wall): the floor ramps from
+  nothing at the outer wall to the steep wall on the stringer side. A wall on the
+  stringer meets its mirror image at full depth, so it has no wall and no radii there
+  (`profileDepth`'s `onStringer`): two of them from the stringer make the V. Off the
+  stringer it is the step's sawtooth facing the other way.
+- **Meet at the stringer** (`meet`, `curve` in `ChannelParams`): from the layout station
+  each wall keeps the share `1 − tⁿ` of its width, t from the station (0) to the end
+  (1), n = 1.5 + 3.5·curve. Flat at the station, so no kink where it leaves the run
+  before it; zero at the end, met at an angle, a gothic-arch point. The panel's
+  Early–Late slider is `curve`. The depth stays the Depth blend's: independent of
+  where the walls meet, as the owner asked.
+- **Mesh points where walls meet** (`MIN_ANCHOR_SPAN`): walls that close to nothing, and
+  are held there past the channels' end, would put every one of a channel's ring points
+  on one spot. Below 5 mm a channel's points are spread over 5 mm instead, on the uncut
+  bottom just outside its tip. The cut's last few millimetres to the point are therefore
+  sampled less finely; the depth has usually faded there.
+
+Next: Apply to give these walls a few points with handles to drag in the outline view.
