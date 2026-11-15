@@ -200,19 +200,14 @@ describe("the common sections, side by side (the owner's reference drawing)", ()
 
 describe("the owner's curved channels", () => {
   it('two from the stringer, walls meeting it, deepest down the middle: a watertight hull', () => {
-    const b0 = shortboard;
-    const b = board(
-      b0.outline,
-      b0.bottom,
-      b0.deck,
-      b0.crossSections,
-      b0.interpolationType,
-      b0.fins,
-      {
-        from: 'numbers',
-        params: { count: 2, wall: { shape: 'step', radius: 0.15, lip: 0.1, deepAt: 'stringer' }, width: 9, depth: 0.5, inner: 0, follow: 0, start: 10, end: 110, station: 20, fullFrom: 10, fullTo: 60, meet: true, curve: 0.6 }, // prettier-ignore
-      },
-    );
+    // As drawn in the outline view: the outer wall from 9 cm out, 10 cm up the board,
+    // curving in to meet the stringer at 110.
+    const wall: ChannelWall = { shape: 'step', radius: 0.15, lip: 0.1, deepAt: 'stringer' };
+    const outer = splineFromKnots([
+      knotFromArray([10, 9, 10, 9, 50, 9], true, false),
+      knotFromArray([110, 0, 95, 4, 110, 0], true, false),
+    ]);
+    const b = withChannels(shortboard, [{ ...straight(0, 9, 0.5, wall, 60, 110), outer }]);
     for (const opts of [
       { lengthSteps: 50, ringSteps: 48 },
       { lengthSteps: 200, ringSteps: 96 },

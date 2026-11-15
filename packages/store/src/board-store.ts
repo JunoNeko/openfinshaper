@@ -21,6 +21,7 @@ import {
   enforceJunctions,
   extendKnotTangent,
   fairKnot,
+  channelWall,
   getTargetSpline,
   insertCrossSection,
   insertKnotAt,
@@ -183,7 +184,9 @@ const selectionAfterHistory = (
   const knotCount = (b: BezierBoard, t: SplineTarget): number | null =>
     t.kind === 'crossSection'
       ? (b.crossSections[t.index]?.spline.knots.length ?? null)
-      : getTargetSpline(b, t).knots.length;
+      : t.kind === 'channel'
+        ? (channelWall(b, t)?.knots.length ?? null)
+        : getTargetSpline(b, t).knots.length;
   const keep =
     selection !== null &&
     knotCount(to, selection.target) !== null &&

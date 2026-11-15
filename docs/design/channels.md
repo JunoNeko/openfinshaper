@@ -301,27 +301,41 @@ side. To edit somewhere new, add a cross-section there. Points can't yet move al
 board (a channel's start and end), and the rocker's vertical scale makes fine depth
 edits easier zoomed in or on the cross-section.
 
-## Curved channels: walls meeting the stringer (owner design, 2026-11)
+## Curved channels: walls drawn with points and handles (owner design, 2026-11)
 
-The owner's reference photo: two channels from the stringer, deepest down the middle,
-their outer walls sweeping from near the rail at the tail to meet the stringer at a
-point about 60% up the board, the depth fading toward the nose.
+The owner's reference board has two channels from the stringer, deepest down the middle,
+their outer walls sweeping in from near the rail at the tail to meet the stringer at a
+point. A first version laid such walls out from numbers (a "meet at the stringer"
+switch and an early–late curve slider); the owner judged that numbers can't cover the
+curves shapers draw, and asked for plain Bézier editing instead. So:
 
+- **Applied walls are spline targets** (`{ kind: 'channel', index, wall }` in
+  `SplineTarget`, `packages/store/src/edits.ts`). The outline view adds one for each wall
+  of applied channels (`channelTargets`), drawn green, and every outline tool works on
+  them: drag a point or a handle, double-click to add a point, Delete, the point
+  inspector, undo. A wall two side-by-side channels share is one target, and an edit to
+  it is written to both (`sameCurve`). `withSpline` holds every point and handle on the
+  board's side of the stringer, so a wall dragged onto it stops there: that is how a
+  channel is closed to a point.
+- **Apply gives walls few points**: a straight wall its two ends; one that follows the
+  outline a point at each cross-section it passes, and midway points only where the
+  curve through those strays more than 0.2 mm from the laid-out wall (`WALL_FIT`).
+- **Cross-section drags bend the wall in place** (`bendAt`): the curve is split exactly
+  at the cross-section if it has no point there, then each point moves by the eased
+  share (smoothstep out to the neighbouring cross-sections), its handles shifted by the
+  bend and tilted by its slope, so smooth points stay smooth and the handles drawn in
+  the outline view are kept. The depth curve, which has no handles to keep, is still
+  re-keyed (`withKeyAt`).
 - **A step turned round** (`deepAt: 'stringer'` on the step wall): the floor ramps from
   nothing at the outer wall to the steep wall on the stringer side. A wall on the
   stringer meets its mirror image at full depth, so it has no wall and no radii there
   (`profileDepth`'s `onStringer`): two of them from the stringer make the V. Off the
   stringer it is the step's sawtooth facing the other way.
-- **Meet at the stringer** (`meet`, `curve` in `ChannelParams`): from the layout station
-  each wall keeps the share `1 − tⁿ` of its width, t from the station (0) to the end
-  (1), n = 1.5 + 3.5·curve. Flat at the station, so no kink where it leaves the run
-  before it; zero at the end, met at an angle, a gothic-arch point. The panel's
-  Early–Late slider is `curve`. The depth stays the Depth blend's: independent of
-  where the walls meet, as the owner asked.
 - **Mesh points where walls meet** (`MIN_ANCHOR_SPAN`): walls that close to nothing, and
   are held there past the channels' end, would put every one of a channel's ring points
   on one spot. Below 5 mm a channel's points are spread over 5 mm instead, on the uncut
   bottom just outside its tip. The cut's last few millimetres to the point are therefore
   sampled less finely; the depth has usually faded there.
 
-Next: Apply to give these walls a few points with handles to drag in the outline view.
+Not yet: walls must still run along the board (one point across at each x); the panel
+says so if a handle is dragged back on itself.

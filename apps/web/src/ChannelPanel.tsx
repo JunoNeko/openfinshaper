@@ -243,37 +243,6 @@ function ChannelFields({
         <p className="text-xs text-muted-foreground">
           From {at(params.start)} to {at(params.end)}
         </p>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={params.meet === true}
-            onChange={(e) => set({ meet: e.target.checked })}
-          />
-          <span>Meet at the stringer</span>
-        </label>
-        {params.meet === true && (
-          <>
-            <MultiSlider
-              ends={['Early', 'Late']}
-              handles={[
-                {
-                  value: Math.min(1, Math.max(0, params.curve ?? 0.5)),
-                  label: 'Curve in',
-                  valueText: `${Math.round((params.curve ?? 0.5) * 100)} %`,
-                },
-              ]}
-              onStart={onDragStart}
-              onEnd={onDragEnd}
-              onChange={(_, v) => set({ curve: v })}
-            />
-            <p className="text-xs text-muted-foreground">
-              The walls keep their width to{' '}
-              {station ? `cross-section ${station.index}` : at(params.station)}, then curve in to
-              meet the stringer at {at(params.end)}: early closes them steadily, late holds them
-              wide and turns them in near the end.
-            </p>
-          </>
-        )}
       </div>
 
       <div className="space-y-2 pt-1">
@@ -338,10 +307,10 @@ function AppliedChannels({
   return (
     <div className="space-y-1.5">
       <p className="text-xs text-muted-foreground">
-        Applied: drag the green points. On a cross-section, a wall point moves the wall across and
-        the point at a channel&apos;s deepest sets its depth. On the outline, a point moves its wall
-        in plan; on the rocker, a point sets the depth of every channel there. Each change eases out
-        to the cross-sections either side.
+        Applied: on the outline, each wall is a curve to shape like the outline. Double-click it to
+        add a point; drag points and handles. On a cross-section, drag a wall point to move the wall
+        across, or the point at a channel&apos;s deepest to set its depth; on the rocker, a point
+        sets the depth of every channel there. Those ease out to the cross-sections either side.
       </p>
       <div className="text-muted-foreground">At cross-section {section.index}</div>
       {rows.length ? (
@@ -442,8 +411,8 @@ export function ChannelPanel({
             Apply
           </Button>
           <p className="text-xs text-muted-foreground">
-            Makes them editable: a point on each wall and depth at every cross-section they pass, to
-            drag in the cross-section view.
+            Makes them editable: each wall a curve to shape in the outline view with points and
+            handles, the depth set at each cross-section they pass.
           </p>
         </div>
       )}

@@ -14,6 +14,8 @@ export {
   enforceJunctions,
   extendKnotTangent,
   fairKnot,
+  channelTargets,
+  channelWall,
   getTargetSpline,
   insertCrossSection,
   insertKnotAt,

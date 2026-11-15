@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { boardChannels, valueAt } from '@openshaper/kernel';
+import { boardChannels } from '@openshaper/kernel';
 import { parseBrd } from '@openshaper/io';
 import { createBoardStore } from '@openshaper/store';
 import { ChannelPanel } from './ChannelPanel';
@@ -87,19 +87,6 @@ describe('<ChannelPanel />', () => {
     expect((screen.getByLabelText(/^Radius top/) as HTMLInputElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole('radio', { name: 'Step, deepest at the rail side' }));
     expect(params(store).wall).toEqual({ shape: 'step', radius: 0.2, lip: 0.5 });
-  });
-
-  it('meets the walls at the stringer, curving in early or late', () => {
-    const { store } = setup();
-    add();
-    expect(screen.queryByRole('slider', { name: 'Curve in' })).toBeNull();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Meet at the stringer' }));
-    expect(params(store).meet).toBe(true);
-    const cs = boardChannels(store.getState().board!);
-    const end = params(store).end;
-    expect(Math.abs(valueAt(cs[cs.length - 1]!.outer, end))).toBeLessThan(1e-9);
-    fireEvent.keyDown(screen.getByRole('slider', { name: 'Curve in' }), { key: 'ArrowRight' });
-    expect(params(store).curve).toBeGreaterThan(0.5);
   });
 
   it('moves the ends and the blend with the keyboard, one undo step a press', () => {

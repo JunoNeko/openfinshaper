@@ -147,9 +147,6 @@ const paramsFromJson = (p: unknown): ChannelParams => {
     station: n('station'),
     fullFrom: n('fullFrom'),
     fullTo: n('fullTo'),
-    // Added with curved channels: older files have neither, and keep their width.
-    ...(p.meet === true ? { meet: true } : {}),
-    ...(finite(p.curve) ? { curve: Math.min(1, Math.max(0, p.curve)) } : {}),
   };
 };
 

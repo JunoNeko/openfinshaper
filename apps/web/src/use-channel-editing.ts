@@ -20,7 +20,6 @@ import {
   channelDepthKeys,
   channelDepthLine,
   channelKeys,
-  channelPlanKeys,
   channelPlanLines,
   moveChannelDepths,
   moveChannelKey,
@@ -67,10 +66,12 @@ export function useChannelEditing(board: BezierBoard | null, sectionX: number | 
     const cs = board ? boardChannels(board) : [];
     if (!board || !cs.length) return null;
     return {
-      outline: channelPlanLines(cs),
+      // Applied walls are drawn and edited in the outline view as curves of their own
+      // (`channelTargets`): lines only for channels still typed in.
+      outline: applied ? [] : channelPlanLines(cs),
       rocker: [channelDepthLine(cs, (x) => valueAt(board.bottom, x))],
     };
-  }, [board]);
+  }, [board, applied]);
 
   const keys = useMemo(() => {
     if (!board || !applied) return null;
@@ -81,10 +82,8 @@ export function useChannelEditing(board: BezierBoard | null, sectionX: number | 
         sectionX === null
           ? []
           : channelKeys(board, sectionX).map((k) => ({ id: `cs:${k.id}`, p: k.p })),
-      outline: channelPlanKeys(cs, stations).map((k) => ({
-        id: `pl:${k.id}`,
-        p: { x: k.x, y: k.value },
-      })),
+      // Walls in plan are edited with points and handles, as targets of the outline view.
+      outline: [],
       rocker: channelDepthKeys(cs, stations).map((k) => ({
         id: `rk:${k.id}`,
         p: { x: k.x, y: valueAt(board.bottom, k.x) + k.value },
@@ -159,20 +158,6 @@ const grab = (
       ...(k.joined !== undefined ? { joined: k.joined } : {}),
       value: k.value,
       axis: k.part === 'depth' ? 'y' : 'x',
-    };
-  }
-  if (pane === 'pl:') {
-    const k = channelPlanKeys(channels.channels, stations).find((q) => q.id === key);
-    if (!k) return null;
-    return {
-      kind: 'wall',
-      channels,
-      x: k.x,
-      k: k.k,
-      part: k.part,
-      ...(k.joined !== undefined ? { joined: k.joined } : {}),
-      value: k.value,
-      axis: 'y',
     };
   }
   if (pane === 'rk:') {

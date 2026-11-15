@@ -61,9 +61,9 @@ test.describe('the production site', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the home page goes to the designer', async ({ page }) => {
+  test('the home page goes to the board editor (print version)', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveURL(/\/fin$/);
+    await expect(page).toHaveURL(/\/app$/);
   });
 
   // The print version serves the board editor at /app too; the surfboard marketing and

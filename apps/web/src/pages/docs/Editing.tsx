@@ -301,12 +301,6 @@ export default function DocsEditing() {
             rail. Tail–Nose: where the channels start and end; a start at the tail runs them out
             through it.
           </Term>
-          <Term name="Meet at the stringer">
-            Curved channels whose walls close to a point: they keep their width to the cross-section
-            they were laid out from, then curve in to meet the stringer where the channels end. The
-            Early–Late slider sets how: early closes them steadily, late holds them wide and turns
-            them in near the end. The depth still follows the Depth blend.
-          </Term>
           <Term name="Depth blend">
             The bar is the channels&apos; length, from where they start to where they end. They are
             full depth between its two handles, and fade smoothly to nothing from each handle to its
@@ -315,16 +309,19 @@ export default function DocsEditing() {
           </Term>
         </Terms>
         <p>
-          <strong>Apply</strong> makes them editable: green points you can drag, at every
-          cross-section the channels pass and at their ends. On a cross-section, drag a point on a
-          wall to move the wall across, or the point where a channel is deepest to set its depth. On
-          the outline, where the walls are drawn in plan, drag a point to move its wall: this is how
-          curved channels are drawn. On the rocker, where the depth is drawn above the bottom, drag
-          a point to deepen every channel there. The change eases out to the cross-sections either
-          side, and side-by-side channels keep sharing their wall. The panel shows each
-          channel&apos;s offset, width and depth at the cross-section on show, live as you drag. Add
-          a cross-section to edit them somewhere new. <strong>Reset</strong> goes back to the
-          numbers they were applied from, clearing every edit.
+          <strong>Apply</strong> makes them editable. On the outline, each wall becomes a green
+          curve edited like the outline itself: double-click it to add a point, drag a point or its
+          handles to shape it, select a point and press Delete to remove it. This is how curved
+          channels are drawn: a wall can be drawn in to the stringer, but not past it, so pulling
+          its end onto the stringer closes the channel to a point. A wall shared by two channels
+          side by side is one curve, and both follow it. On a cross-section, drag a point on a wall
+          to move the wall across there, keeping its shape elsewhere, or the point where a channel
+          is deepest to set its depth. On the rocker, where the depth is drawn above the bottom,
+          drag a point to deepen every channel there. These changes ease out to the cross-sections
+          either side. The panel shows each channel&apos;s offset, width and depth at the
+          cross-section on show, live as you drag. Add a cross-section to edit them somewhere new.{' '}
+          <strong>Reset</strong> goes back to the numbers they were applied from, clearing every
+          edit.
         </p>
         <p>
           The panel says when they can&apos;t be cut: running off the bottom, deeper than half the
