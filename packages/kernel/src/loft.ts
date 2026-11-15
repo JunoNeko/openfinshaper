@@ -92,18 +92,14 @@ export interface Vert3 {
 }
 
 /**
- * The two bracketing station profiles at some x, ready to sample.
+ * The station profiles that make the surface at some x, and how much of each.
  *
- * Both are already scaled to the board's thickness and width at that x, so a
- * blend of the two needs no further correction.
+ * All are already scaled to the board's thickness and width at that x, so the
+ * weighted sum of their points needs no further correction. The weights sum to 1.
  */
 export interface LoftedSection {
-  /** Arc-length table of the preceding station's scaled profile. */
-  readonly prev: ArcTable;
-  /** Arc-length table of the following station's scaled profile. */
-  readonly next: ArcTable;
-  /** Blend weight: 0 at `prev`, 1 at `next`. */
-  readonly d: number;
+  /** One to three station profiles (arc-length tables) and their weights. */
+  readonly parts: readonly { readonly table: ArcTable; readonly w: number }[];
   /** Height of the bottom centreline at this station. */
   readonly rocker: number;
 }
@@ -123,12 +119,36 @@ export const isFinite3 = (x: number, y: number, z: number): boolean =>
 export const MIN_DIM = 0.5;
 
 /**
+ * How far (cm) either side of a station the blend eases from one straight run into
+ * the next; at most {@link STATION_EASE_SHARE} of the gap to either neighbour.
+ *
+ * Between two stations the shape is a straight blend of the two, as in BoardCAD-LE's
+ * sLinear model. Where one run meets the next, at a station, the rate the shape
+ * changes at jumps, and that jump is a crease across the board at every station: a
+ * fraction of a degree, but plain in a printed or rendered hull. So near each station
+ * the two runs are eased into each other (see {@link loftSection}).
+ *
+ * The ease is local, reading only the station and its two neighbours, and exact at
+ * the station itself. Outside the eases the surface is the straight blend it always
+ * was, so a station inserted there on the existing shape moves nothing.
+ */
+export const STATION_EASE = 10;
+export const STATION_EASE_SHARE = 0.4;
+
+/**
  * Prepare the surface at station `x` for sampling, or null where there is none.
  *
  * Station bracketing is deliberately identical to `getInterpolatedCrossSection`
  * (`board.ts`), including the order in which `d` is computed relative to the
- * index clamps: the mesh must keep pairing the same stations it always did, so
- * that the only thing this change alters is how the two are blended.
+ * index clamps: the mesh must keep pairing the same stations it always did.
+ *
+ * Within {@link STATION_EASE} of a real station k the surface is
+ * `(1 − s)·A(x) + s·B(x)`: A is the straight blend of the run arriving at k carried
+ * on past it, B the run leaving k carried back before it, and s a smoothstep across
+ * the ease. Both runs equal station k at k, so the station is met exactly; at the
+ * ease's edges s is flat at 0 or 1, so each run is joined with no crease; in between
+ * the slope turns smoothly from one run's to the other's. Past the first and last
+ * station the profile is held, which counts as a run like any other.
  */
 export const loftSection = (b: BezierBoard, x: number): LoftedSection | null => {
   const cs = b.crossSections;
@@ -165,16 +185,77 @@ export const loftSection = (b: BezierBoard, x: number): LoftedSection | null => 
   let width = getWidthAtPos(b, x);
   if (width < MIN_DIM) width = MIN_DIM;
 
+  // Station weights: the straight blend, or the ease near a station.
+  const weights = new Map<number, number>();
+  const add = (i: number, w: number) => weights.set(i, (weights.get(i) ?? 0) + w);
+  const ease = stationEase(cs, index, nextIndex, x);
+  if (ease) {
+    const [k, s] = ease;
+    for (const [i, w] of run(cs, k - 1, k, x)) add(i, (1 - s) * w);
+    for (const [i, w] of run(cs, k, k + 1, x)) add(i, s * w);
+  } else {
+    add(index, 1 - d);
+    if (nextIndex !== index) add(nextIndex, d);
+  }
+
   // Scale BEFORE building the tables: fractional arc length is not invariant
   // under a non-uniform scale, so sampling an unscaled profile and scaling the
   // result would put the two stations' points at different places on the rail.
-  const prevTable = arcLengthTable(scaleCrossSection(cs[index]!, thickness, width).spline);
-  const nextTable =
-    nextIndex === index
-      ? prevTable
-      : arcLengthTable(scaleCrossSection(cs[nextIndex]!, thickness, width).spline);
+  const parts: { table: ArcTable; w: number }[] = [];
+  for (const [i, w] of [...weights].sort((p, q) => p[0] - q[0])) {
+    if (w === 0) continue;
+    parts.push({ table: arcLengthTable(scaleCrossSection(cs[i]!, thickness, width).spline), w });
+  }
+  return { parts, rocker };
+};
 
-  return { prev: prevTable, next: nextTable, d, rocker };
+/** True for a real station, not one of the board's two ends. */
+const isReal = (cs: readonly CrossSection[], i: number): boolean => i >= 1 && i <= cs.length - 2;
+
+/**
+ * Station weights at x of the straight run from station i to station j = i + 1,
+ * carried on past either. Where one of them is not a real station the run is the
+ * other, held.
+ */
+const run = (cs: readonly CrossSection[], i: number, j: number, x: number): [number, number][] => {
+  if (!isReal(cs, i)) return [[j, 1]];
+  if (!isReal(cs, j)) return [[i, 1]];
+  const gap = cs[j]!.position - cs[i]!.position;
+  if (!(gap > 0)) return [[x < cs[i]!.position ? i : j, 1]];
+  const t = (x - cs[i]!.position) / gap;
+  return [
+    [i, 1 - t],
+    [j, t],
+  ];
+};
+
+/** Half-width (cm) of the ease at real station k. */
+const easeReach = (cs: readonly CrossSection[], k: number): number => {
+  const p = cs[k]!.position;
+  const before = isReal(cs, k - 1) ? p - cs[k - 1]!.position : Infinity;
+  const after = isReal(cs, k + 1) ? cs[k + 1]!.position - p : Infinity;
+  return Math.min(STATION_EASE, STATION_EASE_SHARE * before, STATION_EASE_SHARE * after);
+};
+
+/** The station whose ease x lies in, and the smoothstep weight there, if any. */
+const stationEase = (
+  cs: readonly CrossSection[],
+  index: number,
+  nextIndex: number,
+  x: number,
+): [number, number] | null => {
+  for (const k of new Set([index, nextIndex])) {
+    if (!isReal(cs, k)) continue;
+    // A lone station has the same (held) run either side: nothing to ease.
+    if (!isReal(cs, k - 1) && !isReal(cs, k + 1)) continue;
+    const r = easeReach(cs, k);
+    if (!(r > 0)) continue;
+    const u = (x - cs[k]!.position) / r;
+    if (Math.abs(u) >= 1) continue;
+    const t = (u + 1) / 2;
+    return [k, t * t * (3 - 2 * t)];
+  }
+  return null;
 };
 
 /**
@@ -184,9 +265,15 @@ export const loftSection = (b: BezierBoard, x: number): LoftedSection | null => 
  * `f = 0` is the bottom centreline, `f = 1` the deck centreline.
  */
 export const loftPoint = (s: LoftedSection, f: number): Vec2 => {
-  const a = pointAtArcFraction(s.prev, f);
-  const b = pointAtArcFraction(s.next, f);
-  return vec2(a.x + (b.x - a.x) * s.d, a.y + (b.y - a.y) * s.d);
+  if (s.parts.length === 1) return pointAtArcFraction(s.parts[0]!.table, f);
+  let x = 0;
+  let y = 0;
+  for (const { table, w } of s.parts) {
+    const p = pointAtArcFraction(table, f);
+    x += w * p.x;
+    y += w * p.y;
+  }
+  return vec2(x, y);
 };
 
 /** Points per rail for a ring of `ringSteps`; both rails share the two centreline points. */
