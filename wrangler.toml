@@ -32,3 +32,7 @@ directory = "apps/web/dist"
 # analytics into two pages for what's really one route. drop-trailing-slash
 # flips the redirect direction to match the canonical form used everywhere else.
 html_handling = "drop-trailing-slash"
+
+# Non-production branches deploy with `npx wrangler preview` (Workers Builds), which
+# needs this block. Empty: a preview takes the assets and settings above.
+[previews]
