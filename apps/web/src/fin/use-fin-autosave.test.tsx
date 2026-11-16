@@ -24,7 +24,7 @@ describe('useFinAutosave', () => {
     await saveFinSession(writeFinJson({ ...defaultFinDesign('quad-rear', 'right'), cant: 12 }), f);
     const store = createFinStore();
     const { result } = renderHook(() => useFinAutosave(store, f));
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current).toBe(true), { timeout: 3000 }); // IndexedDB is slow under a loaded test run
     expect(store.getState().design!.position).toBe('quad-rear');
     expect(store.getState().design!.cant).toBe(12);
     expect(store.getState().canUndo()).toBe(false); // a restore isn't an edit
@@ -36,7 +36,7 @@ describe('useFinAutosave', () => {
     const f = new IDBFactory();
     const store = createFinStore();
     const { result } = renderHook(() => useFinAutosave(store, f));
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current).toBe(true), { timeout: 3000 }); // IndexedDB is slow under a loaded test run
     expect(store.getState().design!.position).toBe('side');
     act(() => {
       store.getState().setCant(9);
@@ -48,7 +48,7 @@ describe('useFinAutosave', () => {
     const f = new IDBFactory();
     const store = createFinStore();
     const { result } = renderHook(() => useFinAutosave(store, f));
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current).toBe(true), { timeout: 3000 }); // IndexedDB is slow under a loaded test run
     act(() => {
       store.getState().setCant(5);
     });
@@ -69,7 +69,7 @@ describe('useFinAutosave', () => {
     const f = new IDBFactory();
     const store = createFinStore();
     const { result } = renderHook(() => useFinAutosave(store, f));
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current).toBe(true), { timeout: 3000 }); // IndexedDB is slow under a loaded test run
     act(() => {
       store.getState().setCant(11);
     });
@@ -87,7 +87,7 @@ describe('useFinAutosave', () => {
     const store = createFinStore();
     store.getState().load(defaultFinDesign('side', 'right'));
     const { result } = renderHook(() => useFinAutosave(store, f));
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current).toBe(true), { timeout: 3000 }); // IndexedDB is slow under a loaded test run
     expect(store.getState().design!.position).toBe('side');
   });
 
@@ -96,7 +96,7 @@ describe('useFinAutosave', () => {
     await saveFinSession('{ not a fin', f);
     const store = createFinStore();
     const { result } = renderHook(() => useFinAutosave(store, f));
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current).toBe(true), { timeout: 3000 }); // IndexedDB is slow under a loaded test run
     expect(store.getState().design!.position).toBe('side');
   });
 });

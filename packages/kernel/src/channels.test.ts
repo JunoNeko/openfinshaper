@@ -304,6 +304,39 @@ describe('a wall swept in from near the rail (owner report: rail scalloping, 202
   });
 });
 
+describe('a channel run out through a hard rail (owner report: ragged rail, 2026-11)', () => {
+  it('cuts the rail off flat at its floor: no ring folds over itself, and the hull stays closed', () => {
+    const hard = RAIL_PRESETS.find((r) => r.id === '80-20-hard')!.params;
+    const base: BezierBoard = { ...shortboard, crossSections: shortboard.crossSections.map((cs, i) => (i > 0 && i < shortboard.crossSections.length - 1 ? applyRailProfile(cs, hard) : cs)) }; // prettier-ignore
+    // A step 0.3 deep, its outer wall 9 cm out: outside the pointed tail's rail until
+    // well up the board, so the channel runs out through the rail there. (Deeper, and
+    // up this thin tail it would cut the rail away whole.)
+    const step: ChannelWall = { shape: 'step', radius: 0.3, lip: 0 };
+    const b = withChannels(base, [straight(0, 9, 0.3, step, 60, 90, 2)]);
+    const half = (x: number) => getWidthAtPos(base, x) / 2;
+    const crosses = (pts: { y: number; z: number }[]) => {
+      const o = (p: { y: number; z: number }, q: { y: number; z: number }, r: { y: number; z: number }) => (q.y - p.y) * (r.z - p.z) - (q.z - p.z) * (r.y - p.y); // prettier-ignore
+      for (let i = 0; i + 1 < pts.length; i++) {
+        for (let j = i + 2; j + 1 < pts.length; j++) {
+          const [a, c, d, e] = [pts[i]!, pts[i + 1]!, pts[j]!, pts[j + 1]!];
+          if (o(a, c, d) * o(a, c, e) < 0 && o(d, e, a) * o(d, e, c) < 0) return true;
+        }
+      }
+      return false;
+    };
+    let through = 0;
+    for (let x = 3; x < 40; x += 0.5) {
+      if (half(x) > 9.5) continue;
+      through++;
+      const ring = loftRing(b, x, 120)!;
+      const side = ring.slice(0, ring.length / 2 + 1).filter((p) => p.y > half(x) - 3);
+      expect(crosses(side), `x=${x}`).toBe(false);
+    }
+    expect(through).toBeGreaterThan(3);
+    expect(badEdges(tessellateBoard(b, { lengthSteps: 200, ringSteps: 96 }))).toBe(0);
+  });
+});
+
 describe('where the bottom ends', () => {
   it('is found exactly, not to a step of the search (owner report: rail scalloping)', () => {
     for (const x of [15, 40, 80, 120, 150]) {

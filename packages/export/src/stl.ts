@@ -2,7 +2,7 @@ import {
   boardChannels,
   triangulatePolygon,
   buildFinBladeMesh,
-  channelLift,
+  channelCutAt,
   getLength,
   hasTailCutout,
   loftPoint,
@@ -65,10 +65,9 @@ const sampleRing = (board: BezierBoard, pos: number, ringSteps: number): P3[] | 
   const cut = boardChannels(board).length > 0;
   const ring: P3[] = [];
   for (const fr of plan.fs) {
-    const p = loftPoint(section, fr);
-    let z = p.y + section.rocker;
-    if (cut) z += channelLift(board, plan, fr, pos, p.x);
-    ring.push({ x: pos, y: p.x, z });
+    // With channels, the cut point: lifted on the bottom, the rail cut off at the floor.
+    const p = cut ? channelCutAt(board, plan, section, fr, pos) : loftPoint(section, fr);
+    ring.push({ x: pos, y: p.x, z: p.y + section.rocker });
   }
   return ring;
 };

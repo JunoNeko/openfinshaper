@@ -4,7 +4,7 @@ import { boardChannels } from './channel-layout';
 import { triangulatePolygon } from './polygon';
 import {
   MIN_DIM,
-  channelLift,
+  channelCutAt,
   isFinite3,
   loftPoint,
   loftRing,
@@ -421,10 +421,11 @@ const tessellateCutout = (
     const left: number[] = [];
     let ok = true;
     for (let i = 0; i < fs.length; i++) {
-      const p = loftPoint(section, fs[i]!);
+      const p = ring
+        ? channelCutAt(board, ring, section, fs[i]!, x, lateralAt(x))
+        : loftPoint(section, fs[i]!);
       const mapped = yIn + p.x * scale; // p.x ∈ [0, yOut] → [yIn, yOut]
-      let z = p.y + section.rocker;
-      if (ring) z += channelLift(board, ring, fs[i]!, x, mapped);
+      const z = p.y + section.rocker;
       if (!isFinite3(x, mapped, z)) {
         ok = false;
         break;
