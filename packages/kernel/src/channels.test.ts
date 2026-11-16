@@ -301,6 +301,15 @@ describe('a wall swept in from near the rail (owner report: rail scalloping, 202
     // channels; 0.032 when the rail's points were eased by profile fraction, which
     // thinned them over the edge; 0.011 eased by the ladder's measure.
     expect(worst(b, half(22) - 1)).toBeLessThan(0.02);
+    // And no point crosses the rail's edge from one station to the next: the same number
+    // on the rail everywhere (owner report: rail cuts wrapping onto the deck). Each that
+    // crossed cut the corner with a facet across the rail.
+    const onRail = new Set<number>();
+    for (let x = 10; x <= 60; x += 0.5) {
+      const r = stationRing(b, loftSection(b, x)!, x, ringHalf(120));
+      onRail.add(r.fs.filter((f) => f >= r.railFrom).length);
+    }
+    expect(onRail.size).toBe(1);
   });
 });
 

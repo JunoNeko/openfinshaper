@@ -660,6 +660,8 @@ interface RingPlan {
   readonly t: readonly number[];
   /** The last anchor at the reference station, or null without anchors. */
   readonly lastRef: number | null;
+  /** Where the rail starts at the reference station ({@link railStart}). */
+  readonly railRef: number;
 }
 
 /** The least span (profile fraction) past the last anchor over which the rail's points are eased back to their own places. */
@@ -692,6 +694,8 @@ const pastLastAnchor = (
   a: number,
   aRef: number,
   lm: LadderMeasure = IDENTITY_MEASURE,
+  e?: number,
+  eRef?: number,
 ): number => {
   // In the ladder's measure (see LadderMeasure): points move by counts of points, not
   // by distance, so wherever the ladder packed them (a hard rail edge) they stay
@@ -699,6 +703,27 @@ const pastLastAnchor = (
   const mRef = lm.m(fRef);
   const mA = lm.m(a);
   const mARef = lm.m(aRef);
+  // With the rail's start known on both stations, it is a fixed boundary: the bottom's
+  // points stay on the bottom, between the last wall and the rail, and the rail's on
+  // the rail, tracking where it starts and easing back to their own places up it. A
+  // point never crosses a hard edge, however fast the wall moves (owner report: rail
+  // cuts wrapping onto the deck, 2026-11).
+  if (e !== undefined && eRef !== undefined && e > a && eRef > aRef) {
+    const mE = lm.m(e);
+    const mERef = lm.m(eRef);
+    if (mRef <= mERef) {
+      return lm.f(mA + ((mRef - mARef) * (mE - mA)) / (mERef - mARef || 1));
+    }
+    const delta = mE - mERef;
+    const rest = 1 - mERef;
+    if (!(rest > 0)) return lm.f(mRef);
+    const span = Math.min(rest, Math.max(RAIL_EASE, 2 * Math.abs(delta)));
+    if (1.5 * Math.abs(delta) >= span) {
+      return lm.f(mE + ((mRef - mERef) * (1 - mE)) / rest);
+    }
+    const v = Math.min(1, (mRef - mERef) / span);
+    return lm.f(mRef + delta * (1 - v * v * (3 - 2 * v)));
+  }
   const shift = mA - mARef;
   const span = 1 - mARef;
   const stretched = mA + ((mRef - mARef) * (1 - mA)) / (span || 1);
@@ -728,7 +753,8 @@ const buildPlan = (
   const x = referenceX(b);
   const s = loftSection(b, x);
   if (!s) return null;
-  const ref = anchorFractions(b, s, x, bottomEnd(s), mapAt(x));
+  const refEnd = bottomEnd(s);
+  const ref = anchorFractions(b, s, x, refEnd, mapAt(x));
   const knots = [0, ...ref, 1];
   const entries: { f: number; k: number; t: number }[] = [];
   for (const f of ringFractions(b, half)) {
@@ -749,6 +775,7 @@ const buildPlan = (
     k: entries.map((e) => e.k),
     t: entries.map((e) => e.t),
     lastRef: ref.length ? ref[ref.length - 1]! : null,
+    railRef: railStart(s, refEnd),
   };
 };
 
@@ -803,7 +830,8 @@ export const stationRing = (
     const lo = knots[k]!;
     const t = plan.t[i]!;
     if (k === last && lastRef !== null && t > 0 && t < 1) {
-      return pastLastAnchor(lastRef + (1 - lastRef) * t, lo, lastRef, ladderMeasure(b));
+      const fRef = lastRef + (1 - lastRef) * t;
+      return pastLastAnchor(fRef, lo, lastRef, ladderMeasure(b), railFrom, plan.railRef);
     }
     return lo + (knots[k + 1]! - lo) * t;
   });
