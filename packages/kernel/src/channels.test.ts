@@ -18,7 +18,16 @@ import {
 } from './channels';
 import { boardChannels } from './channel-layout';
 import { knotFromArray } from './knot';
-import { loftRing, loftSection, ringFractions, ringHalf, stationRing } from './loft';
+import { applyRailProfile, RAIL_PRESETS } from './rail-profile';
+import {
+  bottomEnd,
+  loftPoint,
+  loftRing,
+  loftSection,
+  ringFractions,
+  ringHalf,
+  stationRing,
+} from './loft';
 import { hasTailCutout } from './outline-cutout';
 import { bottomZAt } from './surface';
 import { tessellateBoard, type BoardMesh } from './tessellate';
@@ -255,6 +264,57 @@ describe('the rail past the last channel wall', () => {
     for (const x of [30, 45]) {
       const fs = stationRing(b, loftSection(b, x)!, x, half).fs;
       fs.slice(fs.length - deck.length).forEach((f, i) => expect(f).toBeCloseTo(deck[i]!, 12));
+    }
+  });
+});
+
+describe('a wall swept in from near the rail (owner report: rail scalloping, 2026-11)', () => {
+  it("leaves the rail's points on smooth paths along the board, as without channels", () => {
+    // The outer wall 1.2 cm inside the rail at 20 cm up the board, swept in to 2 cm off
+    // the stringer at 110: from the middle of the channel to the tail it moves across
+    // most of the bottom.
+    // A hard rail, as the owner's board has: the bottom meets it in an edge.
+    const hard = RAIL_PRESETS.find((r) => r.id === '80-20-hard')!.params;
+    const base: BezierBoard = { ...shortboard, crossSections: shortboard.crossSections.map((cs, i) => (i > 0 && i < shortboard.crossSections.length - 1 ? applyRailProfile(cs, hard) : cs)) }; // prettier-ignore
+    const half = (x: number) => getWidthAtPos(base, x) / 2;
+    const wall: ChannelWall = { shape: 'step', radius: 0.6, lip: 0 };
+    const outer = splineFromKnots([
+      knotFromArray([20, half(20) - 1.2, 20, half(20) - 1.2, 40, half(20) - 3], true, false),
+      knotFromArray([110, 2, 90, 2, 110, 2], true, false),
+    ]);
+    const b = withChannels(base, [{ ...straight(0, 9, 0.6, wall, 60, 110, 20), outer }]);
+    /** The worst second difference along x of the ring points out past `from` cm. */
+    const worst = (board: BezierBoard, from: number) => {
+      const rings: { y: number; z: number }[][] = [];
+      for (let x = 22; x <= 40; x += 0.25) rings.push(loftRing(board, x, 120)!);
+      let w = 0;
+      for (let r = 1; r < rings.length - 1; r++) {
+        rings[r]!.forEach((p, i) => {
+          if (p.y < from) return;
+          const [a, c] = [rings[r - 1]![i]!, rings[r + 1]![i]!];
+          w = Math.max(w, Math.hypot(a.y - 2 * p.y + c.y, a.z - 2 * p.z + c.z));
+        });
+      }
+      return w;
+    };
+    // Past the wall, on the uncut bottom and the rail. Measured (cm): 0.0006 without
+    // channels; 0.032 when the rail's points were eased by profile fraction, which
+    // thinned them over the edge; 0.011 eased by the ladder's measure.
+    expect(worst(b, half(22) - 1)).toBeLessThan(0.02);
+  });
+});
+
+describe('where the bottom ends', () => {
+  it('is found exactly, not to a step of the search (owner report: rail scalloping)', () => {
+    for (const x of [15, 40, 80, 120, 150]) {
+      const sec = loftSection(shortboard, x)!;
+      // The widest point, by a search 64 times finer than the one bottomEnd starts from.
+      let ref = 0;
+      for (let i = 1; i <= 4096; i++) {
+        if (loftPoint(sec, i / 4096).x > loftPoint(sec, ref).x) ref = i / 4096;
+      }
+      // A step of the 64-sample search alone would be out by up to 1/128.
+      expect(Math.abs(bottomEnd(sec) - ref)).toBeLessThan(1 / 4096);
     }
   });
 });

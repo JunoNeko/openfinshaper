@@ -339,3 +339,30 @@ curves shapers draw, and asked for plain Bézier editing instead. So:
 
 Not yet: walls must still run along the board (one point across at each x); the panel
 says so if a handle is dragged back on itself.
+
+### The rail where walls sweep across the bottom (owner report: rail scalloping, 2026-11)
+
+A wall drawn from near the rail at the tail to near the stringer up the board moves the
+last anchor a long way from where it is at the reference station (the middle of the
+channel). Two things then showed on a hard rail as a serrated edge:
+
+- **Rail points eased by profile fraction.** `pastLastAnchor` pushed the points past the
+  last anchor out by the anchor's shift, easing back over a span that grows with it, and
+  blended to an even stretch when the shift was large: either way they came out evenly
+  spaced, thinned over the hard edge the ladder had packed, and slid over it at a
+  different station each. They are now eased in the ladder's measure (`ladderMeasure`:
+  the share of a plain ring's points up to a fraction, its density linear between the
+  ladder's samples, so both it and its inverse are smooth): moved by counts of points,
+  they keep the ladder's packing. Measured on a hard-railed shortboard with a swept
+  wall: 0.032 cm worst second difference along the board before, 0.011 after, 0.0006
+  without channels.
+- **Where the cut stops.** The cut was applied up to the rail's widest point
+  (`bottomEnd`), found on 64 samples: as that stepped, rail points switched between cut
+  and uncut. It is now refined exactly (golden section), and the cut fades out over the
+  last 2% of the profile before it (`CUT_FADE`) instead of stopping dead.
+
+The owner's board also ran its channel out through the rail at the tail corner: the
+outer wall's first point had been dragged to 4 cm up the board, and a wall is held
+straight back from its first point, 12.2 cm out where the tail is narrower. The panel
+says so ("runs off the bottom"). There the step's wall crosses the rail at an angle,
+which is a real edge, not a sampling fault.

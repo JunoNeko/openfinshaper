@@ -386,8 +386,9 @@ export const ringFractions = (b: BezierBoard, n: number): readonly number[] => {
 const uniformLadder = (count: number): number[] =>
   Array.from({ length: count }, (_, i) => i / (count - 1));
 
-const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
-  if (CURVATURE_BIAS <= 0) return uniformLadder(count);
+/** The ladder's point density at each of `LADDER_SAMPLES + 1` arc stops, or null for uniform. */
+const ladderDensity = (b: BezierBoard): number[] | null => {
+  if (CURVATURE_BIAS <= 0) return null;
 
   // Interior stations only — index 0 and the last are the degenerate nose/tail
   // dummies, whose collapsed profiles would report meaningless curvature.
@@ -400,11 +401,11 @@ const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
     for (let i = 0; i < monitor.length; i++) monitor[i] = Math.max(monitor[i]!, kl[i]!);
     any = true;
   }
-  if (!any) return uniformLadder(count);
+  if (!any) return null;
 
   // Box-smooth, so one sample's curvature spike can't claim a disproportionate
   // share of the points, then turn it into a density.
-  const density = monitor.map((_, i) => {
+  return monitor.map((_, i) => {
     let sum = 0;
     let seen = 0;
     for (let j = i - LADDER_SMOOTH; j <= i + LADDER_SMOOTH; j++) {
@@ -415,6 +416,11 @@ const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
     }
     return 1 + CURVATURE_BIAS * Math.sqrt(Math.max(0, sum / Math.max(1, seen)));
   });
+};
+
+const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
+  const density = ladderDensity(b);
+  if (!density) return uniformLadder(count);
 
   // Cumulative density, normalised: cum[i] is the share of the points that
   // should have been used by arc fraction i / LADDER_SAMPLES.
@@ -443,6 +449,64 @@ const buildLadder = (b: BezierBoard, count: number): readonly number[] => {
   return out;
 };
 
+/**
+ * The ladder as a measure: `m(f)`, the share of a plain ring's points up to profile
+ * fraction `f`, and its inverse `f(m)`. Its density is the ladder's, taken linear
+ * between the sample stops, so both are smooth (C¹) and one undoes the other exactly.
+ * Moving points by a share of this measure, rather than by profile fraction, keeps
+ * them as dense as the ladder put them: packed where the profile curves hard.
+ */
+interface LadderMeasure {
+  readonly m: (f: number) => number;
+  readonly f: (m: number) => number;
+}
+
+const IDENTITY_MEASURE: LadderMeasure = { m: (f) => f, f: (m) => m };
+const MEASURE_CACHE = new WeakMap<BezierBoard, LadderMeasure>();
+
+const ladderMeasure = (b: BezierBoard): LadderMeasure => {
+  const hit = MEASURE_CACHE.get(b);
+  if (hit) return hit;
+  const rho = ladderDensity(b);
+  let out = IDENTITY_MEASURE;
+  if (rho) {
+    const n = rho.length - 1;
+    const cum = [0];
+    for (let i = 1; i <= n; i++) cum.push(cum[i - 1]! + (rho[i - 1]! + rho[i]!) / 2);
+    const total = cum[n]!;
+    if (total > 0) {
+      out = {
+        m: (f) => {
+          const u = Math.min(n, Math.max(0, f * n));
+          const i = Math.min(n - 1, Math.floor(u));
+          const t = u - i;
+          const r0 = rho[i]!;
+          const r1 = rho[i + 1]!;
+          return (cum[i]! + r0 * t + ((r1 - r0) * t * t) / 2) / total;
+        },
+        f: (m) => {
+          const c = Math.min(1, Math.max(0, m)) * total;
+          let i = 0;
+          let hi = n - 1;
+          while (i < hi) {
+            const mid = (i + hi + 1) >> 1;
+            if (cum[mid]! <= c) i = mid;
+            else hi = mid - 1;
+          }
+          const r0 = rho[i]!;
+          const r1 = rho[i + 1]!;
+          const d = c - cum[i]!;
+          // r0·t + (r1 − r0)·t²/2 = d, in the form that stays exact as r1 → r0.
+          const t = (2 * d) / (r0 + Math.sqrt(Math.max(0, r0 * r0 + 2 * (r1 - r0) * d)));
+          return Math.min(1, Math.max(0, (i + Math.min(1, Math.max(0, t))) / n));
+        },
+      };
+    }
+  }
+  MEASURE_CACHE.set(b, out);
+  return out;
+};
+
 // --- channels: points on the walls, the bottom lifted ---------------------------
 
 /** Distance from the stringer for a profile point's distance from the centreline. */
@@ -467,8 +531,46 @@ export const bottomEnd = (s: LoftedSection): number => {
       best = f;
     }
   }
-  return best;
+  // Then exactly, between the samples either side (golden section): a step of the
+  // sampling would move where the cut ends, and the mesh's points near it would jump
+  // from station to station (owner report: rail scalloping, 2026-11).
+  const h = 1 / BOTTOM_END_SAMPLES;
+  let lo = Math.max(0, best - h);
+  let hi = Math.min(1, best + h);
+  const g = (Math.sqrt(5) - 1) / 2;
+  const at = (f: number) => loftPoint(s, f).x;
+  let c = hi - g * (hi - lo);
+  let d = lo + g * (hi - lo);
+  let fc = at(c);
+  let fd = at(d);
+  for (let i = 0; i < BOTTOM_END_REFINE; i++) {
+    if (fc >= fd) {
+      hi = d;
+      d = c;
+      fd = fc;
+      c = hi - g * (hi - lo);
+      fc = at(c);
+    } else {
+      lo = c;
+      c = d;
+      fc = fd;
+      d = lo + g * (hi - lo);
+      fd = at(d);
+    }
+  }
+  return (lo + hi) / 2;
 };
+
+/** Golden-section steps refining where the bottom ends: (0.618)^40 of a sample, far under a micron. */
+const BOTTOM_END_REFINE = 40;
+
+/**
+ * Over how much of the profile (fraction) below where the bottom ends a channel's cut
+ * fades out, rather than stopping dead: a channel run out through the rail meets the
+ * rail's points smoothly, and none of them jump as the bottom's end moves along the
+ * board.
+ */
+const CUT_FADE = 0.02;
 
 /** Bisection steps finding a wall on a station: 2^-40 of the profile, far under a micron. */
 const WALL_STEPS = 40;
@@ -576,19 +678,38 @@ const RAIL_EASE = 0.1;
  * `D` past it, and the rail and deck are sampled exactly as without channels. Strictly
  * increasing in `fRef` and continuous in `a`; where the anchor has moved too far for
  * that (a pointed tail), it blends over to the plain stretch.
+ *
+ * All of it in the ladder's measure (`lm`), not in profile fraction. A wall swept far
+ * across the bottom (from near the rail at the tail to near the stringer up the board)
+ * moves the anchor a long way, and eased by fraction the points it pushed toward the
+ * rail came out evenly spaced, thinned over a hard rail edge the ladder had packed:
+ * each slid over the edge at a different station, which the mesh showed as a serrated
+ * rail (owner report: rail scalloping, 2026-11). Moved by counts of points instead,
+ * they keep the ladder's packing wherever they go.
  */
-const pastLastAnchor = (fRef: number, a: number, aRef: number): number => {
-  const shift = a - aRef;
-  const span = 1 - aRef;
-  const stretched = a + ((fRef - aRef) * (1 - a)) / (span || 1);
-  if (!(span > 0)) return stretched;
+const pastLastAnchor = (
+  fRef: number,
+  a: number,
+  aRef: number,
+  lm: LadderMeasure = IDENTITY_MEASURE,
+): number => {
+  // In the ladder's measure (see LadderMeasure): points move by counts of points, not
+  // by distance, so wherever the ladder packed them (a hard rail edge) they stay
+  // packed, however far the anchor has moved.
+  const mRef = lm.m(fRef);
+  const mA = lm.m(a);
+  const mARef = lm.m(aRef);
+  const shift = mA - mARef;
+  const span = 1 - mARef;
+  const stretched = mA + ((mRef - mARef) * (1 - mA)) / (span || 1);
+  if (!(span > 0)) return lm.f(stretched);
   const D = Math.min(span, Math.max(RAIL_EASE, 2 * Math.abs(shift)));
-  const u = Math.min(1, Math.max(0, (fRef - aRef) / D));
-  const eased = fRef + shift * (1 - u * u * (3 - 2 * u));
+  const u = Math.min(1, Math.max(0, (mRef - mARef) / D));
+  const eased = mRef + shift * (1 - u * u * (3 - 2 * u));
   // Its slope is at least 1 - 1.5 |shift| / D: blend to the stretch before that nears 0.
   const steep = (1.5 * Math.abs(shift)) / D;
   const lambda = Math.min(1, Math.max(0, (steep - 0.5) / 0.5));
-  return (1 - lambda) * eased + lambda * stretched;
+  return lm.f((1 - lambda) * eased + lambda * stretched);
 };
 
 const PLAN_CACHE = new WeakMap<BezierBoard, Map<number, RingPlan | null>>();
@@ -669,7 +790,7 @@ export const stationRing = (
     const lo = knots[k]!;
     const t = plan.t[i]!;
     if (k === last && lastRef !== null && t > 0 && t < 1) {
-      return pastLastAnchor(lastRef + (1 - lastRef) * t, lo, lastRef);
+      return pastLastAnchor(lastRef + (1 - lastRef) * t, lo, lastRef, ladderMeasure(b));
     }
     return lo + (knots[k + 1]! - lo) * t;
   });
@@ -681,8 +802,12 @@ export const stationRing = (
  * board's channels (cm): their depth where it is on the bottom, `y` out from the
  * stringer; 0 on the deck and wherever there is no channel.
  */
-export const channelLift = (b: BezierBoard, ring: StationRing, f: number, x: number, y: number) =>
-  f < ring.bottomEnd ? channelDepthAt(boardChannels(b), x, y) : 0;
+export const channelLift = (b: BezierBoard, ring: StationRing, f: number, x: number, y: number) => {
+  if (!(f < ring.bottomEnd)) return 0;
+  const u = (ring.bottomEnd - f) / CUT_FADE;
+  const fade = u >= 1 ? 1 : u * u * (3 - 2 * u);
+  return fade * channelDepthAt(boardChannels(b), x, y);
+};
 
 /**
  * A full closed cross-section ring at station `x`, as `2 * ringHalf - 2` points (more
