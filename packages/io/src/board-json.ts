@@ -1,6 +1,7 @@
 import {
   FIN_SETUPS,
   board,
+  clampWall,
   crossSection,
   defaultFinConfig,
   noFins,
@@ -10,6 +11,7 @@ import {
   type ChannelWall,
   type FinConfig,
   type FinSetup,
+  type SwallowWall,
 } from '@openshaper/kernel';
 import {
   assertKnots as assertKnotsAs,
@@ -56,6 +58,8 @@ export interface BoardJson {
   fins?: FinConfig;
   /** Bottom channels. Omitted when there are none. */
   channels?: ChannelsJson;
+  /** A swallow tail's inside wall (print version). */
+  swallow?: SwallowWall;
   metadata?: Record<string, unknown>;
 }
 
@@ -150,6 +154,16 @@ const paramsFromJson = (p: unknown): ChannelParams => {
   };
 };
 
+/** A swallow's inside wall, or nothing when it isn't one we can read. */
+const swallowFromJson = (w: unknown): SwallowWall | undefined => {
+  if (!isObject(w)) return undefined;
+  if (w.kind === 'bevel' && typeof w.angle === 'number' && Number.isFinite(w.angle))
+    return clampWall({ kind: 'bevel', angle: w.angle });
+  if (w.kind === 'round' && typeof w.size === 'number' && Number.isFinite(w.size))
+    return clampWall({ kind: 'round', size: w.size });
+  return undefined;
+};
+
 const channelsFromJson = (c: unknown): BoardChannels | undefined => {
   if (c === undefined) return undefined;
   if (isObject(c) && c.from === 'numbers') {
@@ -196,6 +210,7 @@ export const writeBoardJson = (b: BezierBoard, metadata?: Record<string, unknown
     })),
     ...(b.fins.setup !== 'none' ? { fins: b.fins } : {}),
     ...(b.channels ? { channels: channelsToJson(b.channels) } : {}),
+    ...(b.swallow ? { swallow: b.swallow } : {}),
     ...(metadata ? { metadata } : {}),
   };
   return JSON.stringify(doc, null, 2);
@@ -250,6 +265,7 @@ export const readBoardJson = (
     doc.interpolationType ?? 'controlPoint',
     finConfigFromDoc(doc),
     channelsFromJson(doc.channels),
+    swallowFromJson(doc.swallow),
   );
   return doc.metadata ? { board: b, metadata: doc.metadata } : { board: b };
 };
