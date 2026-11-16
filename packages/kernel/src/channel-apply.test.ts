@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { valueAt } from './bezier-spline';
+import { splineFromKnots, valueAt } from './bezier-spline';
+import { knotFromArray } from './knot';
+import { vec2 } from './vec2';
 import { board, type BezierBoard } from './board';
 import {
   applyChannels,
@@ -167,6 +169,39 @@ describe('channel points in plan and along the board', () => {
     const moved = moveChannelKey(cs, P.start, 1, 'outer', before + 2, stations);
     expect(valueAt(moved[1]!.outer, P.start)).toBeCloseTo(before + 2, 9);
     expect(valueAt(moved[1]!.outer, inside[0]!)).toBeCloseTo(valueAt(cs[1]!.outer, inside[0]!), 9);
+  });
+
+  it('bend a wall shaped with handles in place: its points and handles kept, smooth where moved', () => {
+    // A wall reshaped in the outline view: a point added midway, its handles pulled.
+    const w = cs[1]!.outer;
+    const [a, z] = [w.knots[0]!, w.knots[w.knots.length - 1]!];
+    const mid = (a.end.x + z.end.x) / 2;
+    const shaped = splineFromKnots([
+      { ...a, tangentToNext: vec2(a.end.x + 5, a.end.y + 1) },
+      knotFromArray(
+        [mid, a.end.y + 3, mid - 8, a.end.y + 3.5, mid + 8, a.end.y + 2.5],
+        true,
+        false,
+      ),
+      { ...z, tangentToPrev: vec2(z.end.x - 5, z.end.y) },
+    ]);
+    const x = inside.find((v) => v > a.end.x && v < mid)!;
+    const target = valueAt(shaped, x) + 1;
+    const moved = moveChannelKey([{ ...cs[1]!, outer: shaped }], x, 0, 'outer', target, stations)[0]!.outer; // prettier-ignore
+    expect(valueAt(moved, x)).toBeCloseTo(target, 9);
+    // One point added, at the cross-section; the others where they were drawn, those past
+    // the neighbouring cross-sections untouched, handles and all.
+    expect(moved.knots).toHaveLength(4);
+    // (Splitting the curve at the cross-section shortens the handles either side: the
+    // same shape.)
+    expect(moved.knots[0]!.end).toEqual(shaped.knots[0]!.end);
+    const hi = Math.min(...stations.filter((v) => v > x), z.end.x);
+    for (const k of shaped.knots.filter((q) => q.end.x >= hi))
+      expect(moved.knots).toContainEqual(k);
+    // The new point is smooth: its handles in line.
+    const p = moved.knots.find((k) => Math.abs(k.end.x - x) < 1e-6)!;
+    const cross = (p.tangentToPrev.x - p.end.x) * (p.tangentToNext.y - p.end.y) - (p.tangentToPrev.y - p.end.y) * (p.tangentToNext.x - p.end.x); // prettier-ignore
+    expect(Math.abs(cross)).toBeLessThan(1e-9);
   });
 
   it("put a depth point at the ends and each cross-section, and move every channel's", () => {

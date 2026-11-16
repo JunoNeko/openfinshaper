@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyChannels,
   board,
   boardChannels,
   crossSection,
@@ -19,7 +20,7 @@ import {
   type Vec2,
 } from '@openshaper/kernel';
 import { createBoardStore } from './board-store';
-import { canDeleteKnot, moveKnotTangent } from './edits';
+import { canDeleteKnot, channelTargets, getTargetSpline, moveKnotTangent } from './edits';
 import { selectSpecs } from './selectors';
 
 // A small but valid board: outline (half-width), flat-ish bottom & deck.
@@ -941,5 +942,46 @@ describe('board store: channels', () => {
     const b = store.getState().board!;
     expect(b.channels).toEqual({ from: 'numbers', params });
     expect(outer(b)).not.toBeCloseTo(before, 3);
+  });
+
+  it('applied, each wall is a curve to edit like the outline: a shared wall once, both channels moving with it', () => {
+    const store = createBoardStore();
+    store.getState().load(makeBoard());
+    const b0 = store.getState().board!;
+    const stations = b0.crossSections.slice(1, -1).map((c) => c.position);
+    store.getState().setChannels(applyChannels(b0, { ...params, count: 4, follow: 0 }, stations));
+    const b1 = store.getState().board!;
+    // Two channels a side: inner, shared, outer.
+    const targets = channelTargets(b1);
+    expect(targets).toEqual([
+      { kind: 'channel', index: 0, wall: 'inner' },
+      { kind: 'channel', index: 0, wall: 'outer' },
+      { kind: 'channel', index: 1, wall: 'outer' },
+    ]);
+    // Straight walls get just their two ends.
+    expect(getTargetSpline(b1, targets[1]!).knots).toHaveLength(2);
+    // Double-click on the shared wall adds a point; dragging it moves both channels.
+    store.getState().addControlPoint(targets[1]!, vec2(45, 5));
+    expect(getTargetSpline(store.getState().board!, targets[1]!).knots).toHaveLength(3);
+    store.getState().moveControlPoint(targets[1]!, 1, vec2(45, 7));
+    const drawn = () => {
+      const c = store.getState().board!.channels!;
+      return c.from === 'drawn' ? c.channels : [];
+    };
+    expect(valueAt(drawn()[0]!.outer, 45)).toBeCloseTo(7, 6);
+    expect(valueAt(drawn()[1]!.inner!, 45)).toBeCloseTo(7, 6);
+    // Its handles reshape it.
+    store.getState().moveTangent(targets[1]!, 1, 'next', vec2(52, 8));
+    expect(drawn()[0]!.outer.knots[1]!.tangentToNext).toEqual(vec2(52, 8));
+    expect(drawn()[1]!.inner!.knots[1]!.tangentToNext).toEqual(vec2(52, 8));
+    // A wall goes no further than the stringer: dragged past it, it stops on it.
+    store.getState().moveControlPoint(targets[0]!, 0, vec2(25, -3));
+    expect(drawn()[0]!.inner!.knots[0]!.end).toEqual(vec2(25, 0));
+    // Each an undo step.
+    store.getState().undo();
+    store.getState().undo();
+    store.getState().undo();
+    store.getState().undo();
+    expect(store.getState().board!.channels).toEqual(b1.channels);
   });
 });

@@ -1,3 +1,3 @@
-# openfinshaper.com is the fin designer: the home page is the designer itself.
+# The print version is the board editor: the home page is the editor itself.
 # Cloudflare applies this when it serves the site's files (wrangler.toml [assets]).
-/  /fin  301
+/  /app  301

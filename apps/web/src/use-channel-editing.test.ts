@@ -43,25 +43,27 @@ const drag = (
   });
 
 describe('useChannelEditing', () => {
-  it('draws the walls on the outline and the depth on the rocker, with points on each', () => {
+  it("draws the depth on the rocker with points; applied walls are the outline view's own curves", () => {
     const b = board();
     const { result } = renderHook(() => useChannelEditing(b, b.crossSections[2]!.position));
-    expect(result.current.linesFor('outline')).toHaveLength(4);
+    // Applied walls are edited as curves of the outline view (`channelTargets`), not
+    // drawn or pointed here.
+    expect(result.current.linesFor('outline')).toEqual([]);
+    expect(result.current.keysFor('outline')).toEqual([]);
     expect(result.current.linesFor('rocker')).toHaveLength(1);
-    expect(result.current.keysFor('outline')!.length).toBeGreaterThan(0);
     expect(result.current.keysFor('rocker')!.length).toBeGreaterThan(0);
     expect(result.current.keysFor('crossSection')!.map((k) => k.id)).toContain('cs:o1');
     expect(result.current.sectionCut).not.toBeNull();
   });
 
-  it('moves a wall in plan, at its cross-section, one undo step', () => {
+  it('moves a wall across on the cross-section, one undo step', () => {
     const b = board();
     const x = b.crossSections[2]!.position;
+    const before = valueAt(boardChannels(b)[1]!.outer, x);
     const { result } = renderHook(() => useChannelEditing(b, x));
-    const key = result.current.keysFor('outline')!.find((k) => k.id.startsWith('pl:o1@') && Math.abs(k.p.x - x) < 1e-6)!; // prettier-ignore
-    drag(result.current.onChannelKeyDrag, key.id, { x: 5, y: 1.5 });
+    drag(result.current.onChannelKeyDrag, 'cs:o1', { x: 1.5, y: 5 });
     const c = boardChannels(board())[1]!;
-    expect(valueAt(c.outer, x)).toBeCloseTo(key.p.y + 1.5, 6); // across only
+    expect(valueAt(c.outer, x)).toBeCloseTo(before + 1.5, 6); // across only
     expect(
       boardStore
         .getState()

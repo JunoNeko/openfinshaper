@@ -7,6 +7,7 @@ import { board, getLength, getThicknessAtPos, getWidthAtPos, type BezierBoard } 
 import { splineFromKnots } from './bezier-spline';
 import {
   CHANNEL_FLOOR_POINTS,
+  MIN_ANCHOR_SPAN,
   SQUARE_WALL_GAP,
   channelAnchors,
   channelDepthAt,
@@ -15,8 +16,18 @@ import {
   type BottomChannel,
   type ChannelWall,
 } from './channels';
+import { boardChannels } from './channel-layout';
 import { knotFromArray } from './knot';
-import { loftRing, loftSection, ringFractions, ringHalf, stationRing } from './loft';
+import { applyRailProfile, RAIL_PRESETS } from './rail-profile';
+import {
+  bottomEnd,
+  loftPoint,
+  loftRing,
+  loftSection,
+  ringFractions,
+  ringHalf,
+  stationRing,
+} from './loft';
 import { hasTailCutout } from './outline-cutout';
 import { bottomZAt } from './surface';
 import { tessellateBoard, type BoardMesh } from './tessellate';
@@ -155,6 +166,25 @@ describe("the common sections, side by side (the owner's reference drawing)", ()
     expect(Math.abs(slope(6 + 0.01))).toBeLessThan(0.01);
   });
 
+  it('steps turned to the stringer: nothing at the outer wall, deepest at the inner one; on the stringer a V, no ridge', () => {
+    const inward: ChannelWall = { shape: 'step', radius: 0.15, lip: 0.1, deepAt: 'stringer' };
+    // The pair from the stringer: the first meets its mirror image there at full depth.
+    expect(d(inward, 0)).toBeCloseTo(0.4, 9);
+    expect(d(inward, 0.001)).toBeCloseTo(0.4, 3);
+    expect(d(inward, 3)).toBeCloseTo(0.2, 9);
+    expect(d(inward, 5.999)).toBeCloseTo(0, 3);
+    // The second, off the stringer, has its wall at its inner edge, lip rounded into the
+    // first one's shallow outer edge.
+    expect(d(inward, 6.0001)).toBeCloseTo(0, 2);
+    expect(d(inward, 6.5)).toBeGreaterThan(0.3);
+    expect(d(inward, 9)).toBeCloseTo((0.4 * 3) / (6 - 0.1), 9); // the floor runs to the lip
+    // Centred: deepest on the stringer, nothing at the walls.
+    const v = [straight(null, 6, 0.4, inward)];
+    expect(channelDepthAt(v, 20, 0)).toBeCloseTo(0.4, 9);
+    expect(channelDepthAt(v, 20, -3)).toBeCloseTo(0.2, 9);
+    expect(channelDepthAt(v, 20, 5.999)).toBeCloseTo(0, 3);
+  });
+
   it('a centred step is a V: nothing on the stringer, full depth at both walls', () => {
     const v = [straight(null, 6, 0.4, { shape: 'step', radius: 0, lip: 0 })];
     expect(channelDepthAt(v, 20, 0)).toBeCloseTo(0, 9);
@@ -166,6 +196,7 @@ describe("the common sections, side by side (the owner's reference drawing)", ()
     for (const wall of [
       { shape: 'step', radius: 0, lip: 0 },
       { shape: 'step', radius: 0.15, lip: 0.1 },
+      { shape: 'step', radius: 0.15, lip: 0.1, deepAt: 'stringer' },
       { shape: 'scoop' },
       { shape: 'wave' },
     ] as ChannelWall[]) {
@@ -173,6 +204,28 @@ describe("the common sections, side by side (the owner's reference drawing)", ()
       const mesh = tessellateBoard(b, { lengthSteps: 50, ringSteps: 48 });
       expect(badEdges(mesh), wall.shape).toBe(0);
     }
+  });
+});
+
+describe("the owner's curved channels", () => {
+  it('two from the stringer, walls meeting it, deepest down the middle: a watertight hull', () => {
+    // As drawn in the outline view: the outer wall from 9 cm out, 10 cm up the board,
+    // curving in to meet the stringer at 110.
+    const wall: ChannelWall = { shape: 'step', radius: 0.15, lip: 0.1, deepAt: 'stringer' };
+    const outer = splineFromKnots([
+      knotFromArray([10, 9, 10, 9, 50, 9], true, false),
+      knotFromArray([110, 0, 95, 4, 110, 0], true, false),
+    ]);
+    const b = withChannels(shortboard, [{ ...straight(0, 9, 0.5, wall, 60, 110), outer }]);
+    for (const opts of [
+      { lengthSteps: 50, ringSteps: 48 },
+      { lengthSteps: 200, ringSteps: 96 },
+    ]) {
+      expect(badEdges(tessellateBoard(b, opts))).toBe(0);
+    }
+    // Deepest on the stringer, where they meet, and nothing past the outer wall.
+    expect(channelDepthAt(boardChannels(b), 30, 0)).toBeCloseTo(0.5, 6);
+    expect(channelDepthAt(boardChannels(b), 30, 9.5)).toBe(0);
   });
 });
 
@@ -215,7 +268,69 @@ describe('the rail past the last channel wall', () => {
   });
 });
 
+describe('a wall swept in from near the rail (owner report: rail scalloping, 2026-11)', () => {
+  it("leaves the rail's points on smooth paths along the board, as without channels", () => {
+    // The outer wall 1.2 cm inside the rail at 20 cm up the board, swept in to 2 cm off
+    // the stringer at 110: from the middle of the channel to the tail it moves across
+    // most of the bottom.
+    // A hard rail, as the owner's board has: the bottom meets it in an edge.
+    const hard = RAIL_PRESETS.find((r) => r.id === '80-20-hard')!.params;
+    const base: BezierBoard = { ...shortboard, crossSections: shortboard.crossSections.map((cs, i) => (i > 0 && i < shortboard.crossSections.length - 1 ? applyRailProfile(cs, hard) : cs)) }; // prettier-ignore
+    const half = (x: number) => getWidthAtPos(base, x) / 2;
+    const wall: ChannelWall = { shape: 'step', radius: 0.6, lip: 0 };
+    const outer = splineFromKnots([
+      knotFromArray([20, half(20) - 1.2, 20, half(20) - 1.2, 40, half(20) - 3], true, false),
+      knotFromArray([110, 2, 90, 2, 110, 2], true, false),
+    ]);
+    const b = withChannels(base, [{ ...straight(0, 9, 0.6, wall, 60, 110, 20), outer }]);
+    /** The worst second difference along x of the ring points out past `from` cm. */
+    const worst = (board: BezierBoard, from: number) => {
+      const rings: { y: number; z: number }[][] = [];
+      for (let x = 22; x <= 40; x += 0.25) rings.push(loftRing(board, x, 120)!);
+      let w = 0;
+      for (let r = 1; r < rings.length - 1; r++) {
+        rings[r]!.forEach((p, i) => {
+          if (p.y < from) return;
+          const [a, c] = [rings[r - 1]![i]!, rings[r + 1]![i]!];
+          w = Math.max(w, Math.hypot(a.y - 2 * p.y + c.y, a.z - 2 * p.z + c.z));
+        });
+      }
+      return w;
+    };
+    // Past the wall, on the uncut bottom and the rail. Measured (cm): 0.0006 without
+    // channels; 0.032 when the rail's points were eased by profile fraction, which
+    // thinned them over the edge; 0.011 eased by the ladder's measure.
+    expect(worst(b, half(22) - 1)).toBeLessThan(0.02);
+  });
+});
+
+describe('where the bottom ends', () => {
+  it('is found exactly, not to a step of the search (owner report: rail scalloping)', () => {
+    for (const x of [15, 40, 80, 120, 150]) {
+      const sec = loftSection(shortboard, x)!;
+      // The widest point, by a search 64 times finer than the one bottomEnd starts from.
+      let ref = 0;
+      for (let i = 1; i <= 4096; i++) {
+        if (loftPoint(sec, i / 4096).x > loftPoint(sec, ref).x) ref = i / 4096;
+      }
+      // A step of the 64-sample search alone would be out by up to 1/128.
+      expect(Math.abs(bottomEnd(sec) - ref)).toBeLessThan(1 / 4096);
+    }
+  });
+});
+
 describe('channel anchors', () => {
+  it('stay spread out where walls meet at the stringer, and past where they met', () => {
+    // An outer wall closing from 6 cm to the stringer at 60, held there beyond.
+    const wall: ChannelWall = { shape: 'step', radius: 0.15, lip: 0.1, deepAt: 'stringer' };
+    const closing: BottomChannel = { ...straight(0, 6, 0.4, wall), outer: polylineSpline([[10, 6], [40, 6], [60, 0]]) }; // prettier-ignore
+    for (const x of [59.99, 60, 100]) {
+      const ys = channelAnchors([closing], x);
+      for (let i = 1; i < ys.length; i++) expect(ys[i]! - ys[i - 1]!).toBeGreaterThan(1e-5);
+      expect(Math.max(...ys)).toBeGreaterThanOrEqual(MIN_ANCHOR_SPAN);
+    }
+  });
+
   it('are the same number at every station, sorted, on the walls', () => {
     const c = [straight(4, 10, 0.5), straight(null, 2, 0.3, { shape: 'round', radius: 0.5 })];
     const counts = [0, 20, 59, 100, 180].map((x) => channelAnchors(c, x).length);

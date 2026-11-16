@@ -50,8 +50,18 @@ export type ChannelWall =
    * nothing on the stringer side: a sawtooth, set side by side. `radius` (cm) rounds the
    * top of the wall, the inside corner where the floor meets it; `lip` (cm) rounds its
    * bottom, the edge where it meets the uncut bottom. 0 leaves either sharp.
+   *
+   * `deepAt: 'stringer'` turns it round: the floor ramps down from nothing at the outer
+   * wall to the steep wall on the stringer side. A wall on the stringer meets its mirror
+   * image at full depth, so there is no wall there: two of them side by side on the
+   * stringer make a V, deepest down the middle (the owner's curved-channel board).
    */
-  | { readonly shape: 'step'; readonly radius: number; readonly lip: number }
+  | {
+      readonly shape: 'step';
+      readonly radius: number;
+      readonly lip: number;
+      readonly deepAt?: 'rail' | 'stringer';
+    }
   /** A concave arc, deepest in the middle, meeting its neighbours in a sharp ridge. */
   | { readonly shape: 'scoop' }
   /** A smooth flute: no edge anywhere, its neighbours meeting in a rounded crest. */
@@ -154,9 +164,17 @@ const stepDepth = (
   return floor;
 };
 
+/** A step whose steep wall is on the stringer side. */
+const facesStringer = (wall: ChannelWall): boolean =>
+  wall.shape === 'step' && wall.deepAt === 'stringer';
+
+/** No radii: a step wall that meets its mirror image on the stringer has nothing to round. */
+const SHARP = { radius: 0, lip: 0 } as const;
+
 /**
  * The depth (cm) of a channel `d` deep at a point `dIn` (cm) out from its inner edge and
- * `dOut` in from its outer wall, `u` = dIn / (dIn + dOut) across it.
+ * `dOut` in from its outer wall, `u` = dIn / (dIn + dOut) across it. `onStringer`: its
+ * inner edge is the stringer (or it is centred on it).
  */
 const profileDepth = (
   wall: ChannelWall,
@@ -164,11 +182,14 @@ const profileDepth = (
   dIn: number,
   dOut: number,
   u: number,
+  onStringer = false,
 ): number => {
   const v = Math.min(1, Math.max(0, u));
   switch (wall.shape) {
     case 'step':
-      return stepDepth(wall, d, dIn, dOut);
+      return facesStringer(wall)
+        ? stepDepth(onStringer ? SHARP : wall, d, dOut, dIn)
+        : stepDepth(wall, d, dIn, dOut);
     case 'scoop':
       return d * Math.sin(Math.PI * v);
     case 'wave':
@@ -205,16 +226,29 @@ export const channelDepthAt = (
       if (ay > yo || yo <= 0) continue;
       cut =
         c.wall.shape === 'step'
-          ? profileDepth(c.wall, depth, ay, yo - ay, ay / yo)
+          ? profileDepth(c.wall, depth, ay, yo - ay, ay / yo, true)
           : profileDepth(c.wall, depth, yo + ay, yo - ay, 0.5 + (0.5 * ay) / yo);
     } else {
       if (ay < yi || ay > yo || yo - yi <= 0) continue;
-      cut = profileDepth(c.wall, depth, ay - yi, yo - ay, (ay - yi) / (yo - yi));
+      const u = (ay - yi) / (yo - yi);
+      cut = profileDepth(c.wall, depth, ay - yi, yo - ay, u, yi <= ON_STRINGER);
     }
     out = Math.max(out, cut);
   }
   return out;
 };
+
+/** An inner wall this close to the stringer (cm) is on it. */
+const ON_STRINGER = 1e-6;
+
+/**
+ * The narrowest (cm) a channel is spread over when the ring gets its points. Walls that
+ * meet at the stringer close to nothing, and past the channel's end they are held there:
+ * its points would all land on one spot, and the mesh would be made of slivers. So below
+ * this the points are spread over this much instead, on the uncut bottom just outside
+ * the narrow tip.
+ */
+export const MIN_ANCHOR_SPAN = 0.5;
 
 /** Points spread across a channel's floor, besides those its walls need. */
 export const CHANNEL_FLOOR_POINTS = 6;
@@ -247,6 +281,7 @@ const ARC_STEPS = [Math.PI / 8, Math.PI / 4, (3 * Math.PI) / 8] as const;
 const wallStops = (
   wall: ChannelWall,
   w: number,
+  onStringer = false,
 ): { outer: readonly number[]; inner: readonly number[] } => {
   switch (wall.shape) {
     case 'step': {
@@ -266,7 +301,10 @@ const wallStops = (
       if (wall.radius > 0) {
         outer.push(...[...ARC_STEPS, Math.PI / 2].map((a) => lip + top * (1 - Math.cos(a))));
       }
-      return { outer, inner: [0] };
+      if (!facesStringer(wall)) return { outer, inner: [0] };
+      // Turned round: the wall's points are in from the inner edge, the crease at the
+      // outer one. On the stringer there is no wall, only the V's crease.
+      return { outer: [0], inner: onStringer ? [0] : outer };
     }
     case 'scoop':
     case 'wave':
@@ -298,10 +336,12 @@ const wallStops = (
 export const channelAnchors = (channels: readonly BottomChannel[], x: number): number[] => {
   const ys: number[] = [];
   for (const c of channels) {
-    const { yi, yo } = wallsAt(c, x);
+    const walls = wallsAt(c, x);
+    const { yi } = walls;
     const lo = yi ?? 0;
+    const yo = Math.max(walls.yo, lo + MIN_ANCHOR_SPAN);
     const inside = (y: number) => Math.min(yo + SQUARE_WALL_GAP, Math.max(lo - SQUARE_WALL_GAP, y));
-    const stops = wallStops(c.wall, yo - lo);
+    const stops = wallStops(c.wall, yo - lo, yi === null || yi <= ON_STRINGER);
     for (const s of stops.outer) ys.push(inside(yo - s));
     if (yi !== null) for (const s of stops.inner) ys.push(inside(yi + s));
     const n =
@@ -369,7 +409,7 @@ export const scaleWall = (w: ChannelWall, fW: number): ChannelWall =>
     : w.shape === 'round'
       ? { shape: 'round', radius: w.radius * fW }
       : w.shape === 'step'
-        ? { shape: 'step', radius: w.radius * fW, lip: w.lip * fW }
+        ? { ...w, radius: w.radius * fW, lip: w.lip * fW }
         : w;
 
 /** `channels` on a board scaled by `fL` along, `fW` across and `fT` in thickness. */

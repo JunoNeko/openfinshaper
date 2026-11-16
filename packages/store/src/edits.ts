@@ -45,12 +45,59 @@ export type SplineTarget =
   | { kind: 'outline' }
   | { kind: 'deck' }
   | { kind: 'bottom' }
-  | { kind: 'crossSection'; index: number };
+  | { kind: 'crossSection'; index: number }
+  /**
+   * A wall of an applied (drawn) channel, in plan: x along the board, y out from the
+   * stringer. Edited in the outline view like the outline itself (print version).
+   */
+  | { kind: 'channel'; index: number; wall: 'inner' | 'outer' };
 
 /** Whether two targets name the same spline (same kind, and same station for sections). */
 export const sameTarget = (a: SplineTarget, b: SplineTarget): boolean =>
   a.kind === b.kind &&
-  (a.kind !== 'crossSection' || (b.kind === 'crossSection' && b.index === a.index));
+  (a.kind !== 'crossSection' || (b.kind === 'crossSection' && b.index === a.index)) &&
+  (a.kind !== 'channel' || (b.kind === 'channel' && b.index === a.index && b.wall === a.wall));
+
+/** The wall a channel target names, if the board has it (applied channels only). */
+export const channelWall = (
+  b: BezierBoard,
+  t: { index: number; wall: 'inner' | 'outer' },
+): Spline | null => {
+  // prettier-ignore
+  const c = b.channels?.from === 'drawn' ? b.channels.channels[t.index] : undefined;
+  return (c && (t.wall === 'outer' ? c.outer : c.inner)) ?? null;
+};
+
+/** Two walls drawn the same: side-by-side channels share the wall between them. */
+const sameCurve = (a: Spline, b: Spline): boolean =>
+  a === b ||
+  (a.knots.length === b.knots.length &&
+    a.knots.every((k, i) => {
+      const o = b.knots[i]!;
+      const near = (p: Vec2, q: Vec2) => Math.abs(p.x - q.x) < 1e-9 && Math.abs(p.y - q.y) < 1e-9;
+      return near(k.end, o.end) && near(k.tangentToPrev, o.tangentToPrev) && near(k.tangentToNext, o.tangentToNext); // prettier-ignore
+    }));
+
+/**
+ * The targets for the walls of `b`'s applied channels, one per wall: a wall two channels
+ * share is one target. None until the channels are applied.
+ */
+export const channelTargets = (b: BezierBoard): SplineTarget[] => {
+  if (b.channels?.from !== 'drawn') return [];
+  const seen: Spline[] = [];
+  const out: SplineTarget[] = [];
+  b.channels.channels.forEach((c, index) => {
+    for (const wall of ['inner', 'outer'] as const) {
+      const s = wall === 'outer' ? c.outer : c.inner;
+      if (!s || seen.some((q) => sameCurve(q, s))) continue;
+      seen.push(s);
+      out.push({ kind: 'channel', index, wall });
+    }
+  });
+  return out;
+};
+
+const EMPTY_SPLINE = splineFromKnots([]);
 
 export const getTargetSpline = (b: BezierBoard, t: SplineTarget): Spline => {
   switch (t.kind) {
@@ -62,8 +109,13 @@ export const getTargetSpline = (b: BezierBoard, t: SplineTarget): Spline => {
       return b.bottom;
     case 'crossSection':
       return b.crossSections[t.index]!.spline;
+    case 'channel':
+      return channelWall(b, t) ?? EMPTY_SPLINE;
   }
 };
+
+/** `p` held on the board's side of the stringer: a wall goes no further than onto it. */
+const offStringer = (p: Vec2): Vec2 => (p.y < 0 ? vec2(p.x, 0) : p);
 
 /** Return a new board with the target spline replaced. */
 export const withSpline = (b: BezierBoard, t: SplineTarget, spline: Spline): BezierBoard => {
@@ -103,6 +155,26 @@ export const withSpline = (b: BezierBoard, t: SplineTarget, spline: Spline): Bez
         i === t.index ? { position: c.position, spline } : c,
       );
       return board(b.outline, b.bottom, b.deck, cs, b.interpolationType, b.fins, b.channels);
+    }
+    case 'channel': {
+      const c = b.channels;
+      if (c?.from !== 'drawn' || !c.channels[t.index]) return b;
+      const held = splineFromKnots(
+        spline.knots.map((k) => ({
+          ...k,
+          end: offStringer(k.end),
+          tangentToPrev: offStringer(k.tangentToPrev),
+          tangentToNext: offStringer(k.tangentToNext),
+        })),
+      );
+      // Every channel drawn on this wall moves with it: side by side, they share it.
+      const old = channelWall(b, t)!;
+      const channels = c.channels.map((ch) => ({
+        ...ch,
+        outer: sameCurve(ch.outer, old) ? held : ch.outer,
+        inner: ch.inner && sameCurve(ch.inner, old) ? held : ch.inner,
+      }));
+      return board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, b.fins, { ...c, channels }); // prettier-ignore
     }
   }
 };

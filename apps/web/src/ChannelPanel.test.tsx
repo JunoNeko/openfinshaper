@@ -73,8 +73,20 @@ describe('<ChannelPanel />', () => {
     expect(params(store).wall).toEqual({ shape: 'wave' });
     expect((screen.getByLabelText(/^Radius top/) as HTMLInputElement).disabled).toBe(true);
     // Back to a step: a wave had no radii to keep, so a fresh one.
-    fireEvent.click(screen.getByRole('radio', { name: 'Step' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Step, deepest at the rail side' }));
     expect(params(store).wall).toEqual({ shape: 'step', radius: 0, lip: 0.5 });
+  });
+
+  it('turns a step round to the stringer, keeping its radii, and back', () => {
+    const { store } = setup();
+    add();
+    typeInto(/^Radius top/, '2');
+    fireEvent.click(screen.getByRole('radio', { name: 'Step, deepest at the stringer side' }));
+    expect(params(store).wall).toEqual({ shape: 'step', radius: 0.2, lip: 0.5, deepAt: 'stringer' }); // prettier-ignore
+    expect(screen.getByRole('radio', { name: 'Step, deepest at the stringer side' }).getAttribute('aria-checked')).toBe('true'); // prettier-ignore
+    expect((screen.getByLabelText(/^Radius top/) as HTMLInputElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('radio', { name: 'Step, deepest at the rail side' }));
+    expect(params(store).wall).toEqual({ shape: 'step', radius: 0.2, lip: 0.5 });
   });
 
   it('moves the ends and the blend with the keyboard, one undo step a press', () => {

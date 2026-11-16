@@ -300,3 +300,69 @@ Every edit goes through the same keyed curves and eases out to the cross-section
 side. To edit somewhere new, add a cross-section there. Points can't yet move along the
 board (a channel's start and end), and the rocker's vertical scale makes fine depth
 edits easier zoomed in or on the cross-section.
+
+## Curved channels: walls drawn with points and handles (owner design, 2026-11)
+
+The owner's reference board has two channels from the stringer, deepest down the middle,
+their outer walls sweeping in from near the rail at the tail to meet the stringer at a
+point. A first version laid such walls out from numbers (a "meet at the stringer"
+switch and an early–late curve slider); the owner judged that numbers can't cover the
+curves shapers draw, and asked for plain Bézier editing instead. So:
+
+- **Applied walls are spline targets** (`{ kind: 'channel', index, wall }` in
+  `SplineTarget`, `packages/store/src/edits.ts`). The outline view adds one for each wall
+  of applied channels (`channelTargets`), drawn green, and every outline tool works on
+  them: drag a point or a handle, double-click to add a point, Delete, the point
+  inspector, undo. A wall two side-by-side channels share is one target, and an edit to
+  it is written to both (`sameCurve`). `withSpline` holds every point and handle on the
+  board's side of the stringer, so a wall dragged onto it stops there: that is how a
+  channel is closed to a point.
+- **Apply gives walls few points**: a straight wall its two ends; one that follows the
+  outline a point at each cross-section it passes, and midway points only where the
+  curve through those strays more than 0.2 mm from the laid-out wall (`WALL_FIT`).
+- **Cross-section drags bend the wall in place** (`bendAt`): the curve is split exactly
+  at the cross-section if it has no point there, then each point moves by the eased
+  share (smoothstep out to the neighbouring cross-sections), its handles shifted by the
+  bend and tilted by its slope, so smooth points stay smooth and the handles drawn in
+  the outline view are kept. The depth curve, which has no handles to keep, is still
+  re-keyed (`withKeyAt`).
+- **A step turned round** (`deepAt: 'stringer'` on the step wall): the floor ramps from
+  nothing at the outer wall to the steep wall on the stringer side. A wall on the
+  stringer meets its mirror image at full depth, so it has no wall and no radii there
+  (`profileDepth`'s `onStringer`): two of them from the stringer make the V. Off the
+  stringer it is the step's sawtooth facing the other way.
+- **Mesh points where walls meet** (`MIN_ANCHOR_SPAN`): walls that close to nothing, and
+  are held there past the channels' end, would put every one of a channel's ring points
+  on one spot. Below 5 mm a channel's points are spread over 5 mm instead, on the uncut
+  bottom just outside its tip. The cut's last few millimetres to the point are therefore
+  sampled less finely; the depth has usually faded there.
+
+Not yet: walls must still run along the board (one point across at each x); the panel
+says so if a handle is dragged back on itself.
+
+### The rail where walls sweep across the bottom (owner report: rail scalloping, 2026-11)
+
+A wall drawn from near the rail at the tail to near the stringer up the board moves the
+last anchor a long way from where it is at the reference station (the middle of the
+channel). Two things then showed on a hard rail as a serrated edge:
+
+- **Rail points eased by profile fraction.** `pastLastAnchor` pushed the points past the
+  last anchor out by the anchor's shift, easing back over a span that grows with it, and
+  blended to an even stretch when the shift was large: either way they came out evenly
+  spaced, thinned over the hard edge the ladder had packed, and slid over it at a
+  different station each. They are now eased in the ladder's measure (`ladderMeasure`:
+  the share of a plain ring's points up to a fraction, its density linear between the
+  ladder's samples, so both it and its inverse are smooth): moved by counts of points,
+  they keep the ladder's packing. Measured on a hard-railed shortboard with a swept
+  wall: 0.032 cm worst second difference along the board before, 0.011 after, 0.0006
+  without channels.
+- **Where the cut stops.** The cut was applied up to the rail's widest point
+  (`bottomEnd`), found on 64 samples: as that stepped, rail points switched between cut
+  and uncut. It is now refined exactly (golden section), and the cut fades out over the
+  last 2% of the profile before it (`CUT_FADE`) instead of stopping dead.
+
+The owner's board also ran its channel out through the rail at the tail corner: the
+outer wall's first point had been dragged to 4 cm up the board, and a wall is held
+straight back from its first point, 12.2 cm out where the tail is narrower. The panel
+says so ("runs off the bottom"). There the step's wall crosses the rail at an angle,
+which is a real edge, not a sampling fault.

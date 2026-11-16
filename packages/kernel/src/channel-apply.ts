@@ -3,10 +3,12 @@
  * Applying typed-in channels, and reshaping them a cross-section at a time (print
  * version, owner request 2026-11).
  *
- * **Apply** turns channels typed in as numbers into drawn ones: each wall and each
- * channel's depth becomes a curve with a key at every cross-section the channels pass
- * (and at their ends, where full depth begins and ends, and in between where the
- * cross-sections are far apart). The numbers are kept with
+ * **Apply** turns channels typed in as numbers into drawn ones. Each wall becomes a curve
+ * with few points, to reshape in the outline view by its points and handles: a straight
+ * wall its two ends, a curved one a point at each cross-section it passes. Each
+ * channel's depth gets a key at every cross-section the channels pass (and at their
+ * ends, where full depth begins and ends, and in between where the cross-sections are
+ * far apart). The numbers are kept with
  * them, so **Reset** can go back.
  *
  * A key is a point the curve passes through with a slope; the curve runs through the
@@ -19,7 +21,8 @@
  * (`loft.ts`), walls kept crisp between stations. Nothing is written into the
  * cross-section curves, which the loft blends point by point and would smear.
  */
-import { splineFromKnots, valueAt, type Spline } from './bezier-spline';
+import { curveFromPoints, splitCurve, tForX, xDeriv, xValue } from './bezier-curve';
+import { findSegment, splineFromKnots, valueAt, type Spline } from './bezier-spline';
 import type { BezierBoard } from './board';
 import {
   channelDepthShare,
@@ -37,6 +40,9 @@ interface Key {
   readonly y: number;
   readonly slope: number;
 }
+
+/** How far (cm) an applied wall may stray from the laid-out one before it gets another point. */
+const WALL_FIT = 0.02;
 
 /** Keys closer than this along the board are the same key (cm). */
 const SAME_X = 1e-6;
@@ -153,17 +159,34 @@ export const applyChannels = (
   const wallXs = [p.start, ...inside, p.end];
   const depthXs = filled([p.start, p.fullFrom, p.fullTo, p.end, ...inside]);
   const depthAt = (x: number) => p.depth * channelDepthShare(p, x);
-  // The laid-out wall's own knots are keys too, so a wall that follows the outline
-  // keeps its shape.
-  const wall = (s: Spline): Spline =>
-    through(
-      keysAt(
-        (x) => valueAt(s, x),
-        filled([...wallXs, ...s.knots.map((k) => k.end.x)]),
-        p.start,
-        p.end,
-      ),
-    );
+  // Walls get few points, to reshape in the outline view with their handles: a straight
+  // wall its two ends, one that follows the outline a point at each cross-section it
+  // passes (or midway, if none).
+  const wall = (s: Spline): Spline => {
+    const y0 = s.knots[0]?.end.y ?? 0;
+    const straight = s.knots.every((k) => Math.abs(k.end.y - y0) < 1e-9);
+    const xs = straight
+      ? [p.start, p.end]
+      : inside.length
+        ? wallXs
+        : [p.start, (p.start + p.end) / 2, p.end];
+    const f = (x: number) => valueAt(s, x);
+    // Midway points only where the curve through the others strays from the laid-out
+    // wall: few points, the wall kept true.
+    let keys = keysAt(f, xs, p.start, p.end);
+    for (let pass = 0; pass < 6 && !straight; pass++) {
+      const fit = through(keys);
+      const extra: number[] = [];
+      for (let i = 1; i < keys.length; i++) {
+        const [a, z] = [keys[i - 1]!.x, keys[i]!.x];
+        const off = Math.max(...[1, 2, 3, 4, 5, 6, 7].map((j) => { const x = a + ((z - a) * j) / 8; return Math.abs(valueAt(fit, x) - f(x)); })); // prettier-ignore
+        if (off > WALL_FIT) extra.push((a + z) / 2);
+      }
+      if (!extra.length) break;
+      keys = keysAt(f, [...keys.map((k) => k.x), ...extra], p.start, p.end);
+    }
+    return through(keys);
+  };
   return {
     from: 'drawn',
     params: p,
@@ -200,16 +223,74 @@ export const moveChannelKey = (
   joined?: number,
 ): BottomChannel[] => {
   const v = Math.max(0, value);
-  const set = (s: Spline) => withKeyAt(s, x, v, stations);
+  // Walls are bent in place, keeping the points and handles drawn in the outline view;
+  // the depth, which has no handles to keep, is re-keyed.
+  const set = (s: Spline) => bendAt(s, x, v, stations);
   return channels.map((c, i) => {
     if (i === k) {
-      if (part === 'depth') return { ...c, depth: set(c.depth) };
+      if (part === 'depth') return { ...c, depth: withKeyAt(c.depth, x, v, stations) };
       if (part === 'outer') return { ...c, outer: set(c.outer) };
       return c.inner ? { ...c, inner: set(c.inner) } : c;
     }
     if (i === joined && c.inner && part === 'outer') return { ...c, inner: set(c.inner) };
     return c;
   });
+};
+
+/** `s` with a point at `x` (its x span inside), splitting the curve there: its shape unchanged. */
+const withPointAt = (s: Spline, x: number): Spline => {
+  if (s.knots.some((k) => Math.abs(k.end.x - x) < SAME_X)) return s;
+  const i = findSegment(s, x);
+  if (i < 0) return s;
+  const a = s.knots[i]!;
+  const z = s.knots[i + 1]!;
+  const c = s.coeffs[i]!;
+  // To the last bit, so the new point lands on the cross-section itself.
+  let t = tForX(c, x);
+  for (let n = 0; n < 8 && Math.abs(x - xValue(c, t)) > 1e-12 && xDeriv(c, t) !== 0; n++) {
+    t += (x - xValue(c, t)) / xDeriv(c, t);
+  }
+  if (!(t > 0 && t < 1)) return s;
+  const cut = splitCurve(curveFromPoints(a.end, a.tangentToNext, z.tangentToPrev, z.end), t);
+  return splineFromKnots([
+    ...s.knots.slice(0, i),
+    { ...a, tangentToNext: cut.startTangentToNext },
+    knot(vec2(x, cut.mid.end.y), cut.mid.tangentToPrev, cut.mid.tangentToNext, true),
+    { ...z, tangentToPrev: cut.endTangentToPrev },
+    ...s.knots.slice(i + 2),
+  ]);
+};
+
+/**
+ * `s` bent so it passes through `y` at `x`, the bend easing out to nothing at the
+ * cross-sections either side (or the curve's ends): each point moves by its eased share,
+ * and its handles with it, tilted by the bend's slope there, so a smooth point stays
+ * smooth. The points and handles drawn in the outline view are kept; a point is added
+ * at `x` if there is none (the curve split there, unchanged).
+ */
+const bendAt = (s0: Spline, x: number, y: number, stations: readonly number[]): Spline => {
+  const s = withPointAt(s0, x);
+  const [a, b] = splineSpan(s);
+  const delta = y - valueAt(s, x);
+  const lo = Math.max(a, ...stations.filter((v) => v < x - SAME_X));
+  const hi = Math.min(b, ...stations.filter((v) => v > x + SAME_X));
+  /** The bend at `v` and its slope: smoothstep from each neighbour (0) to `x` (1). */
+  const bend = (v: number): [number, number] => {
+    if (Math.abs(v - x) < SAME_X) return [delta, 0];
+    if (v <= lo || v >= hi) return [0, 0];
+    const before = v < x;
+    const span = before ? x - lo : hi - x;
+    const t = before ? (v - lo) / span : (hi - v) / span;
+    return [delta * t * t * (3 - 2 * t), ((delta * 6 * t * (1 - t)) / span) * (before ? 1 : -1)];
+  };
+  return splineFromKnots(
+    s.knots.map((k) => {
+      const [d, slope] = bend(k.end.x);
+      if (d === 0 && slope === 0) return k;
+      const move = (p: Vec2) => vec2(p.x, p.y + d + slope * (p.x - k.end.x));
+      return { ...k, end: vec2(k.end.x, Math.max(0, k.end.y + d)), tangentToPrev: move(k.tangentToPrev), tangentToNext: move(k.tangentToNext) }; // prettier-ignore
+    }),
+  );
 };
 
 /** Where a curve can be dragged along the board: its ends and the cross-sections inside it. */

@@ -45,11 +45,12 @@ import { fmtLen, type LengthUnit } from './format';
 import type { Longitudinal } from './longitudinal';
 import { Sel } from './view-toolkit';
 
-type PanelShape = 'step' | 'scoop' | 'wave';
+type PanelShape = 'step' | 'step-in' | 'scoop' | 'wave';
 
 /** The sections the panel offers, each drawn as two channels side by side, bottom down. */
 const TYPES: { shape: PanelShape; label: string; path: string }[] = [
-  { shape: 'step', label: 'Step', path: 'M2 12 L16 4 L16 12 L30 4 L30 12' },
+  { shape: 'step', label: 'Step, deepest at the rail side', path: 'M2 12 L16 4 L16 12 L30 4 L30 12' }, // prettier-ignore
+  { shape: 'step-in', label: 'Step, deepest at the stringer side', path: 'M30 12 L16 4 L16 12 L2 4 L2 12' }, // prettier-ignore
   { shape: 'scoop', label: 'Scoop', path: 'M2 4 Q9 16 16 4 Q23 16 30 4' },
   { shape: 'wave', label: 'Wave', path: 'M2 12 C6 12 5 4 9 4 C13 4 12 12 16 12 C20 12 19 4 23 4 C27 4 26 12 30 12' }, // prettier-ignore
 ];
@@ -60,13 +61,18 @@ const COUNTS = Array.from({ length: MAX_CHANNELS }, (_, i) => {
   return { value: String(n), label };
 });
 
-/** A step keeps its radii when the type changes away and back; others have none. */
-const wallFor = (shape: PanelShape, from: ChannelWall): ChannelWall =>
-  shape === 'step'
-    ? from.shape === 'step'
-      ? from
-      : { shape: 'step', radius: 0, lip: 0.5 }
-    : { shape };
+/** A step keeps its radii when the type changes away and back, or turns round; others have none. */
+const wallFor = (shape: PanelShape, from: ChannelWall): ChannelWall => {
+  if (shape !== 'step' && shape !== 'step-in') return { shape };
+  const radii = from.shape === 'step' ? { radius: from.radius, lip: from.lip } : { radius: 0, lip: 0.5 }; // prettier-ignore
+  return shape === 'step-in'
+    ? { shape: 'step', ...radii, deepAt: 'stringer' }
+    : { shape: 'step', ...radii };
+};
+
+/** The type the picker shows for a wall. */
+const shapeOf = (w: ChannelWall): string =>
+  w.shape === 'step' && w.deepAt === 'stringer' ? 'step-in' : w.shape;
 
 /** The closest the start and end come (cm). */
 const MIN_GAP = 1;
@@ -167,7 +173,7 @@ function ChannelFields({
       <div className="flex items-center gap-2">
         <span className="flex-1 text-muted-foreground">Type</span>
         <TypePicker
-          value={params.wall.shape}
+          value={shapeOf(params.wall)}
           onChange={(shape) => set({ wall: wallFor(shape, params.wall) })}
         />
       </div>
@@ -301,10 +307,10 @@ function AppliedChannels({
   return (
     <div className="space-y-1.5">
       <p className="text-xs text-muted-foreground">
-        Applied: drag the green points. On a cross-section, a wall point moves the wall across and
-        the point at a channel&apos;s deepest sets its depth. On the outline, a point moves its wall
-        in plan; on the rocker, a point sets the depth of every channel there. Each change eases out
-        to the cross-sections either side.
+        Applied: on the outline, each wall is a curve to shape like the outline. Double-click it to
+        add a point; drag points and handles. On a cross-section, drag a wall point to move the wall
+        across, or the point at a channel&apos;s deepest to set its depth; on the rocker, a point
+        sets the depth of every channel there. Those ease out to the cross-sections either side.
       </p>
       <div className="text-muted-foreground">At cross-section {section.index}</div>
       {rows.length ? (
@@ -405,8 +411,8 @@ export function ChannelPanel({
             Apply
           </Button>
           <p className="text-xs text-muted-foreground">
-            Makes them editable: a point on each wall and depth at every cross-section they pass, to
-            drag in the cross-section view.
+            Makes them editable: each wall a curve to shape in the outline view with points and
+            handles, the depth set at each cross-section they pass.
           </p>
         </div>
       )}
