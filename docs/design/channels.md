@@ -358,8 +358,33 @@ channel). Two things then showed on a hard rail as a serrated edge:
   without channels.
 - **Where the cut stops.** The cut was applied up to the rail's widest point
   (`bottomEnd`), found on 64 samples: as that stepped, rail points switched between cut
-  and uncut. It is now refined exactly (golden section), and the cut fades out over the
-  last 2% of the profile before it (`CUT_FADE`) instead of stopping dead.
+  and uncut. It is now found exactly (golden section).
+
+### A channel run out through the rail (owner report: ragged rail, 2026-11)
+
+Lifting every point up to the rail's widest point by the channel's depth lifted the
+rail's lower side too: where a channel ran out through a hard rail, the lifted lower
+side rose over the uncut upper side, and the surface folded over itself, ragged flaps
+in a print. Now (`channelCutAt`):
+
+- **The bottom ends where it turns into the rail** (`railStart`: the first point out
+  from the stringer where the profile is steeper than 45°, found by bisection; on a
+  hard rail, the edge). Up to there a point is lifted by the depth, as before.
+- **The rail is cut off at the channel's floor**: the floor is the bottom's height at
+  the rail's start plus the depth. The points from the rail's start to where the
+  profile first rises back above the floor (`railCutEnd`, on the rail's lower side, or
+  past its widest point where the floor is above it) are cut away, and spread evenly
+  along the floor between the two, in order: no fold, and no points stacked on a
+  vertical rail. Past that the rail is untouched.
+- **Walls reach a hard rail's edge.** Anchors were kept inside 95% of the way to the
+  widest point; on a hard rail that is short of the edge, so a step's wall near it was
+  pulled in and drawn sloping. They now reach the rail's start, less 0.5 mm, where
+  that is further out.
+
+On the owner's board no ring crosses itself any more (13 did, at the tail corner), and
+the step's wall stays vertical to within a millimetre of the rail. A channel deep
+enough to cut a thin rail away whole leaves the floor and the upper side coinciding
+there: the rail is gone, which is what such a channel does.
 
 The owner's board also ran its channel out through the rail at the tail corner: the
 outer wall's first point had been dragged to 4 cm up the board, and a wall is held
