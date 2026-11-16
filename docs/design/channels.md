@@ -391,3 +391,19 @@ outer wall's first point had been dragged to 4 cm up the board, and a wall is he
 straight back from its first point, 12.2 cm out where the tail is narrower. The panel
 says so ("runs off the bottom"). There the step's wall crosses the rail at an angle,
 which is a real edge, not a sampling fault.
+
+### The rail's start as a fixed boundary (owner report: rail cuts wrapping onto the deck, 2026-11)
+
+Easing the points past the last wall in the ladder's measure kept them packed, but a
+wall that moves fast (where its drawn end meets the stretch held behind it) still
+pushed points from the rail's upper side round onto its lower side, one every few
+stations. The mesh joins point k to point k, so each crossing cut the corner with a
+facet across the rail: a crease wrapping from the rail onto the deck.
+
+`pastLastAnchor` now takes where the rail starts on both stations (`railFrom` here,
+`railRef` at the reference) as a boundary no point crosses. The bottom's points stay
+between the last wall and the rail, spread in the ladder's measure; the rail's track
+where it starts and ease back to their own places up it, so the deck is sampled
+exactly as without channels. On the owner's board the number of points on the rail is
+the same at every station (it varied 37 to 46 near the tail), and creases running
+across the rail's upper side went from 121 to 7, all at a corner of the drawn outline.
