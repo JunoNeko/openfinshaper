@@ -100,6 +100,7 @@ import { applyViewChange, DEFAULT_SIDEBAR_STATE, type SidebarState } from './sid
 import sampleBrd from './sample-board.brd?raw';
 import { boardStore } from './store';
 import { useChannelEditing } from './use-channel-editing';
+import { SWALLOW_KEY, useSwallowEditing } from './use-swallow-editing';
 import { SUPPORT_URL } from './support';
 import { BOARD_TEMPLATES } from './templates';
 import { clampSectionIndex, nearestMidpointSection } from './section-index';
@@ -710,7 +711,15 @@ function AppShell() {
   // Channels in the 2D views: the cut, the walls and depth as lines, and the points of
   // applied channels to drag.
   const channelEditing = useChannelEditing(board, activeSectionX);
-  const { onChannelKeyDrag } = channelEditing;
+  const { onChannelKeyDrag: onChannelOnlyKeyDrag } = channelEditing;
+  // A swallow's deck line, and its point, in the outline: dragged like a channel's.
+  const swallowEditing = useSwallowEditing(board);
+  const { onSwallowKeyDrag } = swallowEditing;
+  const onChannelKeyDrag = useCallback(
+    (id: string, delta: { x: number; y: number }, phase: 'start' | 'move') =>
+      id === SWALLOW_KEY ? onSwallowKeyDrag(delta, phase) : onChannelOnlyKeyDrag(id, delta, phase),
+    [onSwallowKeyDrag, onChannelOnlyKeyDrag],
+  );
 
   const overlaysFor = (kind: EditorKind): EditorOverlays => {
     const longitudinal = kind === 'outline' || kind === 'rocker';
@@ -732,7 +741,11 @@ function AppShell() {
       finView: kind === 'rocker' ? 'profile' : 'plan',
       channelCut: kind === 'crossSection' ? (channelEditing.sectionCut ?? undefined) : undefined,
       channelLines: channelEditing.linesFor(kind),
-      channelKeys: channelEditing.keysFor(kind),
+      channelKeys:
+        kind === 'outline' && swallowEditing.keys?.length
+          ? [...(channelEditing.keysFor(kind) ?? []), ...swallowEditing.keys]
+          : channelEditing.keysFor(kind),
+      dashedLines: kind === 'outline' ? swallowEditing.dashedLines : undefined,
     };
   };
 

@@ -28,6 +28,7 @@ import type { View } from './view-toolkit';
 export type SectionId =
   | 'specs'
   | 'resize'
+  | 'swallow'
   | 'controlPoint'
   | 'analysis'
   | 'channels'
@@ -130,6 +131,14 @@ export interface SidebarSection {
 export const SIDEBAR_SECTIONS: readonly SidebarSection[] = [
   { id: 'specs', title: 'Specs', tab: 'specs', relevantTo: 'all', defaultOpen: true },
   { id: 'resize', title: 'Resize', tab: 'shape', relevantTo: [], defaultOpen: false },
+  {
+    id: 'swallow',
+    title: 'Swallow Tail',
+    tab: 'shape',
+    // Shaped by points in the outline, and seen in 3D.
+    relevantTo: ['outline', '3d', 'quad'],
+    defaultOpen: false,
+  },
   {
     id: 'controlPoint',
     title: 'Control point',
