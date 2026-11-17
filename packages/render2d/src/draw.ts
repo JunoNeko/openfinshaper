@@ -1026,10 +1026,20 @@ export const drawFinsProfile = (
     if (f.template.length < 3) return;
     const selected = i === selectedIndex;
     const color = selected ? FIN_COLOR_SELECTED : FIN_COLOR;
-    // Trailing-edge root (template local x=0) sits at the aft base point; local x runs
-    // toward the nose (+x — the tail is always at x=0), local y is depth downward.
-    const rootX = f.baseLine.aft.x;
-    const toScreen = (p: Vec2) => worldToScreen(vp, { x: rootX + p.x, y: f.surfaceZ - p.y });
+    // The fin dot (template local x=0) at the base's back end; local x runs toward the
+    // nose (+x — the tail is always at x=0), local y is depth downward. The fin stands
+    // square to the bottom: its base on the bottom's tangent at the base's middle, its
+    // depth down the normal there (`ResolvedFin.pitch`).
+    const half = f.spec.base / 2;
+    const c = Math.cos(f.pitch);
+    const sn = Math.sin(f.pitch);
+    const toScreen = (p: Vec2) => {
+      const along = p.x - half;
+      return worldToScreen(vp, {
+        x: f.center.x + along * c + p.y * sn,
+        y: f.surfaceZ + along * sn - p.y * c,
+      });
+    };
     ctx.beginPath();
     const p0 = toScreen(f.template[0]!);
     ctx.moveTo(p0.x, p0.y);

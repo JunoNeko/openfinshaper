@@ -442,6 +442,11 @@ export interface ResolvedFin {
   readonly boxCenter: Vec2;
   /** The fin dot: the trailing edge's root, where its distance and inset are measured. */
   readonly dot: Vec2;
+  /**
+   * The bottom's slope at the base's middle, along the board (rad, + rising toward the
+   * nose): the fin stands square to the bottom there, its base on the tangent.
+   */
+  readonly pitch: number;
   /** Its tab's slot in plan (a fin with a design): back and front ends, and width (cm). */
   readonly slot?: { readonly rear: Vec2; readonly front: Vec2; readonly width: number };
 }
@@ -544,6 +549,10 @@ const resolveOne = (
   const { x: cx, y: cy } = at(spec.base / 2);
 
   const surfaceZ = getRockerAtPos(b, cx);
+  // The bottom's slope there: the fin sits square to it, its base along it.
+  const h = Math.min(0.5, spec.base / 4) || 0.5;
+  const slope = (getRockerAtPos(b, Math.min(length, cx + h)) - getRockerAtPos(b, Math.max(0, cx - h))) / (2 * h); // prettier-ignore
+  const pitch = Number.isFinite(slope) ? Math.atan(slope) : 0;
 
   const d = spec.design;
   // Its box follows from the fin: the back of its tab's slot is the fin's own distance
@@ -578,6 +587,7 @@ const resolveOne = (
     plugCant,
     boxCenter,
     dot,
+    pitch,
     ...(slot ? { slot } : {}),
   };
 };
@@ -650,11 +660,20 @@ export const buildFinBladeMesh = (fin: ResolvedFin): BoardMesh => {
 
   const [innerFrac, outerFrac] = foilOffsets(foil);
 
-  const place = (along: number, depth: number, lateral: number): [number, number, number] => [
-    root.x + baseDir.x * along + outward.x * lateral,
-    root.y + baseDir.y * along + downY * depth + outward.y * lateral,
-    surfaceZ + downZ * depth,
-  ];
+  // Square to the bottom: about the base's middle, along it and down its normal.
+  const half = Math.hypot(fin.baseLine.fore.x - root.x, fin.baseLine.fore.y - root.y) / 2;
+  const pc = Math.cos(fin.pitch);
+  const ps = Math.sin(fin.pitch);
+  const place = (along: number, depth: number, lateral: number): [number, number, number] => {
+    const s = along - half;
+    const down = -downZ * depth; // the depth straight down, before the bottom's slope
+    const a = half + s * pc + down * ps;
+    return [
+      root.x + baseDir.x * a + outward.x * lateral,
+      root.y + baseDir.y * a + downY * depth + outward.y * lateral,
+      surfaceZ + s * ps - down * pc,
+    ];
+  };
 
   const positions: number[] = [];
   const indices: number[] = [];

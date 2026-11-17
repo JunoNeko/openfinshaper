@@ -9,8 +9,9 @@
  *   deck-down (x toward the nose, z up from the tab top, y across). Turned over onto the
  *   board, x stays along the fin's base, z hangs down from the bottom, and the blade's
  *   outward side faces away from the stringer.
- * - The tab's middle across sits on the fin's position, and the trailing-edge root on
- *   its distance from the tail; the root rests on the bottom there (`bottomZAt`).
+ * - The tab's middle across sits on the fin's position, and the fin dot on its distance
+ *   from the tail; the base lies on the bottom's tangent at its middle (`bottomZAt`), so
+ *   the fin stands square to the bottom, as its box is set.
  * - Toe turns it in plan, as the 2D views draw it; an FCS plug's cant leans the whole
  *   fin outward about its root, on top of the blade's own.
  *
@@ -69,6 +70,15 @@ export const boardFinMesh = (b: BezierBoard, fin: ResolvedFin): BoardMesh => {
   const root = fin.baseLine.aft;
   const z0 = bottomZAt(b, fin.center.x, Math.abs(fin.center.y));
   const surface = Number.isFinite(z0) ? z0 : fin.surfaceZ;
+  // Square to the bottom where the fin stands: its base on the bottom's tangent at the
+  // base's middle, read along the board at the fin's own place across it.
+  const half = fin.spec.base / 2;
+  const dx = Math.min(0.5, half / 2) || 0.5;
+  const zAt = (x: number) => bottomZAt(b, x, Math.abs(fin.center.y));
+  const slope = (zAt(fin.center.x + dx) - zAt(fin.center.x - dx)) / (2 * dx);
+  const pitch = Number.isFinite(slope) ? Math.atan(slope) : fin.pitch;
+  const pc = Math.cos(pitch);
+  const ps = Math.sin(pitch);
   const src = blade.positions;
   const positions: number[] = [];
   for (let i = 0; i < src.length; i += 3) {
@@ -77,7 +87,11 @@ export const boardFinMesh = (b: BezierBoard, fin: ResolvedFin): BoardMesh => {
     const down = src[i + 2]!;
     const a = across * cos + down * sin;
     const h = down * cos - across * sin;
-    positions.push(root.x + ax * u + ox * a, root.y + ay * u + oy * a, surface - h);
+    // About the base's middle: along the bottom's tangent, and down its normal.
+    const sAlong = u - half;
+    const along = half + sAlong * pc + h * ps;
+    const z = surface + sAlong * ps - h * pc;
+    positions.push(root.x + ax * along + ox * a, root.y + ay * along + oy * a, z);
   }
   // Turned over, (x, y, z) → (x, −y, −z): a rotation, so each triangle still faces out.
   return meshWithNormals(positions, Array.from(blade.indices));
