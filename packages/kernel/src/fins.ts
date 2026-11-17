@@ -123,6 +123,8 @@ export interface FinSpec {
   readonly design?: FinDesign;
   /** The library fin and size it came from (`fin-library.ts`), or absent for one of the person's own. */
   readonly library?: { readonly fin: string; readonly size: 'S' | 'M' | 'L' };
+  /** A person's own fin's name (from My fins or OpenFinShaper), shown in the Fins panel. */
+  readonly name?: string;
 }
 
 /** Which fins of a setup are sides, rears and centres. */
@@ -205,8 +207,10 @@ export const withFinDesign = (
   plugCant = 0,
   library?: FinSpec['library'],
 ): FinSpec => {
-  const { library: _old, ...rest } = spec;
+  // A library fin has no name of its own; a person's keeps the one it is given.
+  const { library: _old, name: _name, ...rest } = spec;
   void _old;
+  void _name;
   return {
     ...rest,
     design: d,

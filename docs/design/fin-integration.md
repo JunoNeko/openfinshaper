@@ -47,7 +47,19 @@ is chosen for them.
   the box (a side box near a thin rail is where it comes through the deck); a box or
   flange within 10 mm of the rail, or past it in plan; a box across a channel wall.
 
-## Next (phase 2)
+## Phase 2: your own fins
 
-The OpenFinShaper round trip (design or edit a fin, Apply back to the board), a My fins
-library in the browser, `.fin.json` import. Phase 3: US box and Gearbox as board systems.
+- **Round trip** (`fin-handoff.ts`): the board's chooser hands the selected fin (or the
+  usual fin for its place, for a new one) to `/fin` as `.fin.json` text, in memory and
+  in sessionStorage. The designer (`fin/BoardTrip.tsx`) opens it in place of its own fin,
+  pauses its autosave, and shows a banner with Apply to board and Cancel. Either puts
+  the designer's own fin back (or clears it, for the autosave to restore) and goes to
+  `/app`, which takes the result once and applies it (`setOwnFin`: handed per side, on
+  the board's tab, its mirror too) and selects that fin.
+- **My fins** (`my-fins.ts`): an IndexedDB store of named `.fin.json` texts, newest first,
+  fed by Apply, OpenFinShaper's Add to My fins and imported files; the chooser lists them
+  with Use and delete. A fin from it keeps its name on the board (`FinSpec.name`).
+
+## Next (phase 3)
+
+US box and Gearbox as board systems.

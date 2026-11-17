@@ -28,11 +28,13 @@ import {
   withFinSet,
   withFinSystem,
   withLibraryFin,
+  withOwnFin,
   withPlugCant,
   withHandles,
   type BezierBoard,
   type CrossSection,
   type FinConfig,
+  type FinDesign,
   type FinSetup,
   type FinSpec,
   type FinSize,
@@ -833,6 +835,18 @@ export const setFinSet = (b: BezierBoard, setId: string, size: FinSize): BezierB
 /** Fin `index` (and its mirror, when kept matched) as library fin `id` at `size`. */
 export const setLibraryFin = (b: BezierBoard, index: number, id: string, size: FinSize): BezierBoard => // prettier-ignore
   index < 0 || index >= b.fins.fins.length ? b : withFins(b, withLibraryFin(b.fins, index, id, size)); // prettier-ignore
+
+/**
+ * Fin `index` (and its mirror, when kept matched) as a person's own design `d`, named
+ * `name`: handed for each side and set on the tab its place takes (`withOwnFin`).
+ */
+export const setOwnFin = (
+  b: BezierBoard,
+  index: number,
+  d: FinDesign,
+  name?: string,
+): BezierBoard =>
+  index < 0 || index >= b.fins.fins.length ? b : withFins(b, withOwnFin(b.fins, index, d, name));
 
 /** An FCS plug cant: the front sides' or the rears'. */
 export const setPlugCant = (b: BezierBoard, which: 'front' | 'rear', cant: PlugCant): BezierBoard =>

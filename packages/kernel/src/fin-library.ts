@@ -214,7 +214,7 @@ export const withLibraryFin = (cfg: FinConfig, i: number, id: string, size: FinS
  * Fin `i` (and its mirror, if matched) given design `d`, a person's own: handed for each
  * fin's side and set on the tab its role takes in the board's system.
  */
-export const withOwnFin = (cfg: FinConfig, i: number, d: FinDesign): FinConfig => {
+export const withOwnFin = (cfg: FinConfig, i: number, d: FinDesign, name?: string): FinConfig => {
   const roles = finGroups(cfg.setup);
   const which = pairOf(cfg, i);
   return {
@@ -224,7 +224,8 @@ export const withOwnFin = (cfg: FinConfig, i: number, d: FinDesign): FinConfig =
       const role = roles[j] ?? 'side';
       const hand: FinHand | null = d.hand === null ? null : f.side > 0 ? 'right' : 'left';
       const placed = placeOnBase({ ...d, hand }, baseFor(cfg.system, role, d.base === 'us-box'));
-      return withFinDesign(f, placed, plugCantFor(cfg, role));
+      const spec = withFinDesign(f, placed, plugCantFor(cfg, role));
+      return name ? { ...spec, name } : spec;
     }),
   };
 };
@@ -243,7 +244,8 @@ export const withFinSystem = (cfg: FinConfig, system: FinSystem): FinConfig => {
       if (f.library) return fromLibrary(next, i, f.library.fin, f.library.size);
       const role = roles[i] ?? 'side';
       const d = placeOnBase(f.design, baseFor(system, role, f.design.base === 'us-box'));
-      return withFinDesign(f, d, plugCantFor(next, role));
+      const spec = withFinDesign(f, d, plugCantFor(next, role));
+      return f.name ? { ...spec, name: f.name } : spec;
     }),
   };
 };
@@ -259,7 +261,11 @@ export const withPlugCant = (
   const roles = finGroups(cfg.setup);
   return {
     ...next,
-    fins: next.fins.map((f, i) => (f.design ? withFinDesign(f, f.design, plugCantFor(next, roles[i]), f.library) : f)), // prettier-ignore
+    fins: next.fins.map((f, i) => {
+      if (!f.design) return f;
+      const spec = withFinDesign(f, f.design, plugCantFor(next, roles[i]), f.library);
+      return f.name ? { ...spec, name: f.name } : spec;
+    }),
   };
 };
 
@@ -267,7 +273,7 @@ export const withPlugCant = (
 export const finLabel = (spec: FinSpec): string => {
   if (!spec.design) return 'Generic (older board)';
   const lib = spec.library && libraryFin(spec.library.fin);
-  return lib ? `${lib.label} ${spec.library!.size}` : 'Own design';
+  return lib ? `${lib.label} ${spec.library!.size}` : (spec.name ?? 'Own design');
 };
 
 /** The set every fin of `cfg` comes from at one size, if they all do. */
@@ -283,3 +289,7 @@ export const finSetOf = (cfg: FinConfig): { set: FinSet; size: FinSize } | null 
   }
   return null;
 };
+
+/** The OpenFinShaper position a fin of `role` is designed as. */
+export const positionFor = (role: FinRole): FinDesign['position'] =>
+  role === 'rear' ? 'quad-rear' : role === 'centre' ? 'centre' : 'side';

@@ -101,6 +101,7 @@ import { applyViewChange, DEFAULT_SIDEBAR_STATE, type SidebarState } from './sid
 import sampleBrd from './sample-board.brd?raw';
 import { boardStore } from './store';
 import { useChannelEditing } from './use-channel-editing';
+import { takeFinResult } from './fin-handoff';
 import { SWALLOW_KEY, useSwallowEditing } from './use-swallow-editing';
 import { SUPPORT_URL } from './support';
 import { BOARD_TEMPLATES } from './templates';
@@ -685,6 +686,17 @@ function AppShell() {
 
   // Fins are part of the board model now; resolve their geometry against the current
   // shape for the 2D overlays (plan footprint + box; profile blade silhouette).
+  // Back from OpenFinShaper (the round trip, fin-handoff.ts): its fin onto the board fin
+  // it was designed for, once, and that fin selected.
+  const boardReady = board !== null;
+  useEffect(() => {
+    if (!boardReady) return;
+    const back = takeFinResult();
+    if (!back) return;
+    boardStore.getState().setOwnFin(back.finIndex, back.design, back.name);
+    boardStore.getState().selectFin(back.finIndex);
+  }, [boardReady]);
+
   const resolvedFins = useMemo(() => (board ? resolveFins(board) : []), [board]);
   // Their boxes and plugs in plan (systems whose boxes are known), for the outline view.
   const finBoxes = useMemo(

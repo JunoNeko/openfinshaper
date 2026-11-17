@@ -20,7 +20,15 @@ import { loadFinSession, saveFinSession } from './fin-session';
 export const FIN_AUTOSAVE_MS = 800;
 
 /** Returns whether the restore has finished (the designer is ready to edit). */
-export function useFinAutosave(store: StoreApi<FinState>, factory?: IDBFactory): boolean {
+export function useFinAutosave(
+  store: StoreApi<FinState>,
+  factory?: IDBFactory,
+  /**
+   * A fin from the board is open (the OpenFinShaper round trip, fin-handoff.ts): it is
+   * neither restored over nor saved, so the fin left in the designer stays as it was.
+   */
+  paused = false,
+): boolean {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -28,7 +36,7 @@ export function useFinAutosave(store: StoreApi<FinState>, factory?: IDBFactory):
     const done = () => {
       if (!cancelled) setHydrated(true);
     };
-    if (store.getState().design) {
+    if (paused || store.getState().design) {
       done();
       return;
     }
@@ -49,10 +57,10 @@ export function useFinAutosave(store: StoreApi<FinState>, factory?: IDBFactory):
     return () => {
       cancelled = true;
     };
-  }, [store, factory]);
+  }, [store, factory, paused]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || paused) return;
     let timer: number | undefined;
     const save = () => {
       timer = undefined;
@@ -81,7 +89,7 @@ export function useFinAutosave(store: StoreApi<FinState>, factory?: IDBFactory):
       window.removeEventListener('pagehide', flush);
       document.removeEventListener('visibilitychange', onHide);
     };
-  }, [hydrated, store, factory]);
+  }, [hydrated, store, factory, paused]);
 
   return hydrated;
 }
