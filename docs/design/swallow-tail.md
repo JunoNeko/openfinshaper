@@ -55,7 +55,7 @@ deck rising up to 7 mm toward the tips: a kick, owner report 2026-11.) The botto
 still squeezed with its heights, as it carries the channel cut; on the owner's board
 that differs from the board's own bottom by under 1 mm. Volume and the surface lookups
 (`bottomZAt`, `deckZAt`) follow the same squeeze; volume is integrated off the squeezed
-section and matches the mesh's to 0.01 %.
+section, and the foam the wall takes agrees with the mesh's to 0.01 % of the board.
 
 ## Mesh
 

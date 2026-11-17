@@ -119,21 +119,64 @@ export const isFinite3 = (x: number, y: number, z: number): boolean =>
 export const MIN_DIM = 0.5;
 
 /**
- * How far (cm) either side of a station the blend eases from one straight run into
- * the next; at most {@link STATION_EASE_SHARE} of the gap to either neighbour.
+ * Station weights along the board: a cardinal (Catmull–Rom) spline through the real
+ * stations, its swing halved ({@link STATION_TENSION}).
  *
- * Between two stations the shape is a straight blend of the two, as in BoardCAD-LE's
- * sLinear model. Where one run meets the next, at a station, the rate the shape
- * changes at jumps, and that jump is a crease across the board at every station: a
- * fraction of a degree, but plain in a printed or rendered hull. So near each station
- * the two runs are eased into each other (see {@link loftSection}).
+ * The surface passes through every station exactly and flows through it with no corner:
+ * each stretch between two stations is a cubic in the stations around it, its rate of
+ * change at a station the same from both sides. Straight blends between stations turned
+ * a corner at each one; easing that corner while still meeting the station made the
+ * surface curve the wrong way for a few centimetres either side, a shallow dip at every
+ * station (owner report, 2026-11).
  *
- * The ease is local, reading only the station and its two neighbours, and exact at
- * the station itself. Outside the eases the surface is the straight blend it always
- * was, so a station inserted there on the existing shape moves nothing.
+ * Local: a stretch reads only its two stations and one either side, so editing a
+ * station reshapes only the stretches touching it and the next. Inserting a station on
+ * the existing shape moves the surface near it slightly (well under a millimetre on
+ * the golden boards), where a straight blend moved nothing. A clamped cubic spline
+ * through all the stations, smoother still, moved it up to 4 mm and the hull by 1.3 %
+ * of its volume, and was not taken.
+ *
+ * At the first and last real station the rate of change is 0, so the spline joins the
+ * profile held beyond them with no corner. Weights sum to 1; between stations some are
+ * a little negative, which is what lets the surface curve through a station rather than
+ * turn at it.
  */
-export const STATION_EASE = 10;
-export const STATION_EASE_SHARE = 0.4;
+export const STATION_TENSION = 0.5;
+
+/** Each real station's weight at `x` (index into the board's sections → weight). */
+const splineWeights = (cs: readonly CrossSection[], x: number): [number, number][] | null => {
+  const xs = cs.slice(1, -1).map((q) => q.position);
+  const n = xs.length;
+  if (n < 2 || xs.some((p, i) => i > 0 && !(p - xs[i - 1]! > 1e-9))) return null;
+  if (x <= xs[0]!) return [[1, 1]];
+  if (x >= xs[n - 1]!) return [[n, 1]];
+  let i = 0;
+  while (i < n - 2 && x > xs[i + 1]!) i++;
+  const h = xs[i + 1]! - xs[i]!;
+  const t = (x - xs[i]!) / h;
+  // Cubic Hermite: the two stations, and the rate of change at each.
+  const h00 = (1 + 2 * t) * (1 - t) * (1 - t);
+  const h10 = t * (1 - t) * (1 - t);
+  const h01 = t * t * (3 - 2 * t);
+  const h11 = t * t * (t - 1);
+  const w = new Map<number, number>();
+  const add = (j: number, v: number) => w.set(j, (w.get(j) ?? 0) + v);
+  add(i, h00);
+  add(i + 1, h01);
+  // The rate of change at station k: the slope across its neighbours, swing halved; 0 at
+  // the first and last (held beyond).
+  const rate = (k: number, by: number) => {
+    if (k <= 0 || k >= n - 1) return;
+    const span = xs[k + 1]! - xs[k - 1]!;
+    add(k + 1, (by * (1 - STATION_TENSION)) / span);
+    add(k - 1, (-by * (1 - STATION_TENSION)) / span);
+  };
+  rate(i, h10 * h);
+  rate(i + 1, h11 * h);
+  const out: [number, number][] = [];
+  for (const [j, v] of w) if (v !== 0) out.push([j + 1, v]);
+  return out;
+};
 
 /**
  * Prepare the surface at station `x` for sampling, or null where there is none.
@@ -142,13 +185,9 @@ export const STATION_EASE_SHARE = 0.4;
  * (`board.ts`), including the order in which `d` is computed relative to the
  * index clamps: the mesh must keep pairing the same stations it always did.
  *
- * Within {@link STATION_EASE} of a real station k the surface is
- * `(1 − s)·A(x) + s·B(x)`: A is the straight blend of the run arriving at k carried
- * on past it, B the run leaving k carried back before it, and s a smoothstep across
- * the ease. Both runs equal station k at k, so the station is met exactly; at the
- * ease's edges s is flat at 0 or 1, so each run is joined with no crease; in between
- * the slope turns smoothly from one run's to the other's. Past the first and last
- * station the profile is held, which counts as a run like any other.
+ * The stations are weighted by a cardinal spline through them (`splineWeights`):
+ * exact at every station, smooth through it. Past the first and last station the
+ * profile is held.
  */
 export const loftSection = (b: BezierBoard, x: number): LoftedSection | null => {
   const cs = b.crossSections;
@@ -185,14 +224,13 @@ export const loftSection = (b: BezierBoard, x: number): LoftedSection | null => 
   let width = getWidthAtPos(b, x);
   if (width < MIN_DIM) width = MIN_DIM;
 
-  // Station weights: the straight blend, or the ease near a station.
+  // Station weights: the spline through the stations, or (a single station, or two at
+  // one place) the straight blend.
   const weights = new Map<number, number>();
   const add = (i: number, w: number) => weights.set(i, (weights.get(i) ?? 0) + w);
-  const ease = stationEase(cs, index, nextIndex, x);
-  if (ease) {
-    const [k, s] = ease;
-    for (const [i, w] of run(cs, k - 1, k, x)) add(i, (1 - s) * w);
-    for (const [i, w] of run(cs, k, k + 1, x)) add(i, s * w);
+  const spline = splineWeights(cs, x);
+  if (spline) {
+    for (const [i, w] of spline) add(i, w);
   } else {
     add(index, 1 - d);
     if (nextIndex !== index) add(nextIndex, d);
@@ -207,55 +245,6 @@ export const loftSection = (b: BezierBoard, x: number): LoftedSection | null => 
     parts.push({ table: arcLengthTable(scaleCrossSection(cs[i]!, thickness, width).spline), w });
   }
   return { parts, rocker };
-};
-
-/** True for a real station, not one of the board's two ends. */
-const isReal = (cs: readonly CrossSection[], i: number): boolean => i >= 1 && i <= cs.length - 2;
-
-/**
- * Station weights at x of the straight run from station i to station j = i + 1,
- * carried on past either. Where one of them is not a real station the run is the
- * other, held.
- */
-const run = (cs: readonly CrossSection[], i: number, j: number, x: number): [number, number][] => {
-  if (!isReal(cs, i)) return [[j, 1]];
-  if (!isReal(cs, j)) return [[i, 1]];
-  const gap = cs[j]!.position - cs[i]!.position;
-  if (!(gap > 0)) return [[x < cs[i]!.position ? i : j, 1]];
-  const t = (x - cs[i]!.position) / gap;
-  return [
-    [i, 1 - t],
-    [j, t],
-  ];
-};
-
-/** Half-width (cm) of the ease at real station k. */
-const easeReach = (cs: readonly CrossSection[], k: number): number => {
-  const p = cs[k]!.position;
-  const before = isReal(cs, k - 1) ? p - cs[k - 1]!.position : Infinity;
-  const after = isReal(cs, k + 1) ? cs[k + 1]!.position - p : Infinity;
-  return Math.min(STATION_EASE, STATION_EASE_SHARE * before, STATION_EASE_SHARE * after);
-};
-
-/** The station whose ease x lies in, and the smoothstep weight there, if any. */
-const stationEase = (
-  cs: readonly CrossSection[],
-  index: number,
-  nextIndex: number,
-  x: number,
-): [number, number] | null => {
-  for (const k of new Set([index, nextIndex])) {
-    if (!isReal(cs, k)) continue;
-    // A lone station has the same (held) run either side: nothing to ease.
-    if (!isReal(cs, k - 1) && !isReal(cs, k + 1)) continue;
-    const r = easeReach(cs, k);
-    if (!(r > 0)) continue;
-    const u = (x - cs[k]!.position) / r;
-    if (Math.abs(u) >= 1) continue;
-    const t = (u + 1) / 2;
-    return [k, t * t * (3 - 2 * t)];
-  }
-  return null;
 };
 
 /**

@@ -11,8 +11,8 @@
  * of the two stations it blends.
  *
  * The oracle is the **exact** blend: the two bracketing profiles sampled by true
- * arc length (`pointByS`, adaptive, no table) and lerped, eased into the next run
- * near a station as `loftSection` documents. That is what `loftPoint`
+ * arc length (`pointByS`, adaptive, no table) and joined by the cardinal spline
+ * `loftSection` documents. That is what `loftPoint`
  * approximates with its fixed-resolution table, so measuring the rebuilt curve against
  * it prices the table and the rebuild together, which is what a caller actually gets.
  */
@@ -30,14 +30,7 @@ import {
   type BezierBoard,
 } from './board';
 import { scaleCrossSection } from './cross-section';
-import {
-  loftCrossSection,
-  loftPoint,
-  loftSection,
-  MIN_DIM,
-  STATION_EASE,
-  STATION_EASE_SHARE,
-} from './loft';
+import { loftCrossSection, loftPoint, loftSection, MIN_DIM, STATION_TENSION } from './loft';
 import { railFacetStations } from './rail-facets';
 import { applyRailProfile, RAIL_PRESETS } from './rail-profile';
 import { bottomZAt, deckZAt } from './surface';
@@ -91,26 +84,33 @@ const exactBlendPoint = (b: BezierBoard, x: number, f: number): Vec2 => {
   const thickness = Math.max(MIN_DIM, getThicknessAtPos(b, x));
   const width = Math.max(MIN_DIM, getWidthAtPos(b, x));
   const at = (i: number) => pointByS(scaleCrossSection(cs[i]!, thickness, width).spline, f);
-  const lerp = (p: Vec2, q: Vec2, t: number) => vec2(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t);
-  const straight = lerp(at(index), at(nextIndex), d);
-
-  // Near a real station k the straight runs either side are eased into each other:
-  // each carried past k, mixed by a smoothstep over ±reach.
+  if (index === nextIndex) return at(index);
+  // A cardinal spline through the stations' points, as `loftSection` documents: Hermite
+  // between the two stations, the rate at each the slope across its neighbours times
+  // (1 − tension), 0 at the first and last real station. Worked on points, not weights.
   const real = (i: number) => i >= 1 && i <= cs.length - 2;
   const pos = (i: number) => cs[i]!.position;
-  for (const k of [index, nextIndex]) {
-    if (!real(k) || (!real(k - 1) && !real(k + 1))) continue;
-    const gapBefore = real(k - 1) ? pos(k) - pos(k - 1) : Infinity;
-    const gapAfter = real(k + 1) ? pos(k + 1) - pos(k) : Infinity;
-    const reach = Math.min(STATION_EASE, STATION_EASE_SHARE * gapBefore, STATION_EASE_SHARE * gapAfter); // prettier-ignore
-    const u = (x - pos(k)) / reach;
-    if (!(reach > 0) || Math.abs(u) >= 1) continue;
-    const arriving = real(k - 1) ? lerp(at(k - 1), at(k), (x - pos(k - 1)) / gapBefore) : at(k);
-    const leaving = real(k + 1) ? lerp(at(k), at(k + 1), (x - pos(k)) / gapAfter) : at(k);
-    const t = (u + 1) / 2;
-    return lerp(arriving, leaving, t * t * (3 - 2 * t));
-  }
-  return straight;
+  const rate = (k: number): Vec2 => {
+    if (!real(k - 1) || !real(k + 1)) return vec2(0, 0);
+    const p = at(k + 1);
+    const q = at(k - 1);
+    const span = pos(k + 1) - pos(k - 1);
+    return vec2(((p.x - q.x) / span) * (1 - STATION_TENSION), ((p.y - q.y) / span) * (1 - STATION_TENSION)); // prettier-ignore
+  };
+  const h = pos(nextIndex) - pos(index);
+  const t = d;
+  const p0 = at(index);
+  const p1 = at(nextIndex);
+  const m0 = rate(index);
+  const m1 = rate(nextIndex);
+  const h00 = 2 * t ** 3 - 3 * t ** 2 + 1;
+  const h10 = t ** 3 - 2 * t ** 2 + t;
+  const h01 = -2 * t ** 3 + 3 * t ** 2;
+  const h11 = t ** 3 - t ** 2;
+  return vec2(
+    h00 * p0.x + h10 * h * m0.x + h01 * p1.x + h11 * h * m1.x,
+    h00 * p0.y + h10 * h * m0.y + h01 * p1.y + h11 * h * m1.y,
+  );
 };
 
 /** Densely sampled points of a rebuilt section, for nearest-point comparison. */
