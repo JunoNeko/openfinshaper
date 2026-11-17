@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { board, getWidthAtPos, type BezierBoard } from './board';
+import { board, getRockerAtPos, getWidthAtPos, type BezierBoard } from './board';
 import { boardFinMesh } from './fin-board';
 import { validateFinDesign } from './fin-design/fin-rules';
 import {
@@ -121,8 +121,21 @@ describe('fin library', () => {
       }
       const n = p.length / 3;
       const surface = bottomZAt(b, fin.center.x, Math.abs(fin.center.y));
-      expect(top).toBeCloseTo(surface, 1); // the root on the bottom
-      expect(surface - bottom).toBeCloseTo(fin.spec.depth, 0); // as deep as the fin, near enough (cant)
+      // The root on the bottom, square to it: along the tangent at the base's middle, it
+      // touches the bottom and nowhere rises into the board.
+      let into = -Infinity;
+      for (let i = 0; i < p.length; i += 3) {
+        into = Math.max(into, p[i + 2]! - bottomZAt(b, p[i]!, Math.abs(p[i + 1]!)));
+      }
+      expect(into).toBeLessThan(0.05);
+      expect(into).toBeGreaterThan(-0.1);
+      void top;
+      // As deep as the fin below the bottom, near enough (cant and the bottom's slope).
+      let deepest = 0;
+      for (let i = 0; i < p.length; i += 3) if (p[i + 2]! < p[deepest + 2]!) deepest = i;
+      const under = bottomZAt(b, p[deepest]!, Math.abs(p[deepest + 1]!)) - bottom;
+      expect(under).toBeCloseTo(fin.spec.depth, 0);
+      void surface;
       expect(Math.abs(sx / n - fin.center.x)).toBeLessThan(fin.spec.base); // at its place along
       expect(Math.abs(sy / n - fin.center.y)).toBeLessThan(1.5); // and across
       if (fin.side !== 0) expect(Math.sign(deepY - fin.center.y)).toBe(fin.side); // tip leans out
@@ -148,5 +161,15 @@ describe('fin library', () => {
     const toed = resolveFins(withFins({ ...twin, fins: twin.fins.map((f) => ({ ...f, toe: 4 })) }))[0]!; // prettier-ignore
     expect(toed.dot).toEqual(a.dot);
     expect(toed.slot!.rear).not.toEqual(a.slot!.rear);
+  });
+
+  it('stands each fin square to the bottom: its base along the rocker at the base middle', () => {
+    const b = withFins(defaultBoardFins('thruster', 'futures'));
+    for (const fin of resolveFins(b)) {
+      const h = 0.25;
+      const slope = (getRockerAtPos(b, fin.center.x + h) - getRockerAtPos(b, fin.center.x - h)) / (2 * h); // prettier-ignore
+      expect(fin.pitch).toBeCloseTo(Math.atan(slope), 2);
+      expect(Math.abs(fin.pitch)).toBeGreaterThan(0.01); // a tail kick: not level
+    }
   });
 });
