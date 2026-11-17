@@ -118,7 +118,8 @@ describe('the board as a blank to print', () => {
     const { warnings } = await exportPrintBlank(b, {
       cavities: { futuresFlangeDepth: 0.24, futuresSideDepth: 2, futuresCentreDepth: 1.35, fcs2Depth: 9, clearance: 0 }, // prettier-ignore
     });
-    expect(warnings.length).toBe(3);
-    expect(warnings[0]).toMatch(/FCS II cavity leaves .* mm of board above it/);
+    // One per cavity (it may also warn of a side box near the rail: `cavityProblems`).
+    const deck = warnings.filter((w) => /FCS II box leaves .* mm of board above it/.test(w));
+    expect(deck.length).toBe(3);
   }, 60000);
 });

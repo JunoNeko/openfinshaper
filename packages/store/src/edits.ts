@@ -7,7 +7,7 @@ import {
   crossSection,
   curveFromPoints,
   curveLength,
-  defaultFinConfig,
+  defaultBoardFins,
   editableCrossSection,
   getLength,
   hasTailCutout,
@@ -25,13 +25,19 @@ import {
   valueAt,
   vec2,
   widthBoundsAt,
+  withFinSet,
+  withFinSystem,
+  withLibraryFin,
+  withPlugCant,
   withHandles,
   type BezierBoard,
   type CrossSection,
   type FinConfig,
   type FinSetup,
   type FinSpec,
+  type FinSize,
   type FinSystem,
+  type PlugCant,
   type InterpolationType,
   type Knot,
   type KnotLock,
@@ -715,12 +721,12 @@ const scaleFins = (
   fT: number,
 ): BezierBoard['fins'] => ({
   ...cfg,
+  // A designed fin is hardware: it moves with the board, but keeps its size.
   fins: cfg.fins.map((f) => ({
     ...f,
     trailingFromTail: f.trailingFromTail * fL,
-    base: f.base * fL,
     insetFromRail: f.insetFromRail * fW,
-    depth: f.depth * fT,
+    ...(f.design ? {} : { base: f.base * fL, depth: f.depth * fT }),
   })),
 });
 
@@ -800,13 +806,37 @@ export const withFins = (b: BezierBoard, fins: FinConfig): BezierBoard =>
     b.swallow,
   );
 
-/** Change the fin setup, re-seeding placement from defaults but keeping the system. */
-export const setFinSetup = (b: BezierBoard, setup: FinSetup): BezierBoard =>
-  withFins(b, defaultFinConfig(setup, b.fins.system));
+/**
+ * Change the fin setup: standard placement, and the setup's first set of library fins
+ * at M (`fin-library.ts`), keeping the system and any plug cants.
+ */
+export const setFinSetup = (b: BezierBoard, setup: FinSetup): BezierBoard => {
+  const cfg = defaultBoardFins(setup, b.fins.system);
+  if (!b.fins.plugCant) return withFins(b, cfg);
+  let next = withPlugCant(
+    { ...cfg, symmetrical: b.fins.symmetrical },
+    'front',
+    b.fins.plugCant.front,
+  );
+  next = withPlugCant(next, 'rear', b.fins.plugCant.rear);
+  return withFins(b, next);
+};
 
-/** Change the fin system (FCS/Futures/glass-on), keeping placement. */
+/** Change the fin system (FCS/Futures/glass-on), keeping placement; fins move onto its tabs. */
 export const setFinSystem = (b: BezierBoard, system: FinSystem): BezierBoard =>
-  withFins(b, { ...b.fins, system });
+  withFins(b, withFinSystem(b.fins, system));
+
+/** Every fin from library set `setId` at `size` (placement kept). */
+export const setFinSet = (b: BezierBoard, setId: string, size: FinSize): BezierBoard =>
+  withFins(b, withFinSet(b.fins, setId, size));
+
+/** Fin `index` (and its mirror, when kept matched) as library fin `id` at `size`. */
+export const setLibraryFin = (b: BezierBoard, index: number, id: string, size: FinSize): BezierBoard => // prettier-ignore
+  index < 0 || index >= b.fins.fins.length ? b : withFins(b, withLibraryFin(b.fins, index, id, size)); // prettier-ignore
+
+/** An FCS plug cant: the front sides' or the rears'. */
+export const setPlugCant = (b: BezierBoard, which: 'front' | 'rear', cant: PlugCant): BezierBoard =>
+  withFins(b, withPlugCant(b.fins, which, cant));
 
 /** Toggle whether port/starboard side-fin pairs are kept mirror-symmetric. */
 export const setFinSymmetrical = (b: BezierBoard, symmetrical: boolean): BezierBoard =>
@@ -837,24 +867,24 @@ export const updateFinSpec = (
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
 /**
- * Re-derive a fin's parametric placement from a dropped plan point (x along length, y
- * lateral) — used for 2D drag. The fin keeps its side; its trailing-edge distance from
- * the tail and (for side fins) its inset from the rail are read back off the point.
+ * Re-derive a fin's placement from a dropped plan point, its fin dot (x along length, y
+ * lateral) — used for 2D drag. The fin keeps its side; the dot's distance from the
+ * tail and (for side fins) its inset from the rail are read back off the point.
  */
 export const setFinFromPlanPoint = (b: BezierBoard, index: number, point: Vec2): BezierBoard => {
   const spec = b.fins.fins[index];
   if (!spec) return b;
   const length = getLength(b);
-  const cx = clamp(point.x, 0.1, length - 0.1);
-  // The tail is always at x=0 (see `resolveFins`), so x is the distance from it.
-  const trailingFromTail = Math.max(0, cx - spec.base / 2);
+  // The point is the fin dot (its trailing edge's root): the tail is always at x=0
+  // (see `resolveFins`), so x is its distance from the tail.
+  const trailingFromTail = clamp(point.x, 0.1, length - 0.1);
   const patch: Partial<FinSpec> =
     spec.side === 0
       ? { trailingFromTail }
       : {
           trailingFromTail,
-          // Outer rail half-width (concave-tail aware) minus the drop point's offset.
-          insetFromRail: Math.max(0, widthBoundsAt(b, cx).yOut - Math.abs(point.y)),
+          // Outer rail half-width (concave-tail aware) minus the dot's offset.
+          insetFromRail: Math.max(0, widthBoundsAt(b, trailingFromTail).yOut - Math.abs(point.y)),
         };
   return updateFinSpec(b, index, patch);
 };

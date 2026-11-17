@@ -3,6 +3,7 @@ import { decodeShareFragment, parseBrd, readBoardJson, writeBoardJson } from '@o
 import {
   loftCrossSection,
   getLength,
+  finBoxOutlines,
   resolveFins,
   type BezierBoard,
   type Spline,
@@ -685,6 +686,11 @@ function AppShell() {
   // Fins are part of the board model now; resolve their geometry against the current
   // shape for the 2D overlays (plan footprint + box; profile blade silhouette).
   const resolvedFins = useMemo(() => (board ? resolveFins(board) : []), [board]);
+  // Their boxes and plugs in plan (systems whose boxes are known), for the outline view.
+  const finBoxes = useMemo(
+    () => (board && board.fins.setup !== 'none' ? finBoxOutlines(board) : []),
+    [board],
+  );
 
   // Per-view trace-image interaction props for an EditorPane (outline / rocker).
   const traceProps = (view: TraceView) => ({
@@ -739,6 +745,7 @@ function AppShell() {
       fins:
         (kind === 'outline' || kind === 'rocker') && resolvedFins.length ? resolvedFins : undefined,
       finView: kind === 'rocker' ? 'profile' : 'plan',
+      finBoxes: kind === 'outline' && finBoxes.length ? finBoxes : undefined,
       channelCut: kind === 'crossSection' ? (channelEditing.sectionCut ?? undefined) : undefined,
       channelLines: channelEditing.linesFor(kind),
       channelKeys:
@@ -1354,6 +1361,7 @@ function AppShell() {
       analysis={view3d.analysis}
       targetFaceSize={faceSizeFor(view3d.meshQuality)}
       showStringer={view3d.showStringer}
+      showBoxes={view3d.showBoxes}
       showSections={view3d.showSections}
       activeSectionX={activeSectionX}
       key={cameraEpoch}

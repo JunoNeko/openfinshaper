@@ -47,6 +47,8 @@ export * from './tunni';
 export * from './curvature-comb';
 export * from './fin-design/futures-tab';
 export * from './fin-design/fin-tab';
+export * from './fin-library';
+export * from './fin-board';
 export * from './fin-design/fin-design';
 export * from './fin-design/fin-rules';
 export * from './fin-design/fin-readouts';

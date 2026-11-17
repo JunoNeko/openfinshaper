@@ -25,11 +25,11 @@
  * to the bottom there: the plugs and boxes carry the fin's cant themselves. Its depth
  * is measured from the bottom as cut, channels included, so a box sits flush.
  */
-import { getThicknessAtPos, type BezierBoard } from './board';
+import { getWidthAtPos, type BezierBoard } from './board';
 import { boardChannels } from './channel-layout';
 import { channelDepthAt } from './channels';
 import { resolveFins } from './fins';
-import { bottomZAt } from './surface';
+import { bottomZAt, deckZAt } from './surface';
 import { vec2, type Vec2 } from './vec2';
 
 const pts = (xy: readonly (readonly [number, number])[]): readonly Vec2[] =>
@@ -204,8 +204,8 @@ export const finCavities = (
     const dy = fore.y - aft.y;
     const len = Math.hypot(dx, dy) || 1;
     const along = vec2(dx / len, dy / len);
-    const x = (fore.x + aft.x) / 2;
-    const y = (fore.y + aft.y) / 2;
+    // Under the fin's tab (a fin with a design), or the middle of its base.
+    const { x, y } = f.boxCenter;
     // Square to the uncut bottom (a channel wall nearby would tip it), at the height
     // the bottom is cut to. The board is symmetric and the surface is read on the +y
     // side (`bottomZAt` is defined there only), then mirrored: read at a negative y it
@@ -244,15 +244,71 @@ export const finCavities = (
 /** The least board left above a cavity's floor before it is worth a warning (cm). */
 const MIN_SKIN = 0.3;
 
-/**
- * What a person should check before printing `cavities` into `b`, said for them:
- * a cavity that leaves under 3 mm of board above its floor. Empty if nothing.
- */
-export const cavityProblems = (b: BezierBoard, cavities: readonly FinCavity[]): string[] =>
-  cavities.flatMap((c) => {
-    const deepest = Math.max(...c.steps.map((s) => s.depth));
-    const left = getThicknessAtPos(b, c.origin.x) - deepest;
-    return left < MIN_SKIN
-      ? [`Fin ${c.fin + 1}'s ${c.kind} cavity leaves ${Math.max(0, left * 10).toFixed(1)} mm of board above it.`] // prettier-ignore
-      : [];
+/** The least foam between a box (its flange, on Futures) and the rail before a warning (cm). */
+export const MIN_RAIL_GAP = 1;
+
+/** A channel's depth changing more than this across a box means it straddles a wall (cm). */
+const CHANNEL_STEP = 0.1;
+
+/** Where a cavity step's outline lies in plan (cm), grown by its clearance. */
+export const planOutline = (c: FinCavity, step: CavityStep): Vec2[] => {
+  const across = vec2(-c.along.y, c.along.x);
+  return step.outline.map((p) => {
+    const r = Math.hypot(p.x, p.y) || 1;
+    const g = step.grow / r;
+    const px = p.x * (1 + g);
+    const py = p.y * (1 + g);
+    return vec2(c.origin.x + c.along.x * px + across.x * py, c.origin.y + c.along.y * px + across.y * py); // prettier-ignore
   });
+};
+
+/**
+ * What a person should check about `cavities` in `b`, said for them (fin integration):
+ *
+ * - a box too deep for the board above it: under 3 mm of foam left to the deck, read
+ *   where the box is (a thin tail toward the rail is where a side box comes through);
+ * - a box or flange within {@link MIN_RAIL_GAP} of the rail, or past it in plan;
+ * - a box set across a channel's wall, its floor stepping across it.
+ *
+ * Empty if nothing.
+ */
+export const cavityProblems = (b: BezierBoard, cavities: readonly FinCavity[]): string[] => {
+  const channels = boardChannels(b);
+  const half = (x: number) => getWidthAtPos(b, x) / 2;
+  return cavities.flatMap((c) => {
+    const out: string[] = [];
+    const name = `Fin ${c.fin + 1}'s ${c.kind} box`;
+    const deepest = c.steps.reduce((m, s) => (s.depth > m.depth ? s : m));
+    // The foam above the floor, at its thinnest over the box.
+    let left = Infinity;
+    for (const p of [vec2(c.origin.x, c.origin.y), ...planOutline(c, deepest)]) {
+      const y = Math.abs(p.y);
+      const t = deckZAt(b, p.x, y) - bottomZAt(b, p.x, y);
+      if (Number.isFinite(t)) left = Math.min(left, t - deepest.depth);
+    }
+    if (left < MIN_SKIN) {
+      out.push(`${name} leaves ${Math.max(0, left * 10).toFixed(1)} mm of board above it: it may come through the deck.`); // prettier-ignore
+    }
+    // The widest step (a Futures flange) nearest the rail.
+    let gap = Infinity;
+    for (const step of c.steps) {
+      for (const p of planOutline(c, step)) gap = Math.min(gap, half(p.x) - Math.abs(p.y));
+    }
+    if (gap < 0) {
+      out.push(`${name} reaches ${(-gap * 10).toFixed(1)} mm past the rail.`);
+    } else if (gap < MIN_RAIL_GAP) {
+      out.push(`${name} comes within ${(gap * 10).toFixed(1)} mm of the rail.`);
+    }
+    if (channels.length > 0) {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const p of planOutline(c, deepest)) {
+        const d = channelDepthAt(channels, p.x, Math.abs(p.y));
+        lo = Math.min(lo, d);
+        hi = Math.max(hi, d);
+      }
+      if (hi - lo > CHANNEL_STEP) out.push(`${name} sits across a channel wall.`);
+    }
+    return out;
+  });
+};

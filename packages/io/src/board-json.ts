@@ -11,8 +11,10 @@ import {
   type ChannelWall,
   type FinConfig,
   type FinSetup,
+  type FinSpec,
   type SwallowWall,
 } from '@openshaper/kernel';
+import { readFinJson, writeFinJson } from './fin-json';
 import {
   assertKnots as assertKnotsAs,
   isObject,
@@ -68,10 +70,39 @@ export interface BoardJson {
  * otherwise migrate a legacy `metadata.finType` setup name to a default config; else
  * no fins.
  */
+/**
+ * The fin config as a document stores it: each fin's design (fin integration) as the
+ * `.fin.json` document OpenFinShaper writes, so a board carries its fins with it.
+ */
+const finsToJson = (cfg: FinConfig): FinConfig =>
+  ({
+    ...cfg,
+    fins: cfg.fins.map((f) =>
+      f.design ? { ...f, design: JSON.parse(writeFinJson(f.design)) } : f,
+    ),
+  }) as FinConfig;
+
+/** A stored fin's design back, or the fin without one if it can't be read. */
+const finSpecFromJson = (f: FinSpec): FinSpec => {
+  const raw = (f as { design?: unknown }).design;
+  if (raw === undefined) return f;
+  const { design: _d, ...rest } = f;
+  void _d;
+  try {
+    return { ...rest, design: readFinJson(JSON.stringify(raw)).design };
+  } catch {
+    return rest; // drawn as a generic blade, as boards from before designs are
+  }
+};
+
 const finConfigFromDoc = (doc: BoardJson): FinConfig => {
   if (doc.fins && Array.isArray(doc.fins.fins)) {
     // `symmetrical` was added after the v2 `fins` block; default older docs to true.
-    return { ...doc.fins, symmetrical: doc.fins.symmetrical ?? true };
+    return {
+      ...doc.fins,
+      symmetrical: doc.fins.symmetrical ?? true,
+      fins: doc.fins.fins.map(finSpecFromJson),
+    };
   }
   const legacy = doc.metadata?.finType;
   if (typeof legacy === 'string' && (FIN_SETUPS as readonly string[]).includes(legacy)) {
@@ -208,7 +239,7 @@ export const writeBoardJson = (b: BezierBoard, metadata?: Record<string, unknown
       position: cs.position,
       knots: splineToJson(cs.spline),
     })),
-    ...(b.fins.setup !== 'none' ? { fins: b.fins } : {}),
+    ...(b.fins.setup !== 'none' ? { fins: finsToJson(b.fins) } : {}),
     ...(b.channels ? { channels: channelsToJson(b.channels) } : {}),
     ...(b.swallow ? { swallow: b.swallow } : {}),
     ...(metadata ? { metadata } : {}),
