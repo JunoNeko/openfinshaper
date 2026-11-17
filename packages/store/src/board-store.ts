@@ -1,4 +1,11 @@
-import type { BezierBoard, RailPresetId, SwallowWall, Vec2 } from '@openshaper/kernel';
+import type {
+  BezierBoard,
+  FinSize,
+  PlugCant,
+  RailPresetId,
+  SwallowWall,
+  Vec2,
+} from '@openshaper/kernel';
 import {
   adjustCrossSectionsToThicknessAndWidth,
   applyRailProfile,
@@ -40,7 +47,10 @@ import {
   withSwallowTail,
   withSwallowWall,
   withoutSwallowTail,
+  setFinSet,
   setFinSystem,
+  setLibraryFin,
+  setPlugCant,
   setKnotContinuous,
   setKnotLock,
   setKnotTangentLength,
@@ -152,6 +162,12 @@ export interface BoardState {
   setFinSystem: (system: FinSystem) => void;
   /** Toggle symmetric port/starboard pair editing. */
   setFinSymmetrical: (symmetrical: boolean) => void;
+  /** Every fin from a library set at a size (placement kept): one undo step. */
+  setFinSet: (setId: string, size: FinSize) => void;
+  /** One fin (and its mirror, when kept matched) as a library fin at a size. */
+  setLibraryFin: (index: number, id: string, size: FinSize) => void;
+  /** An FCS plug cant: the front sides' or the rears'. */
+  setPlugCant: (which: 'front' | 'rear', cant: PlugCant) => void;
   /** Add, change or remove (`null`) the bottom channels: one undo step. */
   /** Set the board's channels; `label` names the undo step (else Add / Edit / Remove). */
   setChannels: (channels: BoardChannels | null, label?: string) => void;
@@ -472,6 +488,25 @@ export const createBoardStore = (): StoreApi<BoardState> =>
         const { board } = get();
         if (!board || board.fins.symmetrical === symmetrical) return;
         commit(setFinSymmetrical(board, symmetrical), 'Toggle fin symmetry');
+      },
+
+      setFinSet: (setId, size) => {
+        const { board } = get();
+        if (!board) return;
+        commit(setFinSet(board, setId, size), 'Change fins');
+      },
+
+      setLibraryFin: (index, id, size) => {
+        const { board } = get();
+        if (!board) return;
+        const next = setLibraryFin(board, index, id, size);
+        if (next !== board) commit(next, 'Change fin');
+      },
+
+      setPlugCant: (which, cant) => {
+        const { board } = get();
+        if (!board) return;
+        commit(setPlugCant(board, which, cant), 'Change plug cant');
       },
 
       setChannels: (channels, label) => {

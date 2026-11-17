@@ -1,101 +1,116 @@
 /**
- * Fins panel: pick the configuration (single/twin/thruster/quad/2+1/5-fin) and the
- * mounting system (glass-on / FCS II / FCS x2 / Futures), then fine-tune the selected
- * fin's placement and geometry. Fins are part of the board model (`board.fins`), so all
- * edits go through the store (undoable) and re-render the 2D/3D views and exports.
+ * Fins panel (fin integration, phase 1): pick the setup and the fin system, then the
+ * fins themselves from the library (`FinChooser`: a set, or one fin at a time), and
+ * place each one: distance from the tail, inset from the rail, toe-in. A fin's shape
+ * and cant are its own, as OpenFinShaper designs it; on FCS the plugs add 5° or 9°
+ * (front sides, and quad rears), the centre 0°. Box clearance problems are listed here
+ * as they arise. Everything goes through the store (undoable).
  *
  * Length fields follow the editor's unit selector (`units`); angles are degrees.
  */
 import {
-  FIN_PROFILES_LIST,
-  FIN_PROFILE_LABELS,
   FIN_SETUPS,
   FIN_SETUP_LABELS,
   FIN_SYSTEMS,
   FIN_SYSTEM_LABELS,
-  type FinFoil,
-  type FinProfile,
+  cavityProblems,
+  finCavities,
+  finGroups,
+  finLabel,
+  finSetOf,
   type FinSpec,
+  type PlugCant,
 } from '@openshaper/kernel';
 import type { BoardState } from '@openshaper/store';
-import { Checkbox, Panel, PanelBody, PanelHeader, PanelTitle } from '@openshaper/ui';
-import { useSyncExternalStore } from 'react';
+import { Button, Checkbox, Panel, PanelBody, PanelHeader, PanelTitle } from '@openshaper/ui';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import type { StoreApi } from 'zustand/vanilla';
 import { DegField, LenField } from './components/fields';
+import { FinChooser, FinThumb } from './FinChooser';
 import type { LengthUnit } from './format';
 import { Sel } from './view-toolkit';
-
-const FOILS: { value: FinFoil; label: string }[] = [
-  { value: '80/20', label: '80 / 20' },
-  { value: '50/50', label: '50 / 50' },
-  { value: 'flat', label: 'Flat' },
-];
 
 const sideLabel = (side: -1 | 0 | 1): string =>
   side === 0 ? 'Center' : side < 0 ? 'Port' : 'Starboard';
 
-/** Inspector for the selected fin's parametric spec. */
+const PLUG_CANTS: { value: string; label: string }[] = [
+  { value: '5', label: '5°' },
+  { value: '9', label: '9°' },
+];
+
+/**
+ * The selected fin: which fin it is, a way to change it alone, and where it goes. Its
+ * shape and cant are the fin's own (OpenFinShaper's); the board places it.
+ */
 function FinInspector({
   store,
   units,
   index,
   spec,
+  onChange,
 }: {
   store: StoreApi<BoardState>;
   units: LengthUnit;
   index: number;
   spec: FinSpec;
+  onChange: () => void;
 }) {
   const patch = (p: Partial<FinSpec>) => store.getState().updateFin(index, p);
   return (
     <div className="space-y-1.5 rounded-md border border-border px-2 py-2 text-sm">
       <div className="text-xs font-medium text-muted-foreground">{sideLabel(spec.side)} fin</div>
-      <label className="flex items-center gap-2">
-        <span className="flex-1 text-muted-foreground">Profile</span>
-        <Sel
-          value={spec.profile ?? 'thruster'}
-          onChange={(p) => patch({ profile: p as FinProfile })}
-          options={FIN_PROFILES_LIST.map((p) => ({ value: p, label: FIN_PROFILE_LABELS[p] }))}
-          title="Blade profile"
-        />
-      </label>
+      <div className="flex items-center gap-2">
+        {spec.design && <FinThumb design={spec.design} className="h-8 w-10" />}
+        <span className="flex-1">{finLabel(spec)}</span>
+        <Button size="sm" variant="secondary" onClick={onChange}>
+          Change
+        </Button>
+      </div>
       <LenField
-        label="From tail (trailing)"
+        label="Fin dot from tail"
         valueCm={spec.trailingFromTail}
         units={units}
         onCommit={(v) => patch({ trailingFromTail: Math.max(0, v) })}
       />
       {spec.side !== 0 && (
-        <LenField
-          label="Inset from rail"
-          valueCm={spec.insetFromRail}
-          units={units}
-          onCommit={(v) => patch({ insetFromRail: Math.max(0, v) })}
-        />
-      )}
-      <LenField
-        label="Base"
-        valueCm={spec.base}
-        units={units}
-        onCommit={(v) => patch({ base: Math.max(0.5, v) })}
-      />
-      <LenField
-        label="Depth"
-        valueCm={spec.depth}
-        units={units}
-        onCommit={(v) => patch({ depth: Math.max(0.5, v) })}
-      />
-      <DegField label="Sweep (rake)" value={spec.sweep} onCommit={(v) => patch({ sweep: v })} />
-      {spec.side !== 0 && (
         <>
+          <LenField
+            label="Fin dot from rail"
+            valueCm={spec.insetFromRail}
+            units={units}
+            onCommit={(v) => patch({ insetFromRail: Math.max(0, v) })}
+          />
           <DegField label="Toe-in" value={spec.toe} onCommit={(v) => patch({ toe: v })} />
-          <DegField label="Cant" value={spec.cant} onCommit={(v) => patch({ cant: v })} />
         </>
       )}
-      <label className="flex items-center gap-2">
-        <span className="flex-1 text-muted-foreground">Foil</span>
-        <Sel value={spec.foil} onChange={(f) => patch({ foil: f })} options={FOILS} title="Foil" />
-      </label>
+    </div>
+  );
+}
+
+/** FCS plugs come at 5° or 9°: the front sides', and a quad's or 5-fin's rears'. */
+function PlugCants({ store }: { store: StoreApi<BoardState> }) {
+  const cfg = useSyncExternalStore(store.subscribe, () => store.getState().board?.fins);
+  if (!cfg || (cfg.system !== 'fcs-ii' && cfg.system !== 'fcs-x2')) return null;
+  const groups = finGroups(cfg.setup);
+  const row = (which: 'front' | 'rear', label: string) => (
+    <label className="flex items-center gap-2">
+      <span className="flex-1 text-muted-foreground">{label}</span>
+      <Sel
+        value={String(cfg.plugCant?.[which] ?? 5)}
+        onChange={(v) => store.getState().setPlugCant(which, Number(v) as PlugCant)}
+        options={PLUG_CANTS}
+        title={label}
+      />
+    </label>
+  );
+  return (
+    <div className="space-y-1">
+      {groups.includes('side') &&
+        row('front', groups.includes('rear') ? 'Front plugs' : 'Side plugs')}
+      {groups.includes('rear') && row('rear', 'Rear plugs')}
+      {groups.includes('centre') && (
+        <p className="text-xs text-muted-foreground">Centre plug 0°.</p>
+      )}
     </div>
   );
 }
@@ -104,8 +119,11 @@ function FinInspector({
 export function FinPanel({ store, units }: { store: StoreApi<BoardState>; units: LengthUnit }) {
   const board = useSyncExternalStore(store.subscribe, () => store.getState().board);
   const selectedFin = useSyncExternalStore(store.subscribe, () => store.getState().selectedFin);
+  const [choosing, setChoosing] = useState<null | 'set' | 'fin'>(null);
+  const problems = useMemo(() => (board ? cavityProblems(board, finCavities(board)) : []), [board]);
   if (!board) return null;
   const cfg = board.fins;
+  const set = finSetOf(cfg);
 
   return (
     <Panel>
@@ -127,6 +145,16 @@ export function FinPanel({ store, units }: { store: StoreApi<BoardState>; units:
               options={FIN_SYSTEMS.map((s) => ({ value: s, label: FIN_SYSTEM_LABELS[s] }))}
               title="Fin system"
             />
+            <PlugCants store={store} />
+            <div className="flex items-center gap-2">
+              <span className="flex-1">
+                <span className="text-muted-foreground">Fins: </span>
+                {set ? `${set.set.label} ${set.size}` : 'Mixed'}
+              </span>
+              <Button size="sm" variant="secondary" onClick={() => setChoosing('set')}>
+                Choose fins
+              </Button>
+            </div>
             <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
               <Checkbox
                 checked={cfg.symmetrical}
@@ -145,7 +173,7 @@ export function FinPanel({ store, units }: { store: StoreApi<BoardState>; units:
                       ? 'bg-primary text-primary-foreground'
                       : 'border border-border text-muted-foreground'
                   }`}
-                  title={`${sideLabel(f.side)} fin`}
+                  title={`${sideLabel(f.side)} fin: ${finLabel(f)}`}
                 >
                   {sideLabel(f.side)[0]}
                   {i + 1}
@@ -158,15 +186,32 @@ export function FinPanel({ store, units }: { store: StoreApi<BoardState>; units:
                 units={units}
                 index={selectedFin}
                 spec={cfg.fins[selectedFin]!}
+                onChange={() => setChoosing('fin')}
               />
             )}
+            {problems.length > 0 && (
+              <ul role="alert" className="space-y-1 text-xs text-destructive">
+                {problems.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            )}
             <p className="text-xs text-muted-foreground">
-              Drag a fin on the outline to re-place it; fins follow the rail and rocker. Saved with
-              the board and included in 3D and exports.
+              Fins are placed by the fin dot, the root of the trailing edge: drag it on the outline,
+              or type its distances. Choosing another fin moves the box, not the dot. Fins follow
+              the rail and rocker, and are saved with the board.
             </p>
           </>
         )}
       </PanelBody>
+      {choosing && (
+        <FinChooser
+          store={store}
+          board={board}
+          finIndex={choosing === 'fin' ? selectedFin : null}
+          onClose={() => setChoosing(null)}
+        />
+      )}
     </Panel>
   );
 }

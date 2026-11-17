@@ -1,0 +1,152 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { board, getWidthAtPos, type BezierBoard } from './board';
+import { boardFinMesh } from './fin-board';
+import { validateFinDesign } from './fin-design/fin-rules';
+import {
+  FIN_SIZES,
+  defaultBoardFins,
+  finLabel,
+  finSetOf,
+  finSetsFor,
+  withFinSet,
+  withFinSystem,
+  withLibraryFin,
+  withOwnFin,
+  withPlugCant,
+} from './fin-library';
+import { defaultFinDesign } from './fin-design/fin-defaults';
+import { designDepth, resolveFins, type FinConfig, type FinSetup, type FinSystem } from './fins';
+import { bottomZAt } from './surface';
+import { parseBrdGeometry } from './test-support/brd-geometry';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const shortboard = parseBrdGeometry(
+  readFileSync(resolve(here, '../../../docs/specs/golden/shortboard.brd'), 'utf8'),
+);
+const withFins = (fins: FinConfig): BezierBoard => {
+  const b = shortboard;
+  return board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, fins);
+};
+
+const SETUPS: FinSetup[] = ['single', 'twin', 'thruster', 'quad', '2+1', '5-fin'];
+const SYSTEMS: FinSystem[] = ['futures', 'fcs-ii', 'fcs-x2', 'glass-on'];
+
+describe('fin library', () => {
+  it('gives every setup, system and size valid fins, as the designer would accept them', () => {
+    for (const setup of SETUPS) {
+      for (const system of SYSTEMS) {
+        for (const set of finSetsFor(setup)) {
+          for (const size of FIN_SIZES) {
+            const cfg = withFinSet(defaultBoardFins(setup, system), set.id, size);
+            for (const f of cfg.fins) {
+              expect(f.design).toBeDefined();
+              expect(validateFinDesign(f.design!)).toEqual([]);
+              // A fin's hand matches its side, so the 3D view turns it over, not mirrors it.
+              if (f.side !== 0) expect(f.design!.hand).toBe(f.side > 0 ? 'right' : 'left');
+            }
+            expect(finSetOf(cfg)).toEqual({ set, size });
+          }
+        }
+      }
+    }
+  });
+
+  it('sizes S, M and L: deeper each step', () => {
+    const depth = (size: 'S' | 'M' | 'L') =>
+      designDepth(withFinSet(defaultBoardFins('thruster', 'futures'), 'thruster', size).fins[0]!.design!); // prettier-ignore
+    expect(depth('S')).toBeLessThan(depth('M'));
+    expect(depth('M')).toBeLessThan(depth('L'));
+    expect(depth('M')).toBeCloseTo(11.2, 1); // 112 mm: a medium thruster side fin
+  });
+
+  it('puts each fin on the tab its system takes', () => {
+    const tabs = (system: FinSystem) =>
+      defaultBoardFins('quad', system).fins.map((f) => f.design!.base);
+    expect(tabs('futures')).toEqual(['futures-side', 'futures-side', 'futures-centre', 'futures-centre']); // prettier-ignore
+    expect(tabs('fcs-ii')).toEqual(['fcs-1', 'fcs-1', 'fcs-1', 'fcs-1']);
+    expect(defaultBoardFins('2+1', 'futures').fins[2]!.design!.base).toBe('us-box');
+    // Switching system re-seats them.
+    const moved = withFinSystem(defaultBoardFins('thruster', 'futures'), 'fcs-ii');
+    expect(moved.fins.map((f) => f.design!.base)).toEqual(['fcs-1', 'fcs-1', 'fcs-1']);
+  });
+
+  it('FCS plugs carry the cant: front sides and rears 5 or 9 deg, the centre upright; Futures fins their own', () => {
+    const cfg = withPlugCant(defaultBoardFins('thruster', 'fcs-ii'), 'front', 9);
+    const fins = resolveFins(withFins(cfg));
+    expect(fins.map((f) => f.plugCant)).toEqual([9, 9, 0]);
+    expect(fins.map((f) => f.cant)).toEqual([9, 9, 0]); // FCS fins' blades stand straight on the plug
+    const quad = resolveFins(withFins(withPlugCant(defaultBoardFins('quad', 'fcs-ii'), 'rear', 9)));
+    expect(quad.map((f) => f.plugCant)).toEqual([5, 5, 9, 9]);
+    const futures = resolveFins(withFins(defaultBoardFins('thruster', 'futures')));
+    expect(futures.map((f) => f.plugCant)).toEqual([0, 0, 0]);
+    expect(futures[0]!.cant).toBeGreaterThan(0); // the blade's own lean
+  });
+
+  it('mix and match: one fin and its mirror, or one alone when not kept matched', () => {
+    const cfg = defaultBoardFins('quad', 'futures');
+    const one = withLibraryFin(cfg, 2, 'keel', 'S');
+    expect(one.fins.map((f) => f.library?.fin)).toEqual(['thruster-side', 'thruster-side', 'keel', 'keel']); // prettier-ignore
+    expect(one.fins[3]!.design!.hand).toBe(one.fins[3]!.side > 0 ? 'right' : 'left');
+    const alone = withLibraryFin({ ...cfg, symmetrical: false }, 2, 'keel', 'S');
+    expect(alone.fins.map((f) => f.library?.fin)).toEqual(['thruster-side', 'thruster-side', 'keel', 'quad-rear']); // prettier-ignore
+    expect(finSetOf(one)).toBeNull();
+    expect(finLabel(one.fins[2]!)).toBe('Keel S');
+    const own = withOwnFin(cfg, 0, defaultFinDesign('side', 'right'));
+    expect(finLabel(own.fins[0]!)).toBe('Own design');
+    expect(own.fins.map((f) => f.design!.hand).slice(0, 2)).toEqual(['left', 'right']);
+  });
+
+  it('hangs each blade from the bottom at its fin, leaning away from the stringer', () => {
+    const b = withFins(defaultBoardFins('thruster', 'futures'));
+    for (const fin of resolveFins(b)) {
+      const m = boardFinMesh(b, fin);
+      const p = m.positions;
+      let top = -Infinity;
+      let bottom = Infinity;
+      let sx = 0;
+      let sy = 0;
+      let deepY = 0;
+      for (let i = 0; i < p.length; i += 3) {
+        top = Math.max(top, p[i + 2]!);
+        if (p[i + 2]! < bottom) {
+          bottom = p[i + 2]!;
+          deepY = p[i + 1]!;
+        }
+        sx += p[i]!;
+        sy += p[i + 1]!;
+      }
+      const n = p.length / 3;
+      const surface = bottomZAt(b, fin.center.x, Math.abs(fin.center.y));
+      expect(top).toBeCloseTo(surface, 1); // the root on the bottom
+      expect(surface - bottom).toBeCloseTo(fin.spec.depth, 0); // as deep as the fin, near enough (cant)
+      expect(Math.abs(sx / n - fin.center.x)).toBeLessThan(fin.spec.base); // at its place along
+      expect(Math.abs(sy / n - fin.center.y)).toBeLessThan(1.5); // and across
+      if (fin.side !== 0) expect(Math.sign(deepY - fin.center.y)).toBe(fin.side); // tip leans out
+    }
+  });
+
+  it('places every fin by its fin dot: choosing another fin moves the box, not the dot', () => {
+    const twin = defaultBoardFins('twin', 'futures');
+    const keel = withLibraryFin(twin, 0, 'keel', 'L');
+    const [a, b] = [resolveFins(withFins(twin))[0]!, resolveFins(withFins(keel))[0]!];
+    // The dot: the trailing edge's root, at the typed distance and inset.
+    expect(b.dot).toEqual(a.dot);
+    expect(a.dot.x).toBeCloseTo(twin.fins[0]!.trailingFromTail, 9);
+    const half = getWidthAtPos(shortboard, a.dot.x) / 2;
+    expect(half - Math.abs(a.dot.y)).toBeCloseTo(twin.fins[0]!.insetFromRail, 9);
+    expect(a.baseLine.aft).toEqual(a.dot);
+    // The keel's tab sits further ahead of its trailing edge than the twin's: its box
+    // moves forward of the dot.
+    const back = (f: typeof a) => Math.hypot(f.slot!.rear.x - f.dot.x, f.slot!.rear.y - f.dot.y);
+    expect(back(b)).not.toBeCloseTo(back(a), 2);
+    expect(b.boxCenter.x).not.toBeCloseTo(a.boxCenter.x, 2);
+    // Toe turns the fin about its dot.
+    const toed = resolveFins(withFins({ ...twin, fins: twin.fins.map((f) => ({ ...f, toe: 4 })) }))[0]!; // prettier-ignore
+    expect(toed.dot).toEqual(a.dot);
+    expect(toed.slot!.rear).not.toEqual(a.slot!.rear);
+  });
+});

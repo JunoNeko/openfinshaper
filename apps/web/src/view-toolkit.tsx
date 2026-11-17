@@ -363,6 +363,14 @@ export function ThreeDControls({
       >
         Sections
       </Button>
+      <Button
+        size="sm"
+        variant={settings.showBoxes ? 'secondary' : 'ghost'}
+        onClick={() => set({ showBoxes: !settings.showBoxes })}
+        title="Draw each fin's box or plug on the bottom"
+      >
+        Boxes
+      </Button>
       {!compact && (
         <>
           <Sel
