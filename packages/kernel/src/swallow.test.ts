@@ -220,7 +220,7 @@ describe('swallow tail', () => {
     }
   }, 60_000); // two fine meshes: slow when the whole suite runs at once
 
-  it("volume is the mesh's, squeeze and wall included", () => {
+  it("volume counts the wall's foam as the mesh does", () => {
     const meshVolume = (m: BoardMesh): number => {
       let v = 0;
       const p = m.positions;
@@ -232,13 +232,22 @@ describe('swallow tail', () => {
       }
       return Math.abs(v / 6);
     };
+    // Volume blends the stations' control points straight from one to the next (legacy,
+    // pinned); the mesh curves through them (`loft.ts`), which puts any board's mesh a
+    // few tenths of a percent off its volume. What the swallow's own accounting adds must
+    // match: the foam a wall takes, against an upright one on the same notch.
+    const upright = swallowed({ kind: 'bevel', angle: 0 });
+    const uprightMesh = meshVolume(tessellateBoard(upright, { targetFaceSize: 0.4 }));
     for (const wall of [
       { kind: 'bevel', angle: 45 },
       { kind: 'round', size: 0.8 },
     ] as const) {
       const b = swallowed(wall);
       const mesh = meshVolume(tessellateBoard(b, { targetFaceSize: 0.4 }));
-      expect(Math.abs(getVolume(b) - mesh) / mesh).toBeLessThan(2e-4);
+      const byVolume = getVolume(upright) - getVolume(b);
+      const byMesh = uprightMesh - mesh;
+      expect(byMesh).toBeGreaterThan(1);
+      expect(Math.abs(byVolume - byMesh) / mesh).toBeLessThan(1.5e-4);
     }
   });
 
