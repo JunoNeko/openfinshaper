@@ -1,5 +1,6 @@
 import type {
   BezierBoard,
+  FinDesign,
   FinSize,
   PlugCant,
   RailPresetId,
@@ -50,6 +51,7 @@ import {
   setFinSet,
   setFinSystem,
   setLibraryFin,
+  setOwnFin,
   setPlugCant,
   setKnotContinuous,
   setKnotLock,
@@ -168,6 +170,8 @@ export interface BoardState {
   setLibraryFin: (index: number, id: string, size: FinSize) => void;
   /** An FCS plug cant: the front sides' or the rears'. */
   setPlugCant: (which: 'front' | 'rear', cant: PlugCant) => void;
+  /** One fin (and its mirror, when kept matched) as a person's own design. */
+  setOwnFin: (index: number, design: FinDesign, name?: string) => void;
   /** Add, change or remove (`null`) the bottom channels: one undo step. */
   /** Set the board's channels; `label` names the undo step (else Add / Edit / Remove). */
   setChannels: (channels: BoardChannels | null, label?: string) => void;
@@ -500,6 +504,13 @@ export const createBoardStore = (): StoreApi<BoardState> =>
         const { board } = get();
         if (!board) return;
         const next = setLibraryFin(board, index, id, size);
+        if (next !== board) commit(next, 'Change fin');
+      },
+
+      setOwnFin: (index, design, name) => {
+        const { board } = get();
+        if (!board) return;
+        const next = setOwnFin(board, index, design, name);
         if (next !== board) commit(next, 'Change fin');
       },
 

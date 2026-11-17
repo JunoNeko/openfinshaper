@@ -4,6 +4,11 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { IDBFactory } from 'fake-indexeddb';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { writeFinJson } from '@openshaper/io';
+import { defaultKeel } from '@openshaper/kernel';
+import { finishFinRoundTrip, pendingFinEdit, takeFinResult } from './fin-handoff';
 import { parseBrd } from '@openshaper/io';
 import { createBoardStore } from '@openshaper/store';
 import { FinPanel } from './FinPanel';
@@ -78,5 +83,55 @@ describe('<FinPanel /> fins from the library', () => {
     act(() => store.getState().selectFin(0));
     act(() => store.getState().updateFin(0, { insetFromRail: 0.5 }));
     expect(screen.getByRole('alert').textContent).toMatch(/mm (of|past) the rail/);
+  });
+});
+
+describe('<FinPanel /> your own fins (phase 2)', () => {
+  const openRouted = () => {
+    const store = createBoardStore();
+    act(() => {
+      store.getState().load(shortboard);
+      store.getState().setFinSetup('thruster');
+      store.getState().setFinSystem('futures');
+      store.getState().selectFin(0);
+    });
+    render(
+      <MemoryRouter initialEntries={['/app']}>
+        <Routes>
+          <Route path="/app" element={<FinPanel store={store} units={mm} />} />
+          <Route path="/fin" element={<p>OpenFinShaper</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    return store;
+  };
+
+  it('Edit in OpenFinShaper hands the selected fin over and goes to the designer', () => {
+    openRouted();
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit in OpenFinShaper' }));
+    expect(screen.getByText('OpenFinShaper')).toBeTruthy();
+    const pending = pendingFinEdit()!;
+    expect(pending.label).toMatch(/P1/);
+    expect(pending.design.base).toBe('futures-side');
+    finishFinRoundTrip(null);
+    takeFinResult();
+  });
+
+  it('My fins: import a .fin.json, then Use it for the fin and its mirror', async () => {
+    (globalThis as { indexedDB?: IDBFactory }).indexedDB = new IDBFactory();
+    const store = openRouted();
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    const file = new File([writeFinJson(defaultKeel('left'))], 'Big keel.fin.json', { type: 'application/json' }); // prettier-ignore
+    fireEvent.change(screen.getByLabelText('Import fin files'), { target: { files: [file] } });
+    const use = await screen.findByRole('button', { name: 'Use Big keel' });
+    fireEvent.click(use);
+    const fins = store.getState().board!.fins.fins;
+    expect(fins[0]!.name).toBe('Big keel');
+    expect(fins[1]!.name).toBe('Big keel');
+    expect(fins[1]!.design!.hand).toBe('right');
+    // Named in the panel (and listed in My fins).
+    expect(screen.getAllByText('Big keel').length).toBeGreaterThanOrEqual(2);
+    delete (globalThis as { indexedDB?: IDBFactory }).indexedDB;
   });
 });

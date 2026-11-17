@@ -15,6 +15,7 @@ export default function DocsFins() {
       lede="Setups, mounting systems and the fins themselves — and why fin placement follows the board rather than sitting at fixed coordinates."
       toc={[
         { id: 'choosing', label: 'Choosing fins' },
+        { id: 'own', label: 'Your own fins' },
         { id: 'parametric', label: 'How placement works' },
         { id: 'setups', label: 'Setups' },
         { id: 'systems', label: 'Systems' },
@@ -49,6 +50,31 @@ export default function DocsFins() {
         </p>
         <p>
           Boards saved before fin designs keep their plain generic fins until you choose new ones.
+        </p>
+      </Section>
+
+      <Section id="own" title="Your own fins">
+        <p>
+          Select a fin and <strong>Change</strong> it. Under <strong>My fins</strong>:
+        </p>
+        <Terms>
+          <Term name="Edit in OpenFinShaper">
+            Opens this fin in OpenFinShaper. Shape it there and <strong>Apply to board</strong>: it
+            comes back onto this fin, and its mirror partner while Symmetrical is on, and is kept in
+            My fins. <strong>Cancel</strong> leaves the board as it was.
+          </Term>
+          <Term name="Design a new fin">The same, starting from the usual fin for its place.</Term>
+          <Term name="My fins">
+            Your fins, kept in this browser for any board: those you applied, added from
+            OpenFinShaper (<strong>Add to My fins</strong>) or imported. <strong>Use</strong> puts
+            one on the selected fin; ✕ removes it from the list.
+          </Term>
+          <Term name="Import .fin.json">Adds OpenFinShaper fin files to My fins.</Term>
+        </Terms>
+        <p>
+          A fin is set on the tab your board&apos;s system takes, so one designed on another tab
+          moves onto this board&apos;s. A board keeps its fins in its file, so it opens with them
+          anywhere, My fins or not.
         </p>
       </Section>
 
