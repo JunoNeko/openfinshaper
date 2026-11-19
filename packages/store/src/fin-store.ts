@@ -274,6 +274,15 @@ const validSelection = (
   return also && also.length !== s.also!.length ? { ...s, also } : s;
 };
 
+/** The blade slid the least way across to keep the tab under its foil; as it was if the foil can't be built. */
+const underTab = (d: FinDesign): FinDesign => {
+  try {
+    return nudgeLateral(d, 0);
+  } catch {
+    return d;
+  }
+};
+
 export const createFinStore = (): StoreApi<FinState> =>
   createStore<FinState>((set, get) => {
     /** Apply an edited design, recording a labelled step unless mid-drag. */
@@ -638,7 +647,9 @@ export const createFinStore = (): StoreApi<FinState> =>
       importOutline: (outline) =>
         replaceWith((d) => importedOutline(d, outline), 'Import outline', SIZE_RULES),
       importBaseFoil: (section) => {
-        const wrong = replaceWith((d) => withFoil(d, 0, section), 'Import foil');
+        // A strongly cambered foil can leave the tab off its inside face where the old
+        // one kept it: the blade slides the least way back over the tab.
+        const wrong = replaceWith((d) => underTab(withFoil(d, 0, section)), 'Import foil');
         if (wrong.length === 0) set({ activeFoil: 0 });
         return wrong;
       },

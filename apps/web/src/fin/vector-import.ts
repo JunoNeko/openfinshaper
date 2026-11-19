@@ -726,14 +726,23 @@ export const vectorFoil = (
   const p = facingLeft(largest(paths), facing);
   if (p.closed) {
     // Square to the chord first, so the edges found are the foil's, not a tilted one's.
-    const rough = cutAtTurns(p.segs);
-    const a = rough[anchorAtX(rough, -1)]![0];
-    const b = rough[anchorAtX(rough, 1)]![0];
-    const tilt = Math.atan2(b.y - a.y, b.x - a.x);
-    const [c, s] = [Math.cos(-tilt), Math.sin(-tilt)];
-    const level = cutAtTurns(
-      mapPath(p, (q) => ({ x: c * q.x - s * q.y, y: s * q.x + c * q.y })).segs,
-    );
+    // The edges of a tilted drawing aren't those of the levelled foil, so it is levelled
+    // again on the chord it finds until that chord stops turning: otherwise a face lands
+    // a hair past its trailing edge once laid on the chord (a foil drawn at 40°).
+    const levelBy = (tilt: number) => {
+      const [c, s] = [Math.cos(-tilt), Math.sin(-tilt)];
+      return cutAtTurns(mapPath(p, (q) => ({ x: c * q.x - s * q.y, y: s * q.x + c * q.y })).segs);
+    };
+    let tilt = 0;
+    let level = levelBy(tilt);
+    for (let k = 0; k < 50; k++) {
+      const a = level[anchorAtX(level, -1)]![0];
+      const b = level[anchorAtX(level, 1)]![0];
+      const turn = Math.atan2(b.y - a.y, b.x - a.x);
+      if (Math.abs(turn) < 1e-13) break;
+      tilt += turn;
+      level = levelBy(tilt);
+    }
     const n = level.length;
     const iL = anchorAtX(level, -1);
     const iT = anchorAtX(level, 1);
