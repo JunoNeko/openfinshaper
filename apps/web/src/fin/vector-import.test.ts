@@ -185,6 +185,35 @@ describe('a vector as the base foil', () => {
     expect(s.getState().activeFoil).toBe(0);
     expect(validateFinDesign(s.getState().design!)).toEqual([]);
   });
+
+  // A thick, strongly cambered foil drawn at about 40° in Inkscape (a user's file).
+  const TILTED = `<svg xmlns="http://www.w3.org/2000/svg" width="186.31532mm" viewBox="0 0 186.31532 165.67651">
+    <g transform="translate(-18.173983,-71.914721)"><path d="m 18.544103,237.24677 c 16.483646,-25.01981 45.003161,-65.5261 72.410305,-100.37363 27.407142,-34.84753 51.693282,-64.596336 89.188302,-64.757184 20.41089,-0.08756 22.17233,4.497618 23.25372,6.475717 1.08139,3.670616 0.82322,5.58327 0.88305,10.007929 0.29435,21.767538 -6.04082,56.123038 -17.14594,83.595628 -11.10512,27.4726 -20.13127,47.82986 -49.31638,52.68881 -14.46537,2.4083 -14.90043,6.94034 -15.78348,12.31223 -27.951609,0.40688 -103.489577,0.0505 -103.489577,0.0505 z"/></g>
+  </svg>`;
+
+  it('levels a tilted drawing on its own chord, so no face runs past an edge', () => {
+    for (const facing of ['left', 'right'] as const) {
+      const f = vectorFoil(parseSvg(TILTED), facing, false);
+      for (const face of [f.outside, f.inside!]) {
+        for (const k of face.knots) {
+          for (const q of [k.end, k.tangentToPrev, k.tangentToNext]) {
+            expect(q.x).toBeGreaterThanOrEqual(-1e-9);
+            expect(q.x).toBeLessThanOrEqual(1 + 1e-9);
+          }
+        }
+      }
+    }
+  });
+
+  it('slides the blade over the tab when a cambered foil leaves it off the inside face', () => {
+    for (const position of ['side', 'centre'] as const) {
+      const s = createFinStore();
+      s.getState().load(defaultFinDesign(position, 'left'));
+      const f = vectorFoil(parseSvg(TILTED), 'left', position === 'centre');
+      expect(s.getState().importBaseFoil(f)).toEqual([]);
+      expect(validateFinDesign(s.getState().design!)).toEqual([]);
+    }
+  });
 });
 
 describe('a ghost', () => {
