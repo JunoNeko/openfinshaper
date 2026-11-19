@@ -16,12 +16,14 @@
  * - **Tabs:** Futures sides on the 3/4" tab, rears and centres on the 1/2"; FCS II and
  *   X-2 on FCS 1 tabs (both plugs take them); a single, or a 2+1's centre, on a US box
  *   whatever the system, as such boards are built. Glass-on fins keep a tab the 3D view
- *   leaves off.
+ *   leaves off. A twinzer's canards stand in FCS single plugs whatever its twins' system
+ *   (`FinConfig.canardBox`).
  */
 import { splineFromKnots, type Spline } from './bezier-spline';
 import { knot } from './knot';
 import { vec2, type Vec2 } from './vec2';
 import {
+  defaultCanard,
   defaultFinDesign,
   defaultKeel,
   defaultSingleFin,
@@ -40,15 +42,17 @@ import {
   type FinConfig,
   type FinSetup,
   type FinSpec,
+  type CanardBox,
   type FinSystem,
   type PlugCant,
+  type PlugCantGroup,
 } from './fins';
 
 export type FinSize = 'S' | 'M' | 'L';
 export const FIN_SIZES: readonly FinSize[] = ['S', 'M', 'L'];
 
 /** What a fin does on its board. */
-export type FinRole = 'side' | 'rear' | 'centre';
+export type FinRole = 'side' | 'rear' | 'centre' | 'canard';
 
 /** A fin in the library, before it is sized and set on a tab. */
 export interface LibraryFin {
@@ -73,6 +77,7 @@ export const LIBRARY_FINS: readonly LibraryFin[] = [
   { id: 'keel', label: 'Keel', roles: ['side'], make: (h) => defaultKeel(h), scaleM: 1 },
   { id: 'side-bite', label: '2+1 side bite', roles: ['side'], make: (h) => defaultFinDesign('side', h), scaleM: 0.95 }, // prettier-ignore
   { id: 'single', label: 'Single', roles: ['centre'], usBox: true, make: () => defaultSingleFin(), scaleM: 1 }, // prettier-ignore
+  { id: 'canard', label: 'Canard', roles: ['canard'], make: (h) => defaultCanard(h), scaleM: 1 },
 ];
 
 export const libraryFin = (id: string): LibraryFin | undefined =>
@@ -94,6 +99,7 @@ export const FIN_SETS: readonly FinSet[] = [
   { id: 'keel', label: 'Keel', setups: ['twin'], fins: { side: 'keel' } },
   { id: 'two-plus-one', label: '2+1', setups: ['2+1'], fins: { side: 'side-bite', centre: 'single' } }, // prettier-ignore
   { id: 'single', label: 'Single', setups: ['single'], fins: { centre: 'single' } },
+  { id: 'twinzer', label: 'Twinzer', setups: ['twinzer'], fins: { side: 'twin', canard: 'canard' } }, // prettier-ignore
 ];
 
 /** The sets for a setup, the first its default. */
@@ -105,6 +111,7 @@ export const finRoles = (setup: FinSetup): FinRole[] => finGroups(setup);
 
 /** The tab a role's fin takes in a fin system. */
 export const baseFor = (system: FinSystem, role: FinRole, usBox = false): FinBase => {
+  if (role === 'canard') return 'fcs-single';
   if (usBox) return 'us-box';
   if (system === 'fcs-ii' || system === 'fcs-x2') return 'fcs-1';
   return role === 'side' ? 'futures-side' : 'futures-centre';
@@ -170,8 +177,11 @@ export const makeLibraryFin = (
 
 /** The library fin a set gives a group, or the usual one for it. */
 const setFinFor = (set: FinSet | undefined, role: FinRole): string =>
-  set?.fins[role] ??
-  (role === 'rear' ? 'quad-rear' : role === 'centre' ? 'thruster-centre' : 'thruster-side');
+  set?.fins[role] ?? usualFin(role);
+
+/** The usual library fin for a role. */
+export const usualFin = (role: FinRole): string =>
+  role === 'rear' ? 'quad-rear' : role === 'centre' ? 'thruster-centre' : role === 'canard' ? 'canard' : 'thruster-side'; // prettier-ignore
 
 /** `cfg` with fin `i` given library fin `id` at `size`, set on its tab. */
 const fromLibrary = (cfg: FinConfig, i: number, id: string, size: FinSize): FinSpec => {
@@ -250,13 +260,13 @@ export const withFinSystem = (cfg: FinConfig, system: FinSystem): FinConfig => {
   };
 };
 
-/** `cfg` with an FCS plug cant set: the front sides' or the rears'. */
-export const withPlugCant = (
-  cfg: FinConfig,
-  which: 'front' | 'rear',
-  cant: PlugCant,
-): FinConfig => {
-  const plugCant = { front: cfg.plugCant?.front ?? 5, rear: cfg.plugCant?.rear ?? 5, [which]: cant }; // prettier-ignore
+/** `cfg` with a twinzer's canard box: the canards re-seated on it, as `withFinSystem` does. */
+export const withCanardBox = (cfg: FinConfig, canardBox: CanardBox): FinConfig =>
+  withFinSystem({ ...cfg, canardBox }, cfg.system);
+
+/** `cfg` with an FCS plug cant set: the front sides', the rears' or a twinzer's canards'. */
+export const withPlugCant = (cfg: FinConfig, which: PlugCantGroup, cant: PlugCant): FinConfig => {
+  const plugCant = { ...cfg.plugCant, front: cfg.plugCant?.front ?? 5, rear: cfg.plugCant?.rear ?? 5, [which]: cant }; // prettier-ignore
   const next: FinConfig = { ...cfg, plugCant };
   const roles = finGroups(cfg.setup);
   return {

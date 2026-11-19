@@ -33,10 +33,28 @@ import { vec2, type Vec2 } from './vec2';
 // --- model -----------------------------------------------------------------
 
 /** Named fin configurations (count of fins differs per setup). */
-export type FinSetup = 'none' | 'single' | 'twin' | 'thruster' | 'quad' | '2+1' | '5-fin';
+export type FinSetup =
+  'none' | 'single' | 'twin' | 'thruster' | 'quad' | '2+1' | '5-fin' | 'twinzer';
 
 /** Mounting system — drives the box/plug geometry routed into the board. */
 export type FinSystem = 'glass-on' | 'fcs-ii' | 'fcs-x2' | 'futures';
+
+/**
+ * A twinzer's canard box, chosen apart from its twins' system: an FCS 1 single plug (the
+ * usual choice), or Futures' own canard box, listed but not offered until its
+ * dimensions are known.
+ */
+export type CanardBox = 'fcs-single' | 'futures-canard';
+
+export const CANARD_BOXES: readonly CanardBox[] = ['fcs-single', 'futures-canard'];
+
+export const CANARD_BOX_LABELS: Record<CanardBox, string> = {
+  'fcs-single': 'FCS single plug',
+  'futures-canard': 'Futures canard box',
+};
+
+/** Canard boxes whose dimensions are known; the others are listed as coming soon. */
+export const canardBoxAvailable = (box: CanardBox): boolean => box === 'fcs-single';
 
 /** Foil (cross-section) of a fin blade. Sides are usually flat-inside (80/20). */
 export type FinFoil = 'flat' | '80/20' | '50/50';
@@ -68,6 +86,7 @@ export const FIN_SETUPS: readonly FinSetup[] = [
   'quad',
   '2+1',
   '5-fin',
+  'twinzer',
 ];
 
 export const FIN_SETUP_LABELS: Record<FinSetup, string> = {
@@ -78,6 +97,7 @@ export const FIN_SETUP_LABELS: Record<FinSetup, string> = {
   quad: 'Quad',
   '2+1': '2 + 1',
   '5-fin': '5-Fin',
+  twinzer: 'Twinzer',
 };
 
 export const FIN_SYSTEMS: readonly FinSystem[] = ['glass-on', 'fcs-ii', 'fcs-x2', 'futures'];
@@ -127,8 +147,8 @@ export interface FinSpec {
   readonly name?: string;
 }
 
-/** Which fins of a setup are sides, rears and centres. */
-export type FinGroup = 'side' | 'rear' | 'centre';
+/** Which fins of a setup are sides, rears, centres and canards (a twinzer's small front fins). */
+export type FinGroup = 'side' | 'rear' | 'centre' | 'canard';
 
 /** The group of each of a setup's fins, in the order `defaultFinConfig` lays them out. */
 export const finGroups = (setup: FinSetup): FinGroup[] => {
@@ -145,6 +165,9 @@ export const finGroups = (setup: FinSetup): FinGroup[] => {
       return ['side', 'side', 'centre'];
     case '5-fin':
       return ['side', 'side', 'rear', 'rear', 'centre'];
+    case 'twinzer':
+      // The canards ahead, then the twins (the twins are the setup's side fins).
+      return ['canard', 'canard', 'side', 'side'];
     default:
       return [];
   }
@@ -153,8 +176,22 @@ export const finGroups = (setup: FinSetup): FinGroup[] => {
 /** The angles FCS makes its plugs at (deg). */
 export type PlugCant = 5 | 9;
 
-/** An FCS plug's cant for a fin of `group`: sides and rears as set, a centre upright. */
+/** Which FCS plugs' cant is set: the front sides', the rears', or a twinzer's canards'. */
+export type PlugCantGroup = 'front' | 'rear' | 'canard';
+
+/** A twinzer's canard plugs' cant when none is set (deg). */
+export const DEFAULT_CANARD_PLUG_CANT: PlugCant = 9;
+
+/**
+ * An FCS plug's cant for a fin of `group`: sides and rears as set, a centre upright. A
+ * twinzer's canards stand in their own FCS single plugs, 9° unless set, whatever the
+ * twins' system (none in a Futures canard box, not known yet).
+ */
 export const plugCantFor = (cfg: FinConfig, group: FinGroup | undefined): number => {
+  if (group === 'canard') {
+    if ((cfg.canardBox ?? 'fcs-single') !== 'fcs-single') return 0;
+    return cfg.plugCant?.canard ?? DEFAULT_CANARD_PLUG_CANT;
+  }
   if (cfg.system !== 'fcs-ii' && cfg.system !== 'fcs-x2') return 0;
   if (group === 'side') return cfg.plugCant?.front ?? 5;
   if (group === 'rear') return cfg.plugCant?.rear ?? 5;
@@ -234,8 +271,17 @@ export interface FinConfig {
   readonly symmetrical: boolean;
   /** One spec per fin; `length` matches the setup's fin count (empty for `none`). */
   readonly fins: readonly FinSpec[];
-  /** FCS plug cants (deg): front sides, and quad / 5-fin rears. 5 when absent. */
-  readonly plugCant?: { readonly front: PlugCant; readonly rear: PlugCant };
+  /**
+   * FCS plug cants (deg): front sides, and quad / 5-fin rears, 5 when absent; a
+   * twinzer's canards, 9 when absent.
+   */
+  readonly plugCant?: {
+    readonly front: PlugCant;
+    readonly rear: PlugCant;
+    readonly canard?: PlugCant;
+  };
+  /** A twinzer's canard box (its twins take `system`). An FCS single plug when absent. */
+  readonly canardBox?: CanardBox;
 }
 
 export const noFins = (): FinConfig => ({
@@ -312,6 +358,24 @@ export const SYSTEM_BOX: Record<FinSystem, BoxGeometry> = {
     kind: 'shapes',
     footprints: [circle(inch(1.5), inch(0.625)), circle(-inch(1.5), inch(0.625))],
   },
+};
+
+/**
+ * The FCS 1 single plug a canard stands in (owner's measurements, 2026-11, cm): a round
+ * plug 26 mm across and 20 mm tall, its slot 22.8 × 6.3 mm and 16 mm deep.
+ */
+export const FCS_SINGLE_PLUG = {
+  diameter: 2.6,
+  height: 2.0,
+  slotLength: 2.28,
+  slotWidth: 0.63,
+  slotDepth: 1.6,
+} as const;
+
+/** A canard's box in plan: one round plug (the Futures canard box isn't known yet). */
+export const CANARD_BOX: Record<CanardBox, BoxGeometry> = {
+  'fcs-single': { kind: 'shapes', footprints: [circle(0, FCS_SINGLE_PLUG.diameter)] },
+  'futures-canard': { kind: 'none' },
 };
 
 // --- real-world default placements -----------------------------------------
@@ -392,6 +456,10 @@ export function defaultFinConfig(setup: FinSetup, system: FinSystem): FinConfig 
           ...pair(inch(6.2), 4.4, 10, 2, 4.5),
           center(inch(3.5), 11, 'thruster'),
         ];
+      case 'twinzer':
+        // The owner's placement (twinzer_placement.board, 2026-11): canards 343 mm from
+        // the tail, 47 mm in, 4° toe; twins 218 mm, 51 mm in, 2° toe.
+        return [...pair(34.324, 4.656, 7, 4, 0), ...pair(21.84, 5.133, 13, 2, 7, 'keel')];
       default:
         return [];
     }
@@ -494,9 +562,16 @@ export function resolveFins(b: BezierBoard, cfg: FinConfig = b.fins): ResolvedFi
   if (!cfg || cfg.setup === 'none' || cfg.fins.length === 0) return [];
   const length = getLength(b);
   const box = SYSTEM_BOX[cfg.system];
+  const canard = CANARD_BOX[cfg.canardBox ?? 'fcs-single'];
   const groups = finGroups(cfg.setup);
   return cfg.fins.map((spec, i) =>
-    resolveOne(b, spec, box, length, spec.design ? plugCantFor(cfg, groups[i]) : 0),
+    resolveOne(
+      b,
+      spec,
+      groups[i] === 'canard' ? canard : box,
+      length,
+      spec.design ? plugCantFor(cfg, groups[i]) : 0,
+    ),
   );
 }
 

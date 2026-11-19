@@ -3,6 +3,8 @@ import type {
   FinDesign,
   FinSize,
   PlugCant,
+  PlugCantGroup,
+  CanardBox,
   RailPresetId,
   SwallowWall,
   Vec2,
@@ -53,6 +55,7 @@ import {
   setLibraryFin,
   setOwnFin,
   setPlugCant,
+  setCanardBox,
   setKnotContinuous,
   setKnotLock,
   setKnotTangentLength,
@@ -168,8 +171,10 @@ export interface BoardState {
   setFinSet: (setId: string, size: FinSize) => void;
   /** One fin (and its mirror, when kept matched) as a library fin at a size. */
   setLibraryFin: (index: number, id: string, size: FinSize) => void;
-  /** An FCS plug cant: the front sides' or the rears'. */
-  setPlugCant: (which: 'front' | 'rear', cant: PlugCant) => void;
+  /** An FCS plug cant: the front sides', the rears' or a twinzer's canards'. */
+  setPlugCant: (which: PlugCantGroup, cant: PlugCant) => void;
+  /** A twinzer's canard box. */
+  setCanardBox: (box: CanardBox) => void;
   /** One fin (and its mirror, when kept matched) as a person's own design. */
   setOwnFin: (index: number, design: FinDesign, name?: string) => void;
   /** Add, change or remove (`null`) the bottom channels: one undo step. */
@@ -518,6 +523,12 @@ export const createBoardStore = (): StoreApi<BoardState> =>
         const { board } = get();
         if (!board) return;
         commit(setPlugCant(board, which, cant), 'Change plug cant');
+      },
+
+      setCanardBox: (box) => {
+        const { board } = get();
+        if (!board || (board.fins.canardBox ?? 'fcs-single') === box) return;
+        commit(setCanardBox(board, box), 'Change canard box');
       },
 
       setChannels: (channels, label) => {

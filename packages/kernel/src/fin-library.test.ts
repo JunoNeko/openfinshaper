@@ -13,13 +13,22 @@ import {
   finSetOf,
   finSetsFor,
   withFinSet,
+  withCanardBox,
   withFinSystem,
   withLibraryFin,
   withOwnFin,
   withPlugCant,
 } from './fin-library';
 import { defaultFinDesign } from './fin-design/fin-defaults';
-import { designDepth, resolveFins, type FinConfig, type FinSetup, type FinSystem } from './fins';
+import {
+  designDepth,
+  finGroups,
+  resolveFins,
+  type FinConfig,
+  type FinSetup,
+  type FinSystem,
+} from './fins';
+import { finCavities } from './fin-cavities';
 import { bottomZAt } from './surface';
 import { parseBrdGeometry } from './test-support/brd-geometry';
 
@@ -32,7 +41,7 @@ const withFins = (fins: FinConfig): BezierBoard => {
   return board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, fins);
 };
 
-const SETUPS: FinSetup[] = ['single', 'twin', 'thruster', 'quad', '2+1', '5-fin'];
+const SETUPS: FinSetup[] = ['single', 'twin', 'thruster', 'quad', '2+1', '5-fin', 'twinzer'];
 const SYSTEMS: FinSystem[] = ['futures', 'fcs-ii', 'fcs-x2', 'glass-on'];
 
 describe('fin library', () => {
@@ -171,5 +180,46 @@ describe('fin library', () => {
       expect(fin.pitch).toBeCloseTo(Math.atan(slope), 2);
       expect(Math.abs(fin.pitch)).toBeGreaterThan(0.01); // a tail kick: not level
     }
+  });
+
+  it('twinzer: canards ahead in FCS single plugs, twins on the system chosen', () => {
+    const cfg = defaultBoardFins('twinzer', 'futures');
+    expect(finGroups('twinzer')).toEqual(['canard', 'canard', 'side', 'side']);
+    expect(cfg.fins.map((f) => f.side)).toEqual([-1, 1, -1, 1]);
+    expect(cfg.fins.map((f) => f.library?.fin)).toEqual(['canard', 'canard', 'twin', 'twin']);
+    expect(cfg.fins.map((f) => f.design!.base)).toEqual(['fcs-single', 'fcs-single', 'futures-side', 'futures-side']); // prettier-ignore
+    // The owner's placement: canards 343 mm from the tail, 47 mm in, 4° toe; twins
+    // 218 mm, 51 mm in, 2°.
+    expect(cfg.fins[0]).toMatchObject({ trailingFromTail: 34.324, insetFromRail: 4.656, toe: 4 });
+    expect(cfg.fins[2]).toMatchObject({ trailingFromTail: 21.84, insetFromRail: 5.133, toe: 2 });
+    // The canards' single plugs at 9° unless set, on Futures twins too.
+    expect(resolveFins(withFins(cfg)).map((f) => f.plugCant)).toEqual([9, 9, 0, 0]);
+    expect(resolveFins(withFins(withPlugCant(cfg, 'canard', 5))).map((f) => f.cant)).toEqual([5, 5, 7, 7]); // prettier-ignore
+    // Twins on FCS II: their plugs, the canards still on single plugs.
+    const fcs = withFinSystem(cfg, 'fcs-ii');
+    expect(fcs.fins.map((f) => f.design!.base)).toEqual(['fcs-single', 'fcs-single', 'fcs-1', 'fcs-1']); // prettier-ignore
+    expect(resolveFins(withFins(withPlugCant(fcs, 'front', 9))).map((f) => f.plugCant)).toEqual([9, 9, 9, 9]); // prettier-ignore
+    expect(resolveFins(withFins(fcs)).map((f) => f.plugCant)).toEqual([9, 9, 5, 5]);
+    // No plug cant in a Futures canard box (not known yet).
+    expect(resolveFins(withFins(withCanardBox(cfg, 'futures-canard')))[0]!.plugCant).toBe(0);
+    expect(finSetOf(fcs)?.set.id).toBe('twinzer');
+  });
+
+  it('twinzer cavities: a 26 mm round plug, 20 mm deep, for each canard; the twins by system', () => {
+    const b = withFins(defaultBoardFins('twinzer', 'futures'));
+    const cav = finCavities(b);
+    expect(cav.map((c) => c.kind)).toEqual(['FCS single', 'FCS single', 'Futures F', 'Futures F']); // prettier-ignore
+    const plug = cav[0]!.steps[0]!;
+    expect(plug.depth).toBeCloseTo(2.0, 9);
+    const r = Math.max(...plug.outline.map((p) => Math.hypot(p.x, p.y)));
+    expect(r * 2).toBeCloseTo(2.6, 9);
+    // The plug sits under the canard's tab.
+    const fin = resolveFins(b)[0]!;
+    expect(cav[0]!.origin.x).toBeCloseTo(fin.boxCenter.x, 9);
+    // Glass-on twins: the canards' plugs alone. Futures' canard box isn't known: none.
+    const glass = withFins(withFinSystem(defaultBoardFins('twinzer', 'futures'), 'glass-on'));
+    expect(finCavities(glass).map((c) => c.fin)).toEqual([0, 1]);
+    const futuresCanard = withFins(withCanardBox(defaultBoardFins('twinzer', 'futures'), 'futures-canard')); // prettier-ignore
+    expect(finCavities(futuresCanard).map((c) => c.fin)).toEqual([2, 3]);
   });
 });

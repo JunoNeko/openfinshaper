@@ -25,6 +25,7 @@ import {
   finSetsFor,
   makeLibraryFin,
   positionFor,
+  usualFin,
   type BezierBoard,
   type FinDesign,
   type FinSize,
@@ -248,7 +249,7 @@ function MyFinsSection({
   const roundTrip = (fresh: boolean) => {
     if (finIndex === null || !spec) return;
     const design = fresh
-      ? makeLibraryFin(role === 'centre' ? 'thruster-centre' : role === 'rear' ? 'quad-rear' : 'thruster-side', 'M', spec.side, cfg.system, role) // prettier-ignore
+      ? makeLibraryFin(usualFin(role), 'M', spec.side, cfg.system, role)
       : spec.design;
     if (!design) return;
     const label = `fin ${sideName(spec.side)[0]}${finIndex + 1} (${sideName(spec.side).toLowerCase()} ${positionFor(role) === 'quad-rear' ? 'rear' : role})`; // prettier-ignore

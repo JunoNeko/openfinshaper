@@ -169,6 +169,8 @@ const SETUP_NOTES: Record<string, string> = {
   quad: 'Four fins, two per side, no centre.',
   '2+1': 'Two side fins plus a centre box — the longboard/mid-length convention.',
   '5-fin': 'Five boxes so the board can be ridden as a thruster or a quad.',
+  twinzer:
+    'Twin fins with a small canard ahead of each. The twins take the fin system you choose; the canards their own box, an FCS single plug by default, at 5° or 9° of cant (9° to start). A Futures canard box is listed as coming soon.',
 };
 
 const SYSTEM_NOTES: Record<string, string> = {

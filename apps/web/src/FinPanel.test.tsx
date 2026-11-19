@@ -18,7 +18,7 @@ const golden = resolve(dirname(fileURLToPath(import.meta.url)), '../../../docs/s
 const shortboard = parseBrd(readFileSync(resolve(golden, 'shortboard.brd'), 'utf8')).board;
 const mm = LENGTH_UNITS.find((u) => u.key === 'mm')!;
 
-const open = (setup: 'thruster' | 'quad' = 'thruster') => {
+const open = (setup: 'thruster' | 'quad' | 'twinzer' = 'thruster') => {
   const store = createBoardStore();
   act(() => {
     store.getState().load(shortboard);
@@ -66,6 +66,31 @@ describe('<FinPanel /> fins from the library', () => {
     act(() => store.getState().setFinSetup('thruster'));
     expect(screen.getByTitle('Side plugs')).toBeTruthy();
     expect(screen.getByText('Centre plug 0°.')).toBeTruthy();
+  });
+
+  it('twinzer: Futures twins and FCS single canards by default, each box its own', () => {
+    const store = open('twinzer');
+    expect(store.getState().board!.fins.system).toBe('futures');
+    expect(screen.getByText('Twinzer M')).toBeTruthy();
+    const twin = screen.getByTitle('Twin fin box') as HTMLSelectElement;
+    const canard = screen.getByTitle('Canard box') as HTMLSelectElement;
+    expect(twin.value).toBe('futures');
+    expect(canard.value).toBe('fcs-single');
+    // The canards' plugs take a cant, 9° to start, on Futures twins too.
+    const canardCant = screen.getByTitle('Canard plugs') as HTMLSelectElement;
+    expect(canardCant.value).toBe('9');
+    fireEvent.change(canardCant, { target: { value: '5' } });
+    expect(store.getState().board!.fins.plugCant?.canard).toBe(5);
+    expect(screen.queryByTitle('Twin plugs')).toBeNull();
+    // Futures' canard box is listed, greyed out, until its dimensions are known.
+    const soon = within(canard).getByRole('option', { name: 'Futures canard box (coming soon)' }) as HTMLOptionElement; // prettier-ignore
+    expect(soon.disabled).toBe(true);
+    // The twins' system changes the twins only; on FCS they take a twin plug cant.
+    fireEvent.change(twin, { target: { value: 'fcs-ii' } });
+    expect(store.getState().board!.fins.fins.map((f) => f.design!.base)).toEqual(['fcs-single', 'fcs-single', 'fcs-1', 'fcs-1']); // prettier-ignore
+    expect(screen.getByTitle('Twin plugs')).toBeTruthy();
+    act(() => store.getState().selectFin(0));
+    expect(screen.getByText('Port canard')).toBeTruthy();
   });
 
   it('places the selected fin: from the tail, inset, toe; no shape fields', () => {
