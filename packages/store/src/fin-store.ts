@@ -648,8 +648,12 @@ export const createFinStore = (): StoreApi<FinState> =>
         replaceWith((d) => importedOutline(d, outline), 'Import outline', SIZE_RULES),
       importBaseFoil: (section) => {
         // A strongly cambered foil can leave the tab off its inside face where the old
-        // one kept it: the blade slides the least way back over the tab.
-        const wrong = replaceWith((d) => underTab(withFoil(d, 0, section)), 'Import foil');
+        // one kept it: the blade slides the least way back over the tab. After the foil
+        // is stored at its true scale, whose rounding moves the tab's range a hair.
+        const wrong = replaceWith(
+          (d) => underTab(withFoilsNearTrueScale(withFoil(d, 0, section))),
+          'Import foil',
+        );
         if (wrong.length === 0) set({ activeFoil: 0 });
         return wrong;
       },
