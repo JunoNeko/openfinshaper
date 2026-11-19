@@ -7,6 +7,7 @@ import {
   boardChannels,
   defaultBoardFins,
   withPlugCant,
+  withCanardBox,
   defaultChannelParams,
   crossSection,
   defaultFinConfig,
@@ -321,6 +322,16 @@ describe('board-json fin designs', () => {
       expect(writeFinJson(f.design!)).toBe(writeFinJson(o.design!));
       expect(f.base).toBeCloseTo(o.base, 9);
     });
+  });
+
+  it("round-trips a twinzer's canard box, and drops one it doesn't know", () => {
+    const b = loadBrd('shortboard');
+    const fins = withCanardBox(defaultBoardFins('twinzer', 'futures'), 'futures-canard');
+    const original = board(b.outline, b.bottom, b.deck, b.crossSections, b.interpolationType, fins); // prettier-ignore
+    const doc = JSON.parse(writeBoardJson(original));
+    expect(readBoardJson(JSON.stringify(doc)).board.fins.canardBox).toBe('futures-canard');
+    doc.fins.canardBox = 'nonsense';
+    expect(readBoardJson(JSON.stringify(doc)).board.fins.canardBox).toBeUndefined();
   });
 
   it('opens a board whose fin design is damaged, with a plain fin there', () => {

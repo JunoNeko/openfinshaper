@@ -116,7 +116,7 @@ describe('the board as a blank to print', () => {
   it('warns when a cavity leaves too little board above it', async () => {
     const b = withFins('thruster', 'fcs-ii');
     const { warnings } = await exportPrintBlank(b, {
-      cavities: { futuresFlangeDepth: 0.24, futuresSideDepth: 2, futuresCentreDepth: 1.35, fcs2Depth: 9, clearance: 0 }, // prettier-ignore
+      cavities: { futuresFlangeDepth: 0.24, futuresSideDepth: 2, futuresCentreDepth: 1.35, fcs2Depth: 9, fcsSingleDepth: 2, clearance: 0 }, // prettier-ignore
     });
     // One per cavity (it may also warn of a side box near the rail: `cavityProblems`).
     const deck = warnings.filter((w) => /FCS II box leaves .* mm of board above it/.test(w));

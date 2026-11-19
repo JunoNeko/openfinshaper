@@ -1,4 +1,5 @@
 import {
+  CANARD_BOXES,
   FIN_SETUPS,
   board,
   clampWall,
@@ -98,8 +99,11 @@ const finSpecFromJson = (f: FinSpec): FinSpec => {
 const finConfigFromDoc = (doc: BoardJson): FinConfig => {
   if (doc.fins && Array.isArray(doc.fins.fins)) {
     // `symmetrical` was added after the v2 `fins` block; default older docs to true.
+    // A twinzer's canard box is dropped (an FCS single plug) if it isn't one we know.
+    const { canardBox, ...rest } = doc.fins;
     return {
-      ...doc.fins,
+      ...rest,
+      ...(canardBox && CANARD_BOXES.includes(canardBox) ? { canardBox } : {}),
       symmetrical: doc.fins.symmetrical ?? true,
       fins: doc.fins.fins.map(finSpecFromJson),
     };

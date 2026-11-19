@@ -16,6 +16,9 @@
  * | Futures box body | 139.5 × 22.5     | 129.5 × 12.5 |                             |
  * | FCS II plug      | 120.6 × 46.9     | 110.6 × 36.9 | plug at most 110 × 37.5     |
  *
+ * A twinzer's canards stand in FCS 1 single plugs: round, 26 mm across and 20 mm tall
+ * (the owner's measurements), so their cavity is that round hole, as deep as the plug.
+ *
  * Depths: a Futures flange is 1.587 mm thick, plus 0.8 mm for resin, 2.4 mm; FCS II
  * plugs vary, 18.5 mm is safe (both the owner's). A Futures box body is as deep as its
  * box: "F" boxes (thruster sides, quad fronts) 3/4", "X" boxes (centres, quad rears)
@@ -28,7 +31,7 @@
 import { getWidthAtPos, type BezierBoard } from './board';
 import { boardChannels } from './channel-layout';
 import { channelDepthAt } from './channels';
-import { resolveFins } from './fins';
+import { FCS_SINGLE_PLUG, finGroups, resolveFins } from './fins';
 import { bottomZAt, deckZAt } from './surface';
 import { vec2, type Vec2 } from './vec2';
 
@@ -122,6 +125,13 @@ const FCS2_PLUG = pts([
   [1.3273, 1.4129], [1.1218, 1.3592], [0.8952, 1.3083], [0.6581, 1.2728], [0.426, 1.2532], [0.1979, 1.2445],
 ]);
 
+/** The FCS single plug's outline (cm), as {@link FUTURES_FLANGE}: a circle. */
+const FCS_SINGLE = Array.from({ length: 48 }, (_, i) => {
+  const a = (i / 48) * 2 * Math.PI;
+  const r = FCS_SINGLE_PLUG.diameter / 2;
+  return vec2(r * Math.cos(a), r * Math.sin(a));
+});
+
 /** How deep each cavity is cut (cm, below the bottom), and extra room all round. */
 export interface CavitySettings {
   /** The Futures flange step: the flange, 1.587 mm, plus 0.8 mm for resin. */
@@ -132,6 +142,8 @@ export interface CavitySettings {
   readonly futuresCentreDepth: number;
   /** An FCS II plug: they vary; 18.5 mm is safe. */
   readonly fcs2Depth: number;
+  /** An FCS single plug (a twinzer's canards): the plug's height, 20 mm. */
+  readonly fcsSingleDepth: number;
   /** Extra room all round every outline (cm), past the jigs' own. */
   readonly clearance: number;
 }
@@ -141,6 +153,7 @@ export const DEFAULT_CAVITY_SETTINGS: CavitySettings = {
   futuresSideDepth: 1.905 + 0.08,
   futuresCentreDepth: 1.27 + 0.08,
   fcs2Depth: 1.85,
+  fcsSingleDepth: FCS_SINGLE_PLUG.height,
   clearance: 0,
 };
 
@@ -166,7 +179,7 @@ export interface FinCavity {
   /** The fin, by index in the board's fin configuration. */
   readonly fin: number;
   /** Which box, as a shaper calls it. */
-  readonly kind: 'Futures F' | 'Futures X' | 'FCS II';
+  readonly kind: 'Futures F' | 'Futures X' | 'FCS II' | 'FCS single';
   /** Its centre on the bottom as cut (cm). */
   readonly origin: P3;
   /** Along the fin base toward the nose, in plan (unit). */
@@ -188,17 +201,24 @@ const rearOfPair = (fins: ReturnType<typeof resolveFins>, i: number): boolean =>
 
 /**
  * The cavities to print into board `b` for its fins: none for glass-on fins, or for
- * the FCS X-2's round plugs, whose cavities aren't known yet.
+ * the FCS X-2's round plugs or Futures' canard box, whose cavities aren't known yet.
+ * A twinzer's canards take their own box (`FinConfig.canardBox`), its twins the system.
  */
 export const finCavities = (
   b: BezierBoard,
   s: CavitySettings = DEFAULT_CAVITY_SETTINGS,
 ): FinCavity[] => {
-  const system = b.fins.system;
-  if (system !== 'futures' && system !== 'fcs-ii') return [];
+  const cfg = b.fins;
+  const groups = finGroups(cfg.setup);
+  const boxOf = (i: number) =>
+    groups[i] === 'canard' ? (cfg.canardBox ?? 'fcs-single') : cfg.system;
+  const known = (i: number) => ['futures', 'fcs-ii', 'fcs-single'].includes(boxOf(i));
+  if (!cfg.fins.some((_, i) => known(i))) return [];
   const fins = resolveFins(b);
   const channels = boardChannels(b);
-  return fins.map((f, i) => {
+  return fins.flatMap((f, i): FinCavity[] => {
+    if (!known(i)) return [];
+    const system = boxOf(i);
     const { fore, aft } = f.baseLine;
     const dx = fore.x - aft.x;
     const dy = fore.y - aft.y;
@@ -220,24 +240,32 @@ export const finCavities = (
     const origin = { x, y, z: zAt(x, ay) + channelDepthAt(channels, x, ay) };
     if (system === 'fcs-ii') {
       const steps = [{ outline: FCS2_PLUG, depth: s.fcs2Depth, grow: s.clearance }];
-      return { fin: i, kind: 'FCS II', origin, along, axis, steps };
+      return [{ fin: i, kind: 'FCS II', origin, along, axis, steps }];
     }
-    const small = f.side === 0 || rearOfPair(fins, i);
-    return {
-      fin: i,
-      kind: small ? 'Futures X' : 'Futures F',
-      origin,
-      along,
-      axis,
-      steps: [
-        { outline: FUTURES_FLANGE, depth: s.futuresFlangeDepth, grow: s.clearance },
-        {
-          outline: FUTURES_BODY,
-          depth: small ? s.futuresCentreDepth : s.futuresSideDepth,
-          grow: s.clearance,
-        },
-      ],
-    };
+    if (system === 'fcs-single') {
+      const steps = [{ outline: FCS_SINGLE, depth: s.fcsSingleDepth, grow: s.clearance }];
+      return [{ fin: i, kind: 'FCS single', origin, along, axis, steps }];
+    }
+    // A Futures box: an X box for a centre, or a rear with a fin ahead of it on its
+    // side (a quad's; a twinzer's twins are its main fins, ahead of nothing but canards).
+    const small = f.side === 0 || (groups[i] !== 'side' && rearOfPair(fins, i));
+    return [
+      {
+        fin: i,
+        kind: small ? 'Futures X' : 'Futures F',
+        origin,
+        along,
+        axis,
+        steps: [
+          { outline: FUTURES_FLANGE, depth: s.futuresFlangeDepth, grow: s.clearance },
+          {
+            outline: FUTURES_BODY,
+            depth: small ? s.futuresCentreDepth : s.futuresSideDepth,
+            grow: s.clearance,
+          },
+        ],
+      },
+    ];
   });
 };
 

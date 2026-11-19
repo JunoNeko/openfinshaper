@@ -26,12 +26,14 @@ import {
   vec2,
   widthBoundsAt,
   withFinSet,
+  withCanardBox,
   withFinSystem,
   withLibraryFin,
   withOwnFin,
   withPlugCant,
   withHandles,
   type BezierBoard,
+  type CanardBox,
   type CrossSection,
   type FinConfig,
   type FinDesign,
@@ -40,6 +42,7 @@ import {
   type FinSize,
   type FinSystem,
   type PlugCant,
+  type PlugCantGroup,
   type InterpolationType,
   type Knot,
   type KnotLock,
@@ -813,7 +816,8 @@ export const withFins = (b: BezierBoard, fins: FinConfig): BezierBoard =>
  * at M (`fin-library.ts`), keeping the system and any plug cants.
  */
 export const setFinSetup = (b: BezierBoard, setup: FinSetup): BezierBoard => {
-  const cfg = defaultBoardFins(setup, b.fins.system);
+  // A twinzer starts as most are built: Futures twins, canards in FCS single plugs.
+  const cfg = defaultBoardFins(setup, setup === 'twinzer' ? 'futures' : b.fins.system);
   if (!b.fins.plugCant) return withFins(b, cfg);
   let next = withPlugCant(
     { ...cfg, symmetrical: b.fins.symmetrical },
@@ -821,6 +825,7 @@ export const setFinSetup = (b: BezierBoard, setup: FinSetup): BezierBoard => {
     b.fins.plugCant.front,
   );
   next = withPlugCant(next, 'rear', b.fins.plugCant.rear);
+  if (b.fins.plugCant.canard) next = withPlugCant(next, 'canard', b.fins.plugCant.canard);
   return withFins(b, next);
 };
 
@@ -849,8 +854,12 @@ export const setOwnFin = (
   index < 0 || index >= b.fins.fins.length ? b : withFins(b, withOwnFin(b.fins, index, d, name));
 
 /** An FCS plug cant: the front sides' or the rears'. */
-export const setPlugCant = (b: BezierBoard, which: 'front' | 'rear', cant: PlugCant): BezierBoard =>
+export const setPlugCant = (b: BezierBoard, which: PlugCantGroup, cant: PlugCant): BezierBoard =>
   withFins(b, withPlugCant(b.fins, which, cant));
+
+/** A twinzer's canard box (its twins keep the board's fin system). */
+export const setCanardBox = (b: BezierBoard, box: CanardBox): BezierBoard =>
+  withFins(b, withCanardBox(b.fins, box));
 
 /** Toggle whether port/starboard side-fin pairs are kept mirror-symmetric. */
 export const setFinSymmetrical = (b: BezierBoard, symmetrical: boolean): BezierBoard =>

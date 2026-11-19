@@ -3,23 +3,32 @@
  * fins themselves from the library (`FinChooser`: a set, or one fin at a time), and
  * place each one: distance from the tail, inset from the rail, toe-in. A fin's shape
  * and cant are its own, as OpenFinShaper designs it; on FCS the plugs add 5° or 9°
- * (front sides, and quad rears), the centre 0°. Box clearance problems are listed here
+ * (front sides, and quad rears), the centre 0°. A twinzer takes two boxes: its twins'
+ * system, and its canards' own (an FCS single plug; Futures' canard box is listed as
+ * coming soon until its dimensions are known). Box clearance problems are listed here
  * as they arise. Everything goes through the store (undoable).
  *
  * Length fields follow the editor's unit selector (`units`); angles are degrees.
  */
 import {
+  CANARD_BOXES,
+  CANARD_BOX_LABELS,
+  DEFAULT_CANARD_PLUG_CANT,
   FIN_SETUPS,
   FIN_SETUP_LABELS,
   FIN_SYSTEMS,
   FIN_SYSTEM_LABELS,
+  canardBoxAvailable,
   cavityProblems,
   finCavities,
   finGroups,
   finLabel,
   finSetOf,
+  type CanardBox,
+  type FinGroup,
   type FinSpec,
   type PlugCant,
+  type PlugCantGroup,
 } from '@openshaper/kernel';
 import type { BoardState } from '@openshaper/store';
 import { Button, Checkbox, Panel, PanelBody, PanelHeader, PanelTitle } from '@openshaper/ui';
@@ -32,6 +41,16 @@ import { Sel } from './view-toolkit';
 
 const sideLabel = (side: -1 | 0 | 1): string =>
   side === 0 ? 'Center' : side < 0 ? 'Port' : 'Starboard';
+
+/** "Port fin", or "Port canard" for a twinzer's front fins. */
+const finName = (side: -1 | 0 | 1, group: FinGroup | undefined): string =>
+  `${sideLabel(side)} ${group === 'canard' ? 'canard' : 'fin'}`;
+
+const CANARD_OPTIONS = CANARD_BOXES.map((b) => ({
+  value: b,
+  label: canardBoxAvailable(b) ? CANARD_BOX_LABELS[b] : `${CANARD_BOX_LABELS[b]} (coming soon)`,
+  disabled: !canardBoxAvailable(b),
+}));
 
 const PLUG_CANTS: { value: string; label: string }[] = [
   { value: '5', label: '5°' },
@@ -47,18 +66,20 @@ function FinInspector({
   units,
   index,
   spec,
+  group,
   onChange,
 }: {
   store: StoreApi<BoardState>;
   units: LengthUnit;
   index: number;
   spec: FinSpec;
+  group: FinGroup | undefined;
   onChange: () => void;
 }) {
   const patch = (p: Partial<FinSpec>) => store.getState().updateFin(index, p);
   return (
     <div className="space-y-1.5 rounded-md border border-border px-2 py-2 text-sm">
-      <div className="text-xs font-medium text-muted-foreground">{sideLabel(spec.side)} fin</div>
+      <div className="text-xs font-medium text-muted-foreground">{finName(spec.side, group)}</div>
       <div className="flex items-center gap-2">
         {spec.design && <FinThumb design={spec.design} className="h-8 w-10" />}
         <span className="flex-1">{finLabel(spec)}</span>
@@ -87,16 +108,22 @@ function FinInspector({
   );
 }
 
-/** FCS plugs come at 5° or 9°: the front sides', and a quad's or 5-fin's rears'. */
+/**
+ * FCS plugs come at 5° or 9°: the front sides', a quad's or 5-fin's rears', and a
+ * twinzer's canards' single plugs (9° unless set), whatever its twins' system.
+ */
 function PlugCants({ store }: { store: StoreApi<BoardState> }) {
   const cfg = useSyncExternalStore(store.subscribe, () => store.getState().board?.fins);
-  if (!cfg || (cfg.system !== 'fcs-ii' && cfg.system !== 'fcs-x2')) return null;
+  if (!cfg) return null;
   const groups = finGroups(cfg.setup);
-  const row = (which: 'front' | 'rear', label: string) => (
+  const fcs = cfg.system === 'fcs-ii' || cfg.system === 'fcs-x2';
+  const canards = groups.includes('canard') && (cfg.canardBox ?? 'fcs-single') === 'fcs-single';
+  if (!fcs && !canards) return null;
+  const row = (which: PlugCantGroup, label: string) => (
     <label className="flex items-center gap-2">
       <span className="flex-1 text-muted-foreground">{label}</span>
       <Sel
-        value={String(cfg.plugCant?.[which] ?? 5)}
+        value={String(cfg.plugCant?.[which] ?? (which === 'canard' ? DEFAULT_CANARD_PLUG_CANT : 5))}
         onChange={(v) => store.getState().setPlugCant(which, Number(v) as PlugCant)}
         options={PLUG_CANTS}
         title={label}
@@ -105,10 +132,15 @@ function PlugCants({ store }: { store: StoreApi<BoardState> }) {
   );
   return (
     <div className="space-y-1">
-      {groups.includes('side') &&
-        row('front', groups.includes('rear') ? 'Front plugs' : 'Side plugs')}
-      {groups.includes('rear') && row('rear', 'Rear plugs')}
-      {groups.includes('centre') && (
+      {canards && row('canard', 'Canard plugs')}
+      {fcs &&
+        groups.includes('side') &&
+        row(
+          'front',
+          groups.includes('rear') ? 'Front plugs' : groups.includes('canard') ? 'Twin plugs' : 'Side plugs', // prettier-ignore
+        )}
+      {fcs && groups.includes('rear') && row('rear', 'Rear plugs')}
+      {fcs && groups.includes('centre') && (
         <p className="text-xs text-muted-foreground">Centre plug 0°.</p>
       )}
     </div>
@@ -124,6 +156,16 @@ export function FinPanel({ store, units }: { store: StoreApi<BoardState>; units:
   if (!board) return null;
   const cfg = board.fins;
   const set = finSetOf(cfg);
+  const groups = finGroups(cfg.setup);
+  const twinzer = groups.includes('canard');
+  const systemSel = (
+    <Sel
+      value={cfg.system}
+      onChange={(s) => store.getState().setFinSystem(s)}
+      options={FIN_SYSTEMS.map((s) => ({ value: s, label: FIN_SYSTEM_LABELS[s] }))}
+      title={twinzer ? 'Twin fin box' : 'Fin system'}
+    />
+  );
 
   return (
     <Panel>
@@ -139,12 +181,25 @@ export function FinPanel({ store, units }: { store: StoreApi<BoardState>; units:
         />
         {cfg.setup !== 'none' && (
           <>
-            <Sel
-              value={cfg.system}
-              onChange={(s) => store.getState().setFinSystem(s)}
-              options={FIN_SYSTEMS.map((s) => ({ value: s, label: FIN_SYSTEM_LABELS[s] }))}
-              title="Fin system"
-            />
+            {twinzer ? (
+              <>
+                <label className="flex items-center gap-2">
+                  <span className="flex-1 text-muted-foreground">Twin box</span>
+                  {systemSel}
+                </label>
+                <label className="flex items-center gap-2">
+                  <span className="flex-1 text-muted-foreground">Canard box</span>
+                  <Sel
+                    value={cfg.canardBox ?? 'fcs-single'}
+                    onChange={(b: CanardBox) => store.getState().setCanardBox(b)}
+                    options={CANARD_OPTIONS}
+                    title="Canard box"
+                  />
+                </label>
+              </>
+            ) : (
+              systemSel
+            )}
             <PlugCants store={store} />
             <div className="flex items-center gap-2">
               <span className="flex-1">
@@ -173,7 +228,7 @@ export function FinPanel({ store, units }: { store: StoreApi<BoardState>; units:
                       ? 'bg-primary text-primary-foreground'
                       : 'border border-border text-muted-foreground'
                   }`}
-                  title={`${sideLabel(f.side)} fin: ${finLabel(f)}`}
+                  title={`${finName(f.side, groups[i])}: ${finLabel(f)}`}
                 >
                   {sideLabel(f.side)[0]}
                   {i + 1}
@@ -186,6 +241,7 @@ export function FinPanel({ store, units }: { store: StoreApi<BoardState>; units:
                 units={units}
                 index={selectedFin}
                 spec={cfg.fins[selectedFin]!}
+                group={groups[selectedFin]}
                 onChange={() => setChoosing('fin')}
               />
             )}
