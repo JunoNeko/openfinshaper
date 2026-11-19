@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { defaultFinDesign, sectionThickest, validateFinDesign, vec2 } from '@openshaper/kernel';
+import {
+  defaultFinDesign,
+  placeOnBase,
+  sectionThickest,
+  validateFinDesign,
+  vec2,
+} from '@openshaper/kernel';
 import { createFinStore } from '@openshaper/store';
 import { describe, expect, it } from 'vitest';
 import { dragGhost, ghostMarkers, makeGhost, moveGhost, GHOST_MOVE, GHOST_SCALE } from './ghost';
@@ -213,6 +219,16 @@ describe('a vector as the base foil', () => {
       expect(s.getState().importBaseFoil(f)).toEqual([]);
       expect(validateFinDesign(s.getState().design!)).toEqual([]);
     }
+  });
+
+  it('keeps the tab under it when the foil is stored at its true scale', () => {
+    // A quad rear on an FCS single plug, given the drawing as its profile too: the foil is
+    // far thinner than drawn, so it is rescaled, which moves the tab's range a hair.
+    const s = createFinStore();
+    s.getState().load(placeOnBase(defaultFinDesign('quad-rear', 'left'), 'fcs-single'));
+    expect(s.getState().importOutline(vectorOutline(parseSvg(TILTED), 'right'))).toEqual([]);
+    expect(s.getState().importBaseFoil(vectorFoil(parseSvg(TILTED), 'right', false))).toEqual([]);
+    expect(validateFinDesign(s.getState().design!)).toEqual([]);
   });
 });
 
