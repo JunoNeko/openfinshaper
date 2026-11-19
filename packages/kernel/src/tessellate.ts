@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { getLength, getMaxThickness, getMaxWidth, getWidthAtPos, type BezierBoard } from './board';
 import { boardChannels } from './channel-layout';
+import { channelRailExits } from './channels';
 import { triangulatePolygon } from './polygon';
 import {
   MIN_DIM,
@@ -156,8 +157,7 @@ export const tessellateBoard = (board: BezierBoard, opts: TessellateOptions = {}
   // Each entry: the vertex indices for one ring (a closed loop).
   const rings: number[][] = [];
 
-  for (let s = 0; s < lengthSteps; s++) {
-    const x = x0 + ((x1 - x0) * s) / (lengthSteps - 1);
+  for (const x of stationXs(board, x0, x1, lengthSteps)) {
     const ring = loftRing(board, x, ringSteps);
     if (!ring) continue;
     const idx = ring.map((v) => addVert(positions, v));
@@ -225,6 +225,40 @@ export const tessellateBoard = (board: BezierBoard, opts: TessellateOptions = {}
   else capEnd(rings[rings.length - 1]!, pointed1 ? length : x1, true);
 
   return finalizeMesh(positions, indices);
+};
+
+/** A feature this close to a station (share of the spacing) moves the station onto it. */
+const SNAP_SHARE = 0.25;
+
+/**
+ * Where the stations go: evenly from `x0` to `x1`, plus one on each feature the board
+ * has between them, where its surface turns sharply along its length:
+ *
+ * - each corner of the outline (a diamond tail's shoulders): between two even stations
+ *   the band cut straight across it, off the outline by millimetres;
+ * - where a channel starts or stops running out through the rail: the cut rail
+ *   stretched across the gap to the next station, webbing the corner (owner's diamond
+ *   tail, 2026-11).
+ *
+ * A feature near a station moves that station onto it, else it is added between two.
+ * A board with no features keeps its stations exactly.
+ */
+const stationXs = (board: BezierBoard, x0: number, x1: number, n: number): number[] => {
+  const xs = Array.from({ length: n }, (_, s) => x0 + ((x1 - x0) * s) / (n - 1));
+  const step = (x1 - x0) / (n - 1);
+  const inside = (x: number) => x > x0 + step * SNAP_SHARE && x < x1 - step * SNAP_SHARE;
+  const features = [
+    ...board.outline.knots.filter((k) => !k.continuous).map((k) => k.end.x),
+    ...channelRailExits(boardChannels(board), (x) => getWidthAtPos(board, x) / 2, x0, x1),
+  ].filter(inside);
+  if (features.length === 0) return xs;
+  const extra: number[] = [];
+  for (const f of features) {
+    const i = Math.round((f - x0) / step);
+    if (i > 0 && i < n - 1 && Math.abs(xs[i]! - f) <= step * SNAP_SHARE) xs[i] = f;
+    else extra.push(f);
+  }
+  return [...xs, ...extra].sort((a, b) => a - b).filter((x, i, all) => i === 0 || x - all[i - 1]! > 1e-6); // prettier-ignore
 };
 
 const emptyMesh = (): BoardMesh => ({
