@@ -11,6 +11,7 @@ import { defaultFinDesign, defaultKeel, defaultSingleFin, defaultTwinFin } from 
 import type { FinDesign } from './fin-design';
 import { fairness } from './fairness';
 import { finMesh, FIN_MESH_PREVIEW } from './fin-mesh';
+import { sliceMesh } from './mesh-slice';
 import {
   foilWarp,
   smoothBlade,
@@ -86,6 +87,40 @@ const FINS: [string, () => FinDesign][] = [
   ['steep tip line', () => ownerFin('steep_tip_line.fin.json')],
   ['swept-back tip', () => ownerFin('swept_back_tip.fin.json')],
 ];
+
+describe('the ends of the last row', () => {
+  // rmtest.json (owner testing): an upright cut 145 mm back from the leading-edge root
+  // runs into the corner where the last row meets the trailing edge carried round the
+  // tip. The row's closing and the foil's, multiplied, closed quadratically there: the
+  // face eased onto the minimum, a concave neck under the tip edge.
+  it('close into the corner, never easing onto the minimum', () => {
+    const d = ownerFin('raked_tip_corner.fin.json');
+    const mesh = finMesh(d, { rows: 120, stations: 64, tipGap: 0.01, arcTolerance: 0.001 }).blade;
+    // The analysis plane 145 mm back from the leading-edge root (87.81 mm forward).
+    const cut = sliceMesh(mesh, 'x', 8.781 - 14.5);
+    const thick = (z: number) => {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let i = 0; i < cut.length; i += 6) {
+        const a = cut[i + 2]!;
+        const b = cut[i + 5]!;
+        if ((a - z) * (b - z) > 0 || a === b) continue;
+        const y = cut[i + 1]! + ((cut[i + 4]! - cut[i + 1]!) * (z - a)) / (b - a);
+        lo = Math.min(lo, y);
+        hi = Math.max(hi, y);
+      }
+      return hi - lo;
+    };
+    let top = 0;
+    for (let i = 2; i < cut.length; i += 3) top = Math.max(top, cut[i]!);
+    // Thickness over the last 1.5 mm, 0.3 mm apart: it falls, and no slower toward the top.
+    const t = [5, 4, 3, 2, 1].map((k) => thick(top - 0.03 * k - 1e-6));
+    const steps = t.slice(1).map((v, k) => t[k]! - v);
+    for (const s of steps) expect(s).toBeGreaterThan(0);
+    // As it was, the steps shrank by 28% toward the top (0.097 → 0.070 mm); now they hold.
+    expect(steps[steps.length - 1]!).toBeGreaterThan(steps[0]! * 0.95);
+  });
+});
 
 describe('the smooth blade', () => {
   it.each(FINS)('passes the smoothness gate: %s', (_, make) => {
