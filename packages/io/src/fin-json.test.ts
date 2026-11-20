@@ -270,6 +270,15 @@ describe('.fin.json versions', () => {
     expect(() => readFinJson(JSON.stringify({ ...doc, minThickness: -1 }))).toThrow(/minimum/);
   });
 
+  it('keeps the fin’s tip rounding through a save, in mm', () => {
+    const base = defaultFinDesign('side', 'left');
+    const doc = JSON.parse(writeFinJson({ ...base, tipRound: 0.8 }));
+    expect(doc.tipRound).toBeCloseTo(8, 12);
+    expect(readFinJson(JSON.stringify(doc)).design.tipRound).toBeCloseTo(0.8, 12);
+    expect(JSON.parse(writeFinJson(base))).not.toHaveProperty('tipRound');
+    expect(() => readFinJson(JSON.stringify({ ...doc, tipRound: 0 }))).toThrow(/tip rounding/);
+  });
+
   it('keeps a moved tip line, the tip foil and the thickness path through a save', () => {
     const base = defaultFinDesign('side', 'left');
     const d = {

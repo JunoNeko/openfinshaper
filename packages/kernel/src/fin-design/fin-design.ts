@@ -75,6 +75,23 @@ export const FIN_MIN_THICKNESS = 0.05;
 /** A fin's own minimum thickness (cm), {@link FinDesign.minThickness}: 0.5 to 3 mm. */
 export const FIN_MIN_THICKNESS_LIMITS = { min: FIN_MIN_THICKNESS, max: 0.3 } as const;
 
+/**
+ * How far in from the tip edge the blade rounds over (cm) by default: 5 mm. The tip edge
+ * closes as a dome over it, at the middle and along the edges round the tip alike, the
+ * thickness curve setting the thickness where the rounding starts.
+ */
+export const FIN_TIP_ROUND = 0.5;
+
+/** {@link FinDesign.tipRound}'s range (cm): 1 to 20 mm. */
+export const FIN_TIP_ROUND_LIMITS = { min: 0.1, max: 2 } as const;
+
+/** How far in from the tip edge `d` rounds over (cm). */
+export const finTipRound = (d: FinDesign): number =>
+  Math.min(
+    FIN_TIP_ROUND_LIMITS.max,
+    Math.max(FIN_TIP_ROUND_LIMITS.min, d.tipRound ?? FIN_TIP_ROUND),
+  );
+
 /** The thinnest `d` may get anywhere (cm): its own minimum, or the default 0.5 mm. */
 export const finMinThickness = (d: FinDesign): number =>
   Math.max(FIN_MIN_THICKNESS, d.minThickness ?? FIN_MIN_THICKNESS);
@@ -258,4 +275,10 @@ export interface FinDesign {
    * {@link FIN_MIN_THICKNESS_LIMITS}.
    */
   readonly minThickness?: number;
+  /**
+   * How far in from the tip edge it rounds over (cm), if not the default
+   * {@link FIN_TIP_ROUND}: the tip closes as a dome over this, from any angle (owner
+   * request). {@link FIN_TIP_ROUND_LIMITS}.
+   */
+  readonly tipRound?: number;
 }

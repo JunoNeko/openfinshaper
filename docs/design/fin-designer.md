@@ -714,16 +714,35 @@ corrected to end on the tip foil's thickest point there. Beyond it the outline r
 tip is the rows' edges, so the tip thins as a nose does; only the last row needs closing
 (√(1 − t³), over the outer half of those rows).
 
-Where the last row meets the edges, two closings meet: the row's (its thickness curve and
-√(1 − t³)) and the foil's toward its edge. Multiplied, they closed quadratically, so the
-face eased onto the minimum: a concave neck under the tip edge (owner testing, an upright
-cut 145 mm back on a raked tip, `docs/specs/fins/raked_tip_corner.fin.json`). They are
-combined instead as 1/g = 1/f + 1/r − 1: g is the foil's f where the row doesn't close,
-the row's r at the foil's thickest, and the nearer of the two where both close, so the
-corner closes as a wedge like every edge. The row's closing is measured against how it
-would carry on thinning past the start of the closing (the same thickness and slope,
-falling exponentially), so nothing changes below that and the slope stays continuous
-there. Along the thickest line the tip is as before.
+**The tip rounds over** (owner testing, `docs/specs/fins/raked_tip_corner.fin.json`: "the
+tip should fill in ... from any angle"). The tip used to close twice: the thickness curve,
+and √(1 − t³) across the outer half of the rows past the tip line. Along the trailing side
+of the tip edge it closed as a foil's tail, a wedge. Where the last row met the edges the
+two closings multiplied and eased onto the minimum, a concave neck under the tip edge. Now,
+within a reach of the tip edge (`FinDesign.tipRound`, 5 mm by default, 1 to 20 mm, set in
+the thickness view), **measured by distance in the profile**, the blade goes over to a dome:
+a quarter ellipse, √(x(2 − x)), of the thickness where the rounding starts (x the distance
+from the edge as a share of the reach). It blends from the blade as it stands by
+1 − smootherstep(x): all dome at the edge, so it closes to the minimum whatever the curve
+does; none where the rounding starts, with no slope or curvature either, so no step, turn
+or change of curvature there. Rounding along rows and up the path separately left a waist
+where they met, and a dome matched to the blade's own slope there stayed close to a wedge;
+by distance, the tip is the same dome from any angle.
+
+- The thickness where it starts is read once, at 96 stations along the tip edge, the reach
+  in along its normal, never past halfway to the tip line, so the tip foil lies along it
+  as drawn.
+- Only rows past the tip line round, eased in from it, and the rounding fades in from each
+  end of the tip edge: every other edge keeps the minimum, the trailing edge below the tip
+  stays sharp.
+- The tip edge is the layout's own boundary past the tip line (its two sides and the last
+  row), so a point on it is exactly on it: the dome's √ would otherwise turn a micron's
+  miss into a visible thickening.
+- The rounding is shared by the faces as they stand off the chord line (o² : n²), so a flat
+  face stays flat and a symmetric foil symmetric.
+
+On the owner's fin, 2 mm below the top it is now 1.86 mm thick where it was 1.68 mm, and
+1 mm below, 1.62 mm where it was 1.23 mm.
 
 A control section's height is now its fraction of the way from the base to the tip line,
 and its fade ends by the tip line, so sections never disturb the tip foil. The fraction

@@ -14,7 +14,10 @@ import {
   twistAt,
   FIN_MIN_THICKNESS,
   FIN_MIN_THICKNESS_LIMITS,
+  FIN_TIP_ROUND,
+  FIN_TIP_ROUND_LIMITS,
   finMinThickness,
+  finTipRound,
   FIN_SLICE_MIN_GAP,
   FIN_THICKNESS_PATH_LIMITS,
   placeOnBase,
@@ -678,6 +681,20 @@ export const setMinThickness = (d: FinDesign, cm: number): FinDesign => {
   const { minThickness: _old, ...rest } = d;
   void _old;
   return { ...rest, taper, ...(to === FIN_MIN_THICKNESS ? {} : { minThickness: to }) };
+};
+
+/**
+ * How far in from the tip edge the tip rounds over (cm), within its limits, to 0.01 mm:
+ * left out of the design at the default (owner request: the tip fills in, from any angle).
+ */
+export const setTipRound = (d: FinDesign, cm: number): FinDesign => {
+  if (!Number.isFinite(cm)) return d;
+  const { min, max } = FIN_TIP_ROUND_LIMITS;
+  const to = Math.round(Math.min(max, Math.max(min, cm)) * 1e3) / 1e3;
+  if (to === finTipRound(d)) return d;
+  const { tipRound: _old, ...rest } = d;
+  void _old;
+  return { ...rest, ...(to === FIN_TIP_ROUND ? {} : { tipRound: to }) };
 };
 
 export const setPanelThickness = (d: FinDesign, thickness: number | null): FinDesign => {
