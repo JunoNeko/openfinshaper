@@ -13,7 +13,7 @@ import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
 import { FOIL_ANALYSIS_DEFAULT, type FoilAnalysis } from './foil-analysis';
 import { useState } from 'react';
-import { FinTaperPane, MinThicknessField } from './FinTaperPane';
+import { FinTaperPane, MinThicknessField, TipRoundField } from './FinTaperPane';
 import { finStore } from './fin-store';
 import { scaleBox } from './profile-scale';
 import type { Viewport } from '@openshaper/render2d';
@@ -259,6 +259,26 @@ describe('dragging in the panes', () => {
     fireEvent.keyDown(box, { key: 'Enter' });
     expect(design().minThickness).toBeCloseTo(0.3, 9);
     expect(box.value).toBe('3.00');
+  });
+
+  it('sets the tip rounding from the thickness view, in the current unit', () => {
+    // Owner request: the tip fills in to a dome from any angle; 5 mm in from the tip edge
+    // by default, saved only when set.
+    render(<TipRoundField store={finStore} units={lengthUnitByKey('mm')} />);
+    const box = screen.getByLabelText('Tip rounding') as HTMLInputElement;
+    expect(box.value).toBe('5.0');
+    expect(design().tipRound).toBeUndefined();
+    fireEvent.change(box, { target: { value: '8' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(design().tipRound).toBeCloseTo(0.8, 9);
+    expect(box.value).toBe('8.0');
+    // Past 20 mm: 20 mm. Back to 5: the default again, not saved.
+    fireEvent.change(box, { target: { value: '50' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(design().tipRound).toBeCloseTo(2, 9);
+    fireEvent.change(box, { target: { value: '5' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(design().tipRound).toBeUndefined();
   });
 
   it('drags the outside face of the foil', () => {

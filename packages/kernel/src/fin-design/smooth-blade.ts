@@ -39,11 +39,11 @@
  *   its height, as the curve is drawn; on a swept one, along the sweep.
  * - **The tip**: the tip line is a row, so the tip foil lies along it as drawn, at one
  *   thickness. Beyond it the rows shorten toward the middle of the tip edge, the outline
- *   round the tip being their edges, so the tip thins as a foil's nose does. The short
- *   last row closes to the minimum as √(1 − t³) over the outer half of those rows. At
- *   its ends, where it meets the edges, that closing and the foil's own are combined as
- *   the nearer one closing (1/g = 1/f + 1/r − 1), not multiplied: their product eased
- *   onto the minimum there, a concave neck under the tip edge.
+ *   round the tip being their edges. Within a reach of the tip edge (FinDesign.tipRound,
+ *   5 mm by default), by distance in the profile, the blade goes over to a dome, a
+ *   quarter ellipse of the thickness where the rounding starts: so the tip rounds over
+ *   the same from any angle, and closes to the minimum whatever the thickness curve does
+ *   (owner request: the tip "should fill in ... from any angle").
  * - **Minimum**: the foil scaled to the thickness less the minimum, then the minimum
  *   added all over (symmetric foils half each side): the edges and the tip edge end at it
  *   exactly, with no clamp.
@@ -80,6 +80,7 @@ import {
 } from './blade';
 import { DEG_TO_RAD } from '../constants';
 import {
+  finTipRound,
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
   type FinCantLine,
@@ -511,14 +512,6 @@ export const smoothBladeOf = (b: PreparedBlade): SmoothBlade => {
     return all > 0 ? parts.map(([i, w]) => [i, w * all]) : [];
   };
   const taperAt = (e: number) => yAtX(d.taper, Math.min(1, Math.max(0, e)));
-  // Past the tip line the edges thin the foil as a nose does; only the short last row
-  // needs closing to the minimum, over the outer half of the rows beyond the tip line.
-  const sClose = (sTip + 1) / 2;
-  const round = (s: number) => {
-    if (s <= sClose) return 1;
-    const t = Math.min(1, (s - sClose) / (1 - sClose));
-    return Math.sqrt(Math.max(0, 1 - t * t * t));
-  };
   const foil = (s: number, along: number): [number, number, number] => {
     let [o, n, share] = bare(s, along);
     for (const [k, w] of weights(s)) {
@@ -530,42 +523,167 @@ export const smoothBladeOf = (b: PreparedBlade): SmoothBlade => {
     return [o, n, share];
   };
   const etaAt = (s: number) => eta.at(s * SPINE_SAMPLES);
-  const thickest = (s: number) => Math.max(0, taperAt(etaAt(s)) - m);
-  const scale = (s: number) => thickest(s) * round(s);
-  /**
-   * The last row's closing r and the foil's own f (its thickness, as a fraction of the
-   * row's thickest), together: 1/g = 1/f + 1/r − 1. That is f where the row isn't closing
-   * (r = 1) and r at the foil's thickest (f = 1); where both close, at the ends of the last
-   * row, it closes as the nearer one, a wedge like every edge. As their product it closed
-   * quadratically there, easing onto the minimum: a concave neck under the tip edge (owner
-   * testing, rmtest.json: an upright cut 145 mm back).
-   */
-  const closing = (f: number, r: number): number => {
-    if (r >= 1) return 1;
-    if (!(f > 0 && r > 0)) return 0;
-    return r / (f + r - f * r);
+  /** The thickness curve less the minimum, η along the fin. */
+  const curve = (e: number) => Math.max(0, taperAt(e) - m);
+  // The tip rounds over (owner request: the tip should "fill in ... from any angle").
+  // Within `reach` of the tip edge, by distance in the profile, the blade goes over to a
+  // dome, a quarter ellipse √(x(2 − x)) of the thickness where the rounding starts (x, the
+  // distance from the edge as a share of the reach). Measured by distance, the tip is the
+  // same dome from any angle: the middle of the tip edge and its sides alike (rounding
+  // along rows and up the path apart left a waist where they met). The thickness where it
+  // starts is read once, at stations along the tip edge, the reach in along its normal,
+  // never past halfway to the tip line.
+  const tipRound = finTipRound(d);
+  /** A quarter ellipse: 0 at the edge, round there (√(2x)), 1 where the rounding starts. */
+  const dome = (x: number): number => {
+    const c = Math.min(1, Math.max(0, x));
+    return Math.sqrt(c * (2 - c));
   };
-  // Past sClose the row closes by its thickness curve and by round together. Both count as
-  // the row's closing, measured against how the row would carry on thinning had it not
-  // closed: from sClose, the same thickness and slope, falling exponentially (always above
-  // a dome, never zero), so the shape is unchanged up to sClose and its slope continuous
-  // there.
-  const t0 = thickest(sClose);
-  const ds = 1e-4;
-  const fall = t0 > 0 ? (thickest(sClose) - thickest(sClose - ds)) / ds / t0 : 0;
-  const carried = (s: number) => t0 * Math.exp(fall * (s - sClose));
-  /** How much of the foil's thickness, as a share of the row's thickest, row s keeps where the foil is `f` of it. */
-  const rowClosing = (s: number, f: number): number => {
-    if (s <= sClose || !(t0 > 0)) return thickest(s);
-    const c = carried(s);
-    return c * closing(f, (thickest(s) * round(s)) / c);
+  /** The blade before the tip rounds, less the minimum: the curve times the foil. */
+  const unrounded = (s: number, u: number): number => {
+    const [o, n] = foil(s, alongAt(s, u));
+    return curve(etaAt(s)) * (o - n);
   };
+  // The tip edge as the layout has it: up the leading side from the tip line, across the
+  // last row, down the trailing side. A point of it is (s, u) on the layout's boundary,
+  // so a blade point there is exactly on it (the dome's √ would make a hair of a miss show).
+  const EDGE_SAMPLES = 480;
+  const legs = 3;
+  const edgeParam = (t: number): { s: number; u: number } => {
+    const k = Math.min(legs - 1, Math.floor(t * legs));
+    const f = t * legs - k;
+    if (k === 0) return { s: sTip + (1 - sTip) * f, u: 0 };
+    if (k === 1) return { s: 1, u: f };
+    return { s: 1 - (1 - sTip) * f, u: 1 };
+  };
+  const edgeAt = (t: number): P2 => {
+    const q = edgeParam(t);
+    return point(q.s, q.u);
+  };
+  const edge = polyline(
+    Array.from({ length: EDGE_SAMPLES + 1 }, (_, i) => edgeAt(i / EDGE_SAMPLES)),
+  );
+  const edgeLength = edge.cum[edge.pts.length - 1]!;
+  const TIP_STATIONS = 96;
+  // Inward is toward where the tip line crosses the thickness path.
+  const inside = point(sTip, uAlong(sTip, pathAt(sTip)));
+  const stationValue = new Float64Array(TIP_STATIONS + 1);
+  const stationReach = new Float64Array(TIP_STATIONS + 1);
+  /** Distance (cm) from (x, z) to the tip line, straight from end to end. */
+  const toTipLine = (x: number, z: number): number => {
+    const a = map.tipStart;
+    const c = map.tipEnd;
+    const dx = c.x - a.x;
+    const dz = c.y - a.y;
+    const l2 = dx * dx + dz * dz;
+    const t = l2 > 0 ? Math.min(1, Math.max(0, ((x - a.x) * dx + (z - a.y) * dz) / l2)) : 0;
+    return Math.hypot(a.x + dx * t - x, a.y + dz * t - z);
+  };
+  if (edgeLength > 0 && tipRound > 0) {
+    let hint: { s: number; u: number } | null = null;
+    const at = (x: number, z: number) => {
+      const q = nearestOnMap(map, x, z, hint);
+      hint = q;
+      return q.miss < 0.01 ? unrounded(q.s, q.u) : 0;
+    };
+    for (let i = 0; i <= TIP_STATIONS; i++) {
+      const f = i / TIP_STATIONS;
+      const q = alongPath(edge, f);
+      const a = alongPath(edge, Math.max(0, f - 0.002));
+      const c = alongPath(edge, Math.min(1, f + 0.002));
+      let nx = -(c.y - a.y);
+      let nz = c.x - a.x;
+      const len = Math.hypot(nx, nz) || 1;
+      nx /= len;
+      nz /= len;
+      if (nx * (inside.x - q.x) + nz * (inside.y - q.y) < 0) {
+        nx = -nx;
+        nz = -nz;
+      }
+      // Never past halfway to the tip line, so the tip foil lies along it as drawn.
+      const reach = Math.min(tipRound, 0.5 * toTipLine(q.x, q.y));
+      stationReach[i] = reach;
+      if (!(reach > 1e-4)) {
+        stationValue[i] = 0;
+        continue;
+      }
+      stationValue[i] = at(q.x + nx * reach, q.y + nz * reach);
+    }
+  }
+  const valueAt = spline1(stationValue);
+  const reachAt = spline1(stationReach);
+  /** The rounding fades in over this (cm) from each end of the tip edge. */
+  const TIP_FADE = Math.max(1e-6, Math.min(2 * tipRound, 0.3 * edgeLength));
+  /** The nearest point of the tip edge to (x, z): how far (cm), and where along it (0 → 1). */
+  const toTipEdge = (x: number, z: number): { dist: number; f: number } => {
+    const pts = edge.pts;
+    let best = Infinity;
+    let k = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const dd = (pts[i]!.x - x) ** 2 + (pts[i]!.y - z) ** 2;
+      if (dd < best) [best, k] = [dd, i];
+    }
+    // On the curve itself, between the samples either side.
+    let lo = Math.max(0, k - 1) / EDGE_SAMPLES;
+    let hi = Math.min(EDGE_SAMPLES, k + 1) / EDGE_SAMPLES;
+    const gap = (t: number) => {
+      const q = edgeAt(t);
+      return (q.x - x) ** 2 + (q.y - z) ** 2;
+    };
+    for (let it = 0; it < 40; it++) {
+      const a1 = lo + (hi - lo) / 3;
+      const a2 = hi - (hi - lo) / 3;
+      if (gap(a1) < gap(a2)) hi = a2;
+      else lo = a1;
+    }
+    const t = (lo + hi) / 2;
+    const at = edgeAt(t);
+    // Along the edge by length, as the stations are spaced.
+    const i = Math.min(EDGE_SAMPLES - 1, Math.floor(t * EDGE_SAMPLES));
+    const frac = t * EDGE_SAMPLES - i;
+    const f = (edge.cum[i]! + frac * (edge.cum[i + 1]! - edge.cum[i]!)) / (edgeLength || 1);
+    return { dist: Math.sqrt(Math.min(best, (at.x - x) ** 2 + (at.y - z) ** 2)), f };
+  };
+  /** The blade's thickness less the minimum at (s, u), the tip rounded over. */
+  const thicknessAt = (s: number, u: number, plain: number): number => {
+    // Only rows past the tip line, eased in from it: their ends are the tip edge, where the
+    // dome closes to the minimum, so every other edge keeps it, and the tip foil lies
+    // along the tip line as drawn.
+    if (!(tipRound > 0 && edgeLength > 0) || s <= sTip) return plain;
+    const w = smootherstep((s - sTip) / (0.5 * (1 - sTip)));
+    const p = point(s, u);
+    const near = toTipEdge(p.x, p.y);
+    // On the layout's boundary past the tip line: on the tip edge, exactly.
+    const dist = u <= 0 || u >= 1 || s >= 1 ? 0 : near.dist;
+    const f = near.f;
+    if (dist >= tipRound) return plain;
+    const k = f * TIP_STATIONS;
+    const reach = reachAt.at(k);
+    if (!(reach > 1e-4) || dist >= reach) return plain;
+    // From the blade as it stands to the dome, by 1 − smootherstep(x): all dome at the
+    // edge, so it closes to the minimum whatever the thickness curve does; none where the
+    // rounding starts, with no slope or curvature either, so no step, turn or change of
+    // curvature there, however the stations fall.
+    const x = dist / reach;
+    const toDome = 1 - smootherstep(x);
+    const rounded = valueAt.at(k) * dome(x);
+    // Faded in from each end of the tip edge, where the reach closes to nothing at the tip line.
+    const fadeIn = smootherstep((Math.min(f, 1 - f) * edgeLength) / TIP_FADE);
+    return Math.max(0, plain + (rounded - plain) * toDome * w * fadeIn);
+  };
+  const scale = (s: number): number => thicknessAt(s, uAlong(s, pathAt(s)), curve(etaAt(s)));
   const offsets = (s: number, u: number): [number, number] => {
     const [o, n, share] = foil(s, alongAt(s, u));
-    // g / f: how much of the foil's thickness the row keeps here.
-    const k = rowClosing(s, o - n);
-    let out = o * k + m * share;
-    let ins = n * k - m * (1 - share);
+    const row = curve(etaAt(s));
+    const plain = row * (o - n);
+    // What rounding the tip adds, shared by the faces as they stand off the chord line
+    // (o² : n²), so a flat face stays flat and a symmetric foil stays symmetric.
+    const more = thicknessAt(s, u, plain) - plain;
+    const o2 = o * o;
+    const n2 = n * n;
+    const outShare = o2 + n2 > 0 ? o2 / (o2 + n2) : 0.5;
+    let out = o * row + more * outShare + m * share;
+    let ins = n * row - more * (1 - outShare) - m * (1 - share);
     const { outside: lamOut, inside: lamIn } = b.laminate;
     const lam = lamOut + lamIn;
     if (lam > 0) {

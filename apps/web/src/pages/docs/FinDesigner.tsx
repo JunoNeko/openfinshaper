@@ -13,6 +13,8 @@ import {
   FIN_EXPORT_MIN_THICKNESS,
   FIN_MIN_THICKNESS,
   FIN_MIN_THICKNESS_LIMITS,
+  FIN_TIP_ROUND,
+  FIN_TIP_ROUND_LIMITS,
   FUTURES_TABS,
   rearClearance,
 } from '@openshaper/kernel';
@@ -514,6 +516,17 @@ export default function DocsFinDesigner() {
             tip, say — reshapes the blade only near that edge, rather than creasing it right across.
             Never under {mm(FIN_MIN_THICKNESS)}, enough edge for CAD to read the surface as closed.
             Exports can thicken it further (see <a href="#export">Export min</a>).
+          </Term>
+          <Term name="Tip rounding">
+            The tip edge rounds over like a foil&apos;s nose: within this distance of it (
+            {mm(FIN_TIP_ROUND)} by default, {mm(FIN_TIP_ROUND_LIMITS.min)} to{' '}
+            {mm(FIN_TIP_ROUND_LIMITS.max)}), the blade goes over to a dome, full until near the edge
+            and closing round onto the minimum. It is measured by distance from the tip edge, so the
+            tip is the same dome from any angle, across its middle and down its sides alike. The
+            thickness curve sets the thickness where the rounding starts; the rounding never reaches
+            more than halfway to the tip line, so the tip foil lies along the tip line as drawn, and
+            the trailing edge below the tip stays sharp. Set it in the thickness view&apos;s{' '}
+            <strong>Tip rounding</strong> box: larger for a fuller tip. It is saved with the fin.
           </Term>
           <Term name="One clean shape">
             The edges keep rising to a single tip, and the foil&apos;s faces never cross.

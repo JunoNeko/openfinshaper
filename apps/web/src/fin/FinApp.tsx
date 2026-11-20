@@ -75,7 +75,7 @@ import { FacingDialog, VECTOR_ACCEPT, readVectorFile } from './VectorImport';
 import type { Ghost } from './ghost';
 import { vectorFoil, vectorOutline, type VectorFacing, type VectorPath } from './vector-import';
 import { FOIL_ANALYSIS_DEFAULT, type FoilAnalysis } from './foil-analysis';
-import { FinTaperPane, MinThicknessField } from './FinTaperPane';
+import { FinTaperPane, MinThicknessField, TipRoundField } from './FinTaperPane';
 import { FitToPanel } from './panel-tools';
 import { PointTools } from './PointTools';
 import {
@@ -730,6 +730,7 @@ function TaperTools({ units }: { units: LengthUnit }) {
         onCommit={(cm) => finStore.getState().setRootThickness(cm)}
       />
       <MinThicknessField store={finStore} units={units} />
+      <TipRoundField store={finStore} units={units} />
       <PointTools store={finStore} />
     </>
   );

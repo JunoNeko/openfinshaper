@@ -74,6 +74,7 @@ import {
   setPanelAngle,
   setPanelThickness,
   setMinThickness,
+  setTipRound,
   setPanelTilt,
   smoothKnot,
   spanMidpoint,
@@ -174,6 +175,8 @@ export interface FinState {
   setToe: (deg: number) => boolean;
   /** The thinnest the blade may get (cm), the taper following (fin-edits setMinThickness). */
   setMinThickness: (cm: number) => boolean;
+  /** How far in from the tip edge the tip rounds over (cm) (fin-edits setTipRound). */
+  setTipRound: (cm: number) => boolean;
   /** The panel the fin is cut from (cm), or null for none (panel-fit.ts). */
   setPanelThickness: (thickness: number | null) => boolean;
   /** Turn the fin in its panel (deg). */
@@ -600,6 +603,11 @@ export const createFinStore = (): StoreApi<FinState> =>
         const d = get().design;
         const next = d && setMinThickness(d, cm);
         return !!d && !!next && next !== d && commitChecked(next, 'Set minimum thickness');
+      },
+      setTipRound: (cm) => {
+        const d = get().design;
+        const next = d && setTipRound(d, cm);
+        return !!d && !!next && next !== d && commitChecked(next, 'Set tip rounding');
       },
       setPanelThickness: (thickness) => {
         const d = get().design;
