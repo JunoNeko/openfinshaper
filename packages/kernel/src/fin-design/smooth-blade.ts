@@ -40,7 +40,10 @@
  * - **The tip**: the tip line is a row, so the tip foil lies along it as drawn, at one
  *   thickness. Beyond it the rows shorten toward the middle of the tip edge, the outline
  *   round the tip being their edges, so the tip thins as a foil's nose does. The short
- *   last row closes to the minimum as √(1 − t³) over the outer half of those rows.
+ *   last row closes to the minimum as √(1 − t³) over the outer half of those rows. At
+ *   its ends, where it meets the edges, that closing and the foil's own are combined as
+ *   the nearer one closing (1/g = 1/f + 1/r − 1), not multiplied: their product eased
+ *   onto the minimum there, a concave neck under the tip edge.
  * - **Minimum**: the foil scaled to the thickness less the minimum, then the minimum
  *   added all over (symmetric foils half each side): the edges and the tip edge end at it
  *   exactly, with no clamp.
@@ -527,10 +530,40 @@ export const smoothBladeOf = (b: PreparedBlade): SmoothBlade => {
     return [o, n, share];
   };
   const etaAt = (s: number) => eta.at(s * SPINE_SAMPLES);
-  const scale = (s: number) => Math.max(0, taperAt(etaAt(s)) - m) * round(s);
+  const thickest = (s: number) => Math.max(0, taperAt(etaAt(s)) - m);
+  const scale = (s: number) => thickest(s) * round(s);
+  /**
+   * The last row's closing r and the foil's own f (its thickness, as a fraction of the
+   * row's thickest), together: 1/g = 1/f + 1/r − 1. That is f where the row isn't closing
+   * (r = 1) and r at the foil's thickest (f = 1); where both close, at the ends of the last
+   * row, it closes as the nearer one, a wedge like every edge. As their product it closed
+   * quadratically there, easing onto the minimum: a concave neck under the tip edge (owner
+   * testing, rmtest.json: an upright cut 145 mm back).
+   */
+  const closing = (f: number, r: number): number => {
+    if (r >= 1) return 1;
+    if (!(f > 0 && r > 0)) return 0;
+    return r / (f + r - f * r);
+  };
+  // Past sClose the row closes by its thickness curve and by round together. Both count as
+  // the row's closing, measured against how the row would carry on thinning had it not
+  // closed: from sClose, the same thickness and slope, falling exponentially (always above
+  // a dome, never zero), so the shape is unchanged up to sClose and its slope continuous
+  // there.
+  const t0 = thickest(sClose);
+  const ds = 1e-4;
+  const fall = t0 > 0 ? (thickest(sClose) - thickest(sClose - ds)) / ds / t0 : 0;
+  const carried = (s: number) => t0 * Math.exp(fall * (s - sClose));
+  /** How much of the foil's thickness, as a share of the row's thickest, row s keeps where the foil is `f` of it. */
+  const rowClosing = (s: number, f: number): number => {
+    if (s <= sClose || !(t0 > 0)) return thickest(s);
+    const c = carried(s);
+    return c * closing(f, (thickest(s) * round(s)) / c);
+  };
   const offsets = (s: number, u: number): [number, number] => {
     const [o, n, share] = foil(s, alongAt(s, u));
-    const k = scale(s);
+    // g / f: how much of the foil's thickness the row keeps here.
+    const k = rowClosing(s, o - n);
     let out = o * k + m * share;
     let ins = n * k - m * (1 - share);
     const { outside: lamOut, inside: lamIn } = b.laminate;

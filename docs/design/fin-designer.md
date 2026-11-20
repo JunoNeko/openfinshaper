@@ -714,6 +714,17 @@ corrected to end on the tip foil's thickest point there. Beyond it the outline r
 tip is the rows' edges, so the tip thins as a nose does; only the last row needs closing
 (√(1 − t³), over the outer half of those rows).
 
+Where the last row meets the edges, two closings meet: the row's (its thickness curve and
+√(1 − t³)) and the foil's toward its edge. Multiplied, they closed quadratically, so the
+face eased onto the minimum: a concave neck under the tip edge (owner testing, an upright
+cut 145 mm back on a raked tip, `docs/specs/fins/raked_tip_corner.fin.json`). They are
+combined instead as 1/g = 1/f + 1/r − 1: g is the foil's f where the row doesn't close,
+the row's r at the foil's thickest, and the nearer of the two where both close, so the
+corner closes as a wedge like every edge. The row's closing is measured against how it
+would carry on thinning past the start of the closing (the same thickness and slope,
+falling exponentially), so nothing changes below that and the slope stays continuous
+there. Along the thickest line the tip is as before.
+
 A control section's height is now its fraction of the way from the base to the tip line,
 and its fade ends by the tip line, so sections never disturb the tip foil. The fraction
 along each row is smoothed up the fin (8 binomial passes, the tip and base rows held): it

@@ -331,7 +331,8 @@ export const bladeEdges = (b: PreparedBlade): BladeEdges => {
   const trailing = new Float64Array(n + 1);
   const travel = new Float64Array(n + 1);
   for (let i = 0; i <= n; i++) {
-    const h = (b.depth * i) / n;
+    // The top exactly: depth · n / n can round a hair above it (13.969999999999999 → 13.97).
+    const h = i === n ? b.depth : (b.depth * i) / n;
     const c = chordAt(b, h);
     heights[i] = h;
     leading[i] = c.leading;

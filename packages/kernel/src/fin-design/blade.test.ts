@@ -6,6 +6,7 @@ import { knot } from '../knot';
 import { lerp, vec2, type Vec2 } from '../vec2';
 import {
   bladeSection,
+  bladeTravel,
   chordAt,
   cosineStations,
   rootThickestFaces,
@@ -97,6 +98,17 @@ describe('chordAt', () => {
   it('refuses heights off the blade', () => {
     expect(() => chordAt(tri, -0.01)).toThrow(RangeError);
     expect(() => chordAt(tri, 6.01)).toThrow(RangeError);
+  });
+
+  it('samples the edges up to the tip exactly, where depth · n / n rounds above it', () => {
+    // rmtest.json (owner testing): STEP export threw "height 13.97 is outside 0–13.969999999999999".
+    const depth = 13.969999999999999;
+    const b = prepareBlade({
+      ...defaultFinDesign('side'),
+      outline: polyline([vec2(10, 0), vec2(4, depth), vec2(0, 0)]),
+    });
+    expect(b.depth).toBe(depth);
+    expect(() => bladeTravel(b, depth)).not.toThrow();
   });
 
   it.each(FIN_POSITIONS)('matches the root chord of the default %s', (position) => {
