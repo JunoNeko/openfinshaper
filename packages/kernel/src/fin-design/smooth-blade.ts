@@ -38,12 +38,12 @@
  *   point is, η(s), the thickness path's length from the base: on an upright fin about
  *   its height, as the curve is drawn; on a swept one, along the sweep.
  * - **The tip**: the tip line is a row, so the tip foil lies along it as drawn, at one
- *   thickness. Beyond it the rows shorten toward the middle of the tip edge, the outline
- *   round the tip being their edges. Within a reach of the tip edge (FinDesign.tipRound,
- *   5 mm by default), by distance in the profile, the blade goes over to a dome, a
- *   quarter ellipse of the thickness where the rounding starts: so the tip rounds over
- *   the same from any angle, and closes to the minimum whatever the thickness curve does
- *   (owner request: the tip "should fill in ... from any angle").
+ *   thickness. Beyond it (owner proposal) the thickness path carries on along its own
+ *   curve, the direction and bend it arrives with, until it meets the outline: the tip
+ *   point. The rows close up to it (the last row a sliver about it), the outline round the
+ *   tip being their edges, so each is the tip foil shrinking as it nears the point, its
+ *   thickest on the path, as thick as the thickness curve says there. Nothing else shapes
+ *   the tip: a curve that ends thick ends blunt. Moving the tip line steers the tip point.
  * - **Minimum**: the foil scaled to the thickness less the minimum, then the minimum
  *   added all over (symmetric foils half each side): the edges and the tip edge end at it
  *   exactly, with no clamp.
@@ -60,7 +60,7 @@
  * bend runs level, along the flow (blade.ts twistAt).
  */
 import type { Vert3 } from '../loft';
-import { yAtX } from './curve-shape';
+import { splineExtremes, yAtX } from './curve-shape';
 import {
   cosineStations,
   cantLineReach,
@@ -80,14 +80,21 @@ import {
 } from './blade';
 import { DEG_TO_RAD } from '../constants';
 import {
-  finTipRound,
   FIN_MIN_THICKNESS,
   FIN_SLICE_MIN_GAP,
   type FinCantLine,
   type FinDesign,
   type FinSection,
 } from './fin-design';
-import { spline1, spline2, winslowGrid, type P2, type Sides, type Spline2 } from './smooth-map';
+import {
+  spline1,
+  spline2,
+  winslowGrid,
+  type P2,
+  type Sides,
+  type Spline1,
+  type Spline2,
+} from './smooth-map';
 import { findRaisedRear } from './raised-rear';
 import { sweepFrame, thicknessPathAt } from './swept-loft';
 
@@ -156,6 +163,16 @@ export interface SmoothMap {
   readonly tipEnd: P2;
   /** The row (s) that is the tip line, straight from end to end. */
   readonly sTip: number;
+  /**
+   * Where the thickness path, carried on past the tip line along its own curve, meets the
+   * outline: the rows past the tip line close up to it (owner proposal).
+   */
+  readonly tipPoint: P2;
+  /**
+   * Past the tip line, the thickness path's fraction along each row, s from the tip line
+   * (0) to the tip point (1), read through a C² spline over PAST_ROWS samples.
+   */
+  readonly pastPath: Spline1;
 }
 
 /** Passes of smoothing up the fin over the fraction-along table; rows a correction eases over. */
@@ -164,8 +181,18 @@ const ALONG_EASE = 8;
 /** Rows above the base a raised rear's fin eases that smoothing in over. */
 const ALONG_BASE = 16;
 
-/** How much of the tip edge, about its middle, the last row is: the rows close up to it. */
-const TIP_TOP = 0.1;
+/**
+ * How much of the tip edge the last row is, about the tip point: the rows past the tip
+ * line close up to it, a sliver where the extended thickness path meets the outline.
+ */
+const TIP_TOP = 0.02;
+
+/** Rows past the tip line the thickness path's fraction along them is sampled at. */
+const PAST_ROWS = 48;
+
+/** Steps (cm) the extended thickness path is traced in, and at most how far (cm). */
+const ARC_STEP = 0.01;
+const ARC_MAX = 100;
 
 /** A polyline through `pts`, with its running length. */
 const polyline = (pts: readonly P2[]): Polyline => {
@@ -186,21 +213,80 @@ const stretch = (p: Polyline, a: number, b: number): P2[] => {
   return a <= b ? pts : pts.reverse();
 };
 
-const mapCache = new WeakMap<object, Map<string, SmoothMap>>();
+/**
+ * A side of the layout, `edge` read at `warp(t)` of its length, with the node nearest each
+ * of the outline's outermost points (rearmost, foremost, highest) on it moved onto that
+ * point: the layout is read through splines over its nodes, which cut a sharp point (a
+ * hook's tip) between two of them by up to a few tenths of a millimetre. Moved by a
+ * smooth bump at most half a node's spacing across three nodes either side, so the nodes
+ * stay in order; never near row `keep` (the tip line), whose end is on the outline already.
+ */
+const pinned = (
+  edge: Polyline,
+  warp: (t: number) => number,
+  d: FinDesign,
+  rows: number,
+  keep: number,
+): ((t: number) => P2) => {
+  const n = edge.pts.length - 1;
+  const total = edge.cum[n]! || 1;
+  const pins: { at: number; by: number }[] = [];
+  const reach = 3 / rows;
+  for (const e of [
+    splineExtremes(d.outline, 'x').min.point,
+    splineExtremes(d.outline, 'x').max.point,
+    splineExtremes(d.outline, 'y').max.point,
+  ]) {
+    // How far along the side the point is, if it is on it.
+    let best = Infinity;
+    let along = 0;
+    for (let i = 1; i <= n; i++) {
+      const a = edge.pts[i - 1]!;
+      const b = edge.pts[i]!;
+      const dx = b.x - a.x;
+      const dz = b.y - a.y;
+      const l2 = dx * dx + dz * dz;
+      const t = l2 > 0 ? Math.min(1, Math.max(0, ((e.x - a.x) * dx + (e.y - a.y) * dz) / l2)) : 0;
+      const dd = (a.x + dx * t - e.x) ** 2 + (a.y + dz * t - e.y) ** 2;
+      if (dd < best)
+        [best, along] = [dd, (edge.cum[i - 1]! + t * (edge.cum[i]! - edge.cum[i - 1]!)) / total];
+    }
+    if (best > 1e-8 || along <= 0.02 || along >= 0.98) continue;
+    // The t that reads it, and the node nearest that.
+    let lo = 0;
+    let hi = 1;
+    for (let k = 0; k < 60; k++) {
+      const mid = (lo + hi) / 2;
+      if (warp(mid) < along) lo = mid;
+      else hi = mid;
+    }
+    const t = (lo + hi) / 2;
+    const node = Math.round(t * rows) / rows;
+    // Not where it would move the tip line's end, which is on the outline already.
+    if (node > 0 && node < 1 && Math.abs(node - keep) >= reach)
+      pins.push({ at: node, by: t - node });
+  }
+  const shift = (t: number) => {
+    let v = t;
+    for (const p of pins) {
+      const x = (t - p.at) / reach;
+      if (Math.abs(x) < 1) v += p.by * (1 - x * x) ** 3;
+    }
+    return Math.min(1, Math.max(0, v));
+  };
+  return (t) => alongPath(edge, warp(shift(t)));
+};
 
-/** The design's layout, cached per outline and tip line (the elliptic solve is the cost). */
-export const smoothMap = (d: FinDesign): SmoothMap => {
-  const key = d.tipLine ? `${d.tipLine.start},${d.tipLine.end}` : 'default';
-  let byLine = mapCache.get(d.outline);
-  if (!byLine) mapCache.set(d.outline, (byLine = new Map()));
-  const hit = byLine.get(key);
-  if (hit) return hit;
-  const f = sweepFrame(d);
+/** A layout without the path past the tip line: the rows close up about `q` of the tip edge. */
+type Layout = Omit<SmoothMap, 'tipPoint' | 'pastPath'>;
+
+const layoutAbout = (d: FinDesign, f: ReturnType<typeof sweepFrame>, q: number): Layout => {
   const { rows, cols } = SMOOTH_MAP;
-  // Each edge runs on past the tip line round the tip, up to the short last row.
-  const half = (1 - TIP_TOP) / 2;
-  const left = polyline([...f.leading.pts, ...stretch(f.tipEdge, 0, half).slice(1)]);
-  const right = polyline([...f.trailing.pts, ...stretch(f.tipEdge, 1, 1 - half).slice(1)]);
+  // Each edge runs on past the tip line round the tip, up to the short last row about q.
+  const lo = Math.max(1e-3, q - TIP_TOP / 2);
+  const hi = Math.min(1 - 1e-3, q + TIP_TOP / 2);
+  const left = polyline([...f.leading.pts, ...stretch(f.tipEdge, 0, lo).slice(1)]);
+  const right = polyline([...f.trailing.pts, ...stretch(f.tipEdge, 1, hi).slice(1)]);
   const fraction = (edge: Polyline, part: Polyline) =>
     part.cum[part.pts.length - 1]! / (edge.cum[edge.pts.length - 1]! || 1);
   const fL = fraction(left, f.leading);
@@ -211,9 +297,9 @@ export const smoothMap = (d: FinDesign): SmoothMap => {
   const sTip = tipRow / rows;
   const sides: Sides = {
     bottom: (t) => acrossBase(f.base, t),
-    top: (t) => alongPath(f.tipEdge, half + TIP_TOP * t),
-    left: (t) => alongPath(left, foilWarp(t, sTip, fL)),
-    right: (t) => alongPath(right, foilWarp(t, sTip, fR)),
+    top: (t) => alongPath(f.tipEdge, lo + (hi - lo) * t),
+    left: pinned(left, (t) => foilWarp(t, sTip, fL), d, rows, sTip),
+    right: pinned(right, (t) => foilWarp(t, sTip, fR), d, rows, sTip),
   };
   const g = winslowGrid(sides, rows, cols);
   // The tip line's row made exactly straight: its points moved square to where they lie by
@@ -295,7 +381,7 @@ export const smoothMap = (d: FinDesign): SmoothMap => {
       }
     }
   }
-  const m = {
+  return {
     x,
     z,
     along: spline2(along, rows, cols),
@@ -303,8 +389,208 @@ export const smoothMap = (d: FinDesign): SmoothMap => {
     tipEnd: f.tipEnd,
     sTip,
   };
-  byLine.set(key, m);
-  return m;
+};
+
+const layoutPoint = (m: Layout, s: number, u: number): P2 => ({
+  x: m.x.at(s * SMOOTH_MAP.rows, u * SMOOTH_MAP.cols),
+  y: m.z.at(s * SMOOTH_MAP.rows, u * SMOOTH_MAP.cols),
+});
+
+const layoutAlong = (m: Layout, s: number, u: number): number =>
+  Math.min(1, Math.max(0, m.along.at(s * SMOOTH_MAP.rows, u * SMOOTH_MAP.cols)));
+
+/** The u on row s whose fraction along it is `f`. */
+const layoutU = (m: Layout, s: number, f: number): number => {
+  let lo = 0;
+  let hi = 1;
+  for (let k = 0; k < 50; k++) {
+    const mid = (lo + hi) / 2;
+    if (layoutAlong(m, s, mid) < f) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+};
+
+/**
+ * The thickness path up to the tip line: its fraction along row s (the design's base,
+ * middle and tip line values, the quadratic through them), ending exactly on the tip
+ * foil's thickest point at the tip line, so the tip foil lies along it as drawn.
+ */
+const pathToTipLine = (d: FinDesign, sTip: number): ((s: number) => number) => {
+  const way = thicknessPathOf(d);
+  const end = way[2] - thicknessPathAt(way, sTip);
+  return (s) => thicknessPathAt(way, s) + end * smootherstep(s / sTip);
+};
+
+/** Where segment a→b crosses segment c→e: the fraction along c→e, or null. */
+const crossAt = (a: P2, b: P2, c: P2, e: P2): number | null => {
+  const rx = b.x - a.x;
+  const ry = b.y - a.y;
+  const sx = e.x - c.x;
+  const sy = e.y - c.y;
+  const den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-15) return null;
+  const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+  const u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? u : null;
+};
+
+/**
+ * The thickness path carried on past the tip line along its own curve (owner proposal:
+ * the same direction and bend it arrives with), traced until it meets the tip edge: its
+ * points from the tip line on, and how far along the tip edge (0 → 1) it meets it. A path
+ * that never meets it (curling away) is carried on straight; failing that, the middle.
+ */
+const pathPast = (
+  d: FinDesign,
+  f: ReturnType<typeof sweepFrame>,
+  m: Layout,
+): { pts: P2[]; q: number } => {
+  const at = pathToTipLine(d, m.sTip);
+  const spine = (s: number) => layoutPoint(m, s, layoutU(m, s, at(s)));
+  const h = 0.02;
+  const p1 = spine(m.sTip - 2 * h);
+  const p2 = spine(m.sTip - h);
+  const p3 = spine(m.sTip);
+  const l1 = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1e-9;
+  const l2 = Math.hypot(p3.x - p2.x, p3.y - p2.y) || 1e-9;
+  const a1 = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+  let turn = Math.atan2(p3.y - p2.y, p3.x - p2.x) - a1;
+  turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+  const bend = turn / ((l1 + l2) / 2);
+  const edge = f.tipEdge;
+  const n = edge.pts.length - 1;
+  const total = edge.cum[n]! || 1;
+  const trace = (k: number): { pts: P2[]; q: number } | null => {
+    let dir = Math.atan2(p3.y - p2.y, p3.x - p2.x) + (k * l2) / 2;
+    const pts: P2[] = [p3];
+    let p = p3;
+    for (let step = 0; step * ARC_STEP < ARC_MAX; step++) {
+      dir += k * ARC_STEP;
+      const next = { x: p.x + Math.cos(dir) * ARC_STEP, y: p.y + Math.sin(dir) * ARC_STEP };
+      for (let i = 1; i <= n; i++) {
+        const u = crossAt(edge.pts[i - 1]!, edge.pts[i]!, p, next);
+        if (u === null) continue;
+        const hit = { x: p.x + (next.x - p.x) * u, y: p.y + (next.y - p.y) * u };
+        const a = edge.pts[i - 1]!;
+        const along = edge.cum[i - 1]! + Math.hypot(hit.x - a.x, hit.y - a.y);
+        pts.push(hit);
+        return { pts, q: along / total };
+      }
+      pts.push(next);
+      p = next;
+    }
+    return null;
+  };
+  const found = trace(bend) ?? trace(0);
+  if (found) return found;
+  const mid = alongPath(edge, 0.5);
+  return { pts: [p3, mid], q: 0.5 };
+};
+
+/** Steps of the tip edge the tip point is held to for the layout (its rows' closing up). */
+const TIP_POINT_STEPS = 400;
+
+/** Layouts kept per outline and tip line: where the path is found, and a few closing up. */
+interface Layouts {
+  readonly frame: ReturnType<typeof sweepFrame>;
+  readonly first: Layout;
+  readonly about: Map<number, Layout>;
+  readonly maps: Map<string, SmoothMap>;
+}
+
+const layoutCache = new WeakMap<object, Map<string, Layouts>>();
+
+/** Keep a map to its last `n` entries. */
+const bounded = <K, V>(m: Map<K, V>, k: K, v: V, n: number): V => {
+  m.delete(k);
+  m.set(k, v);
+  while (m.size > n) m.delete(m.keys().next().value as K);
+  return v;
+};
+
+/**
+ * The design's layout. The elliptic solves are the cost, so they are kept: one per
+ * outline and tip line, closing up about the tip edge's middle, which the thickness path
+ * is traced on to find where it meets the outline; and the one closing up there, kept by
+ * that point held to 1/400 of the tip edge, so editing a foil rarely solves again. The
+ * path past the tip line is traced afresh for each design (it is cheap).
+ */
+export const smoothMap = (d: FinDesign): SmoothMap => {
+  const tipKey = d.tipLine ? `${d.tipLine.start},${d.tipLine.end}` : 'default';
+  let byLine = layoutCache.get(d.outline);
+  if (!byLine) layoutCache.set(d.outline, (byLine = new Map()));
+  let kept = byLine.get(tipKey);
+  if (!kept) {
+    const frame = sweepFrame(d);
+    kept = bounded(
+      byLine,
+      tipKey,
+      { frame, first: layoutAbout(d, frame, 0.5), about: new Map(), maps: new Map() },
+      4,
+    );
+  }
+  const way = thicknessPathOf(d);
+  const wayKey = way.join(',');
+  const hit = kept.maps.get(wayKey);
+  if (hit) return hit;
+  const f = kept.frame;
+  // The thickness path carried on along its own curve, traced once, on the layout closing
+  // up about the tip edge's middle: it fixes where the path meets the outline (the tip
+  // point) and the path's shape past the tip line. Traced again on the layout closing up at
+  // that point, it wouldn't settle: where the rows close up tilts the rows just under the
+  // tip line, and with them the path's direction there (each pass moved the twin fin's tip
+  // point a further 5% of its tip edge).
+  const margin = TIP_TOP / 2 + 0.02;
+  const past = pathPast(d, f, kept.first);
+  const q =
+    Math.round(Math.min(1 - margin, Math.max(margin, past.q)) * TIP_POINT_STEPS) / TIP_POINT_STEPS;
+  const layout = kept.about.get(q) ?? bounded(kept.about, q, layoutAbout(d, f, q), 4);
+  // The traced path, as at most 80 points, to cross the rows with.
+  const traced = polyline(past.pts);
+  const line = Array.from({ length: 81 }, (_, k) => alongPath(traced, k / 80));
+  const fractions = new Float64Array(PAST_ROWS + 1);
+  const { sTip } = layout;
+  const below = pathToTipLine(d, sTip);
+  let last = below(sTip);
+  fractions[0] = last;
+  for (let k = 1; k <= PAST_ROWS; k++) {
+    const s = sTip + ((1 - sTip) * k) / PAST_ROWS;
+    const row = Array.from({ length: 97 }, (_, j) => layoutPoint(layout, s, j / 96));
+    let cross: number | null = null;
+    for (let j = 1; j < row.length && cross === null; j++) {
+      for (let i = 1; i < line.length; i++) {
+        const u = crossAt(line[i - 1]!, line[i]!, row[j - 1]!, row[j]!);
+        if (u !== null) {
+          cross = layoutAlong(layout, s, (j - 1 + u) / 96);
+          break;
+        }
+      }
+    }
+    last = cross ?? last;
+    const t = k / PAST_ROWS;
+    // Eased in from the path's own way on past the tip line, so it runs on through the tip
+    // line without a corner; and onto the middle of the last row by the end, where the
+    // rows close up about the tip point.
+    const onto = below(s) + (last - below(s)) * smootherstep(t / 0.3);
+    fractions[k] = onto + (0.5 - onto) * smootherstep((t - 0.7) / 0.3);
+  }
+  // Smoothed up the rows (binomial passes, the ends held): read where it crosses each
+  // row, it steps a little from row to row, which showed as a faint crease.
+  for (let pass = 0; pass < 8; pass++) {
+    let prev = fractions[0]!;
+    for (let k = 1; k < PAST_ROWS; k++) {
+      const here = fractions[k]!;
+      fractions[k] = (prev + 2 * here + fractions[k + 1]!) / 4;
+      prev = here;
+    }
+  }
+  return bounded(
+    kept.maps,
+    wayKey,
+    { ...layout, tipPoint: alongPath(f.tipEdge, q), pastPath: spline1(fractions) },
+    8,
+  );
 };
 
 /** 0 → 1 with flat ends: 6t⁵ − 15t⁴ + 10t³, its first two derivatives 0 at both. */
@@ -403,11 +689,12 @@ export const smoothBladeOf = (b: PreparedBlade): SmoothBlade => {
   const alongAt = (s: number, u: number) =>
     Math.min(1, Math.max(0, map.along.at(s * rows, u * cols)));
   const { sTip } = map;
-  const way = thicknessPathOf(d);
   // The path, ending exactly on the tip foil's thickest point at the tip line, so the tip
-  // foil lies along it as drawn; beyond, carried on.
-  const pathEnd = way[2] - thicknessPathAt(way, sTip);
-  const pathAt = (s: number) => thicknessPathAt(way, s) + pathEnd * smootherstep(s / sTip);
+  // foil lies along it as drawn; beyond, carried on along its own curve to the tip point,
+  // where the rows close up (owner proposal), so the tip foil follows it there.
+  const below = pathToTipLine(d, sTip);
+  const pathAt = (s: number) =>
+    s <= sTip ? below(s) : map.pastPath.at(((s - sTip) / (1 - sTip)) * PAST_ROWS);
   /** The u on row s whose fraction along it is `f`. */
   const uAlong = (s: number, f: number): number => {
     let lo = 0;
@@ -525,165 +812,15 @@ export const smoothBladeOf = (b: PreparedBlade): SmoothBlade => {
   const etaAt = (s: number) => eta.at(s * SPINE_SAMPLES);
   /** The thickness curve less the minimum, η along the fin. */
   const curve = (e: number) => Math.max(0, taperAt(e) - m);
-  // The tip rounds over (owner request: the tip should "fill in ... from any angle").
-  // Within `reach` of the tip edge, by distance in the profile, the blade goes over to a
-  // dome, a quarter ellipse √(x(2 − x)) of the thickness where the rounding starts (x, the
-  // distance from the edge as a share of the reach). Measured by distance, the tip is the
-  // same dome from any angle: the middle of the tip edge and its sides alike (rounding
-  // along rows and up the path apart left a waist where they met). The thickness where it
-  // starts is read once, at stations along the tip edge, the reach in along its normal,
-  // never past halfway to the tip line.
-  const tipRound = finTipRound(d);
-  /** A quarter ellipse: 0 at the edge, round there (√(2x)), 1 where the rounding starts. */
-  const dome = (x: number): number => {
-    const c = Math.min(1, Math.max(0, x));
-    return Math.sqrt(c * (2 - c));
-  };
-  /** The blade before the tip rounds, less the minimum: the curve times the foil. */
-  const unrounded = (s: number, u: number): number => {
-    const [o, n] = foil(s, alongAt(s, u));
-    return curve(etaAt(s)) * (o - n);
-  };
-  // The tip edge as the layout has it: up the leading side from the tip line, across the
-  // last row, down the trailing side. A point of it is (s, u) on the layout's boundary,
-  // so a blade point there is exactly on it (the dome's √ would make a hair of a miss show).
-  const EDGE_SAMPLES = 480;
-  const legs = 3;
-  const edgeParam = (t: number): { s: number; u: number } => {
-    const k = Math.min(legs - 1, Math.floor(t * legs));
-    const f = t * legs - k;
-    if (k === 0) return { s: sTip + (1 - sTip) * f, u: 0 };
-    if (k === 1) return { s: 1, u: f };
-    return { s: 1 - (1 - sTip) * f, u: 1 };
-  };
-  const edgeAt = (t: number): P2 => {
-    const q = edgeParam(t);
-    return point(q.s, q.u);
-  };
-  const edge = polyline(
-    Array.from({ length: EDGE_SAMPLES + 1 }, (_, i) => edgeAt(i / EDGE_SAMPLES)),
-  );
-  const edgeLength = edge.cum[edge.pts.length - 1]!;
-  const TIP_STATIONS = 96;
-  // Inward is toward where the tip line crosses the thickness path.
-  const inside = point(sTip, uAlong(sTip, pathAt(sTip)));
-  const stationValue = new Float64Array(TIP_STATIONS + 1);
-  const stationReach = new Float64Array(TIP_STATIONS + 1);
-  /** Distance (cm) from (x, z) to the tip line, straight from end to end. */
-  const toTipLine = (x: number, z: number): number => {
-    const a = map.tipStart;
-    const c = map.tipEnd;
-    const dx = c.x - a.x;
-    const dz = c.y - a.y;
-    const l2 = dx * dx + dz * dz;
-    const t = l2 > 0 ? Math.min(1, Math.max(0, ((x - a.x) * dx + (z - a.y) * dz) / l2)) : 0;
-    return Math.hypot(a.x + dx * t - x, a.y + dz * t - z);
-  };
-  if (edgeLength > 0 && tipRound > 0) {
-    let hint: { s: number; u: number } | null = null;
-    const at = (x: number, z: number) => {
-      const q = nearestOnMap(map, x, z, hint);
-      hint = q;
-      return q.miss < 0.01 ? unrounded(q.s, q.u) : 0;
-    };
-    for (let i = 0; i <= TIP_STATIONS; i++) {
-      const f = i / TIP_STATIONS;
-      const q = alongPath(edge, f);
-      const a = alongPath(edge, Math.max(0, f - 0.002));
-      const c = alongPath(edge, Math.min(1, f + 0.002));
-      let nx = -(c.y - a.y);
-      let nz = c.x - a.x;
-      const len = Math.hypot(nx, nz) || 1;
-      nx /= len;
-      nz /= len;
-      if (nx * (inside.x - q.x) + nz * (inside.y - q.y) < 0) {
-        nx = -nx;
-        nz = -nz;
-      }
-      // Never past halfway to the tip line, so the tip foil lies along it as drawn.
-      const reach = Math.min(tipRound, 0.5 * toTipLine(q.x, q.y));
-      stationReach[i] = reach;
-      if (!(reach > 1e-4)) {
-        stationValue[i] = 0;
-        continue;
-      }
-      stationValue[i] = at(q.x + nx * reach, q.y + nz * reach);
-    }
-  }
-  const valueAt = spline1(stationValue);
-  const reachAt = spline1(stationReach);
-  /** The rounding fades in over this (cm) from each end of the tip edge. */
-  const TIP_FADE = Math.max(1e-6, Math.min(2 * tipRound, 0.3 * edgeLength));
-  /** The nearest point of the tip edge to (x, z): how far (cm), and where along it (0 → 1). */
-  const toTipEdge = (x: number, z: number): { dist: number; f: number } => {
-    const pts = edge.pts;
-    let best = Infinity;
-    let k = 0;
-    for (let i = 0; i < pts.length; i++) {
-      const dd = (pts[i]!.x - x) ** 2 + (pts[i]!.y - z) ** 2;
-      if (dd < best) [best, k] = [dd, i];
-    }
-    // On the curve itself, between the samples either side.
-    let lo = Math.max(0, k - 1) / EDGE_SAMPLES;
-    let hi = Math.min(EDGE_SAMPLES, k + 1) / EDGE_SAMPLES;
-    const gap = (t: number) => {
-      const q = edgeAt(t);
-      return (q.x - x) ** 2 + (q.y - z) ** 2;
-    };
-    for (let it = 0; it < 40; it++) {
-      const a1 = lo + (hi - lo) / 3;
-      const a2 = hi - (hi - lo) / 3;
-      if (gap(a1) < gap(a2)) hi = a2;
-      else lo = a1;
-    }
-    const t = (lo + hi) / 2;
-    const at = edgeAt(t);
-    // Along the edge by length, as the stations are spaced.
-    const i = Math.min(EDGE_SAMPLES - 1, Math.floor(t * EDGE_SAMPLES));
-    const frac = t * EDGE_SAMPLES - i;
-    const f = (edge.cum[i]! + frac * (edge.cum[i + 1]! - edge.cum[i]!)) / (edgeLength || 1);
-    return { dist: Math.sqrt(Math.min(best, (at.x - x) ** 2 + (at.y - z) ** 2)), f };
-  };
-  /** The blade's thickness less the minimum at (s, u), the tip rounded over. */
-  const thicknessAt = (s: number, u: number, plain: number): number => {
-    // Only rows past the tip line, eased in from it: their ends are the tip edge, where the
-    // dome closes to the minimum, so every other edge keeps it, and the tip foil lies
-    // along the tip line as drawn.
-    if (!(tipRound > 0 && edgeLength > 0) || s <= sTip) return plain;
-    const w = smootherstep((s - sTip) / (0.5 * (1 - sTip)));
-    const p = point(s, u);
-    const near = toTipEdge(p.x, p.y);
-    // On the layout's boundary past the tip line: on the tip edge, exactly.
-    const dist = u <= 0 || u >= 1 || s >= 1 ? 0 : near.dist;
-    const f = near.f;
-    if (dist >= tipRound) return plain;
-    const k = f * TIP_STATIONS;
-    const reach = reachAt.at(k);
-    if (!(reach > 1e-4) || dist >= reach) return plain;
-    // From the blade as it stands to the dome, by 1 − smootherstep(x): all dome at the
-    // edge, so it closes to the minimum whatever the thickness curve does; none where the
-    // rounding starts, with no slope or curvature either, so no step, turn or change of
-    // curvature there, however the stations fall.
-    const x = dist / reach;
-    const toDome = 1 - smootherstep(x);
-    const rounded = valueAt.at(k) * dome(x);
-    // Faded in from each end of the tip edge, where the reach closes to nothing at the tip line.
-    const fadeIn = smootherstep((Math.min(f, 1 - f) * edgeLength) / TIP_FADE);
-    return Math.max(0, plain + (rounded - plain) * toDome * w * fadeIn);
-  };
-  const scale = (s: number): number => thicknessAt(s, uAlong(s, pathAt(s)), curve(etaAt(s)));
+  // The thickness: the curve read along the fin (η), to the tip point. Nothing else
+  // shapes the tip: past the tip line the rows close up to the tip point, the tip foil
+  // along them shrinking with them (owner proposal); a blunt curve end is a blunt tip.
+  const scale = (s: number): number => curve(etaAt(s));
   const offsets = (s: number, u: number): [number, number] => {
     const [o, n, share] = foil(s, alongAt(s, u));
-    const row = curve(etaAt(s));
-    const plain = row * (o - n);
-    // What rounding the tip adds, shared by the faces as they stand off the chord line
-    // (o² : n²), so a flat face stays flat and a symmetric foil stays symmetric.
-    const more = thicknessAt(s, u, plain) - plain;
-    const o2 = o * o;
-    const n2 = n * n;
-    const outShare = o2 + n2 > 0 ? o2 / (o2 + n2) : 0.5;
-    let out = o * row + more * outShare + m * share;
-    let ins = n * row - more * (1 - outShare) - m * (1 - share);
+    const k = scale(s);
+    let out = o * k + m * share;
+    let ins = n * k - m * (1 - share);
     const { outside: lamOut, inside: lamIn } = b.laminate;
     const lam = lamOut + lamIn;
     if (lam > 0) {

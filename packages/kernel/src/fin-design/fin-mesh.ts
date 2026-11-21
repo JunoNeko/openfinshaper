@@ -16,6 +16,7 @@
 import { meshWithNormals } from '../fins';
 import type { BoardMesh } from '../tessellate';
 import { vec2, type Vec2 } from '../vec2';
+import { splineExtremes } from './curve-shape';
 import type { Vert3 } from '../loft';
 import { cosineStations, type FinLaminate, NO_LAMINATE } from './blade';
 import { sectionLoop } from './blade-surface';
@@ -104,8 +105,25 @@ const smoothBladeMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh =
   const sb = smoothBlade(d, o.laminate, o.minThickness);
   const us = cosineStations(o.stations);
   const rootEnd = d.outline.knots[d.outline.knots.length - 1]!.end.x;
-  // Gathered toward the tip edge (s = 1), even near the base.
-  const ss = Array.from({ length: o.rows + 1 }, (_, i) => Math.sin((Math.PI / 2) * (i / o.rows)));
+  // Gathered toward the tip edge (s = 1), even near the base; and a row through each of
+  // the profile's outermost points (rearmost, foremost, highest), where the layout has a
+  // node on it (smooth-blade.ts), so the mesh reaches them: a hook's tip, say.
+  const even = Array.from({ length: o.rows + 1 }, (_, i) => Math.sin((Math.PI / 2) * (i / o.rows)));
+  const ext = [
+    splineExtremes(d.outline, 'x').min,
+    splineExtremes(d.outline, 'x').max,
+    splineExtremes(d.outline, 'y').max,
+  ];
+  const through = ext
+    .map((e) => sb.nearest(e.point.x, e.point.y).s)
+    .filter((s) => s > 0.02 && s < 1);
+  const ss = [...even];
+  for (const t of through) {
+    // In place of the nearest row, so the rows stay as many and in order.
+    let k = 1;
+    for (let i = 1; i < ss.length - 1; i++) if (Math.abs(ss[i]! - t) < Math.abs(ss[k]! - t)) k = i;
+    if (t > ss[k - 1]! && t < ss[k + 1]!) ss[k] = t;
+  }
   const rows = ss.map((s) => {
     const outside: Vert3[] = [];
     const inside: Vert3[] = [];

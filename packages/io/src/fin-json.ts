@@ -32,8 +32,8 @@
  *       tip foil's thickness against the thickness curve's, set by an editor that no
  *       longer does): the thickness curve alone sets the thickness. Also
  *       `minThickness` (mm): the thinnest the blade may get, absent for the default 0.5.
- *       And `tipRound` (mm): how far in from the tip edge the tip rounds over, absent for
- *       the default 5.
+ *       A `tipRound` (mm, how far in the tip once rounded over) is read and dropped: the
+ *       tip is shaped by the thickness path carried on to the outline instead.
  *       Always written as version 3.
  */
 import {
@@ -96,6 +96,7 @@ export interface FinJson {
   thicknessMid?: number;
   /** Version 3: the thinnest the blade may get (mm). Absent: the default, 0.5 mm. */
   minThickness?: number;
+  /** No longer used: how far in the tip once rounded over (mm). Dropped. */
   tipRound?: number;
   /** Version 3, no longer used: the tip foil's thickness against the curve's. Dropped. */
   tipScale?: unknown;
@@ -157,7 +158,6 @@ export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): 
     ...(d.tipSection ? { tipSection: sectionToJson(d.tipSection) } : {}),
     ...(d.thicknessMid !== undefined ? { thicknessMid: d.thicknessMid } : {}),
     ...(d.minThickness !== undefined ? { minThickness: toMm(d.minThickness) } : {}),
-    ...(d.tipRound !== undefined ? { tipRound: toMm(d.tipRound) } : {}),
     ...(d.panel
       ? {
           panel: {
@@ -224,9 +224,6 @@ const assertStructure = (doc: Record<string, unknown>): void => {
   }
   if (doc.minThickness !== undefined && !(isNumber(doc.minThickness) && doc.minThickness > 0)) {
     fail('Malformed fin: the minimum thickness needs a positive number');
-  }
-  if (doc.tipRound !== undefined && !(isNumber(doc.tipRound) && doc.tipRound > 0)) {
-    fail('Malformed fin: the tip rounding needs a positive number');
   }
   if (doc.tipSection !== undefined) assertSection(doc.tipSection, 'tip section');
   if (doc.base !== undefined && !(FIN_BASES as readonly unknown[]).includes(doc.base)) {
@@ -307,7 +304,6 @@ export const readFinJson = (
     ...(doc.tipSection ? { tipSection: sectionFromJson(doc.tipSection) } : {}),
     ...(doc.thicknessMid !== undefined ? { thicknessMid: doc.thicknessMid } : {}),
     ...(doc.minThickness !== undefined ? { minThickness: toCm(doc.minThickness) } : {}),
-    ...(doc.tipRound !== undefined ? { tipRound: toCm(doc.tipRound) } : {}),
     ...(doc.panel
       ? {
           panel: {

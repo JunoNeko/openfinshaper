@@ -10,7 +10,7 @@
  * left, owner request); the store stops a point there. The curve is read along the fin,
  * by the thickness path's length from the base.
  */
-import { finMinThickness, finReadouts, finTipRound } from '@openshaper/kernel';
+import { finMinThickness, finReadouts } from '@openshaper/kernel';
 import {
   FIN_CANVAS_FONT,
   FIN_CANVAS_LABEL,
@@ -74,40 +74,6 @@ export function MinThicknessField({
           onCommit={commit}
           onEscape={() => setText(shown)}
           ariaLabel="Fin minimum thickness"
-          className="h-8 w-16 tabular-nums"
-        />
-        <span className="text-xs text-muted-foreground">{unitSuffix(units)}</span>
-      </span>
-    </label>
-  );
-}
-
-/**
- * How far in from the tip edge the tip rounds over, typed in the current unit (owner
- * request: the tip fills in to a dome, from any angle). The store keeps it within range.
- * In the thickness view's toolbar, beside Min thickness.
- */
-export function TipRoundField({ store, units }: { store: StoreApi<FinState>; units: LengthUnit }) {
-  const round = useFinState(store, (s) => (s.design ? finTipRound(s.design) : null));
-  const shown = round === null ? '' : cmToUnitNumber(round, units).toFixed(unitDecimals(units));
-  const [text, setText] = useSyncedText(shown);
-  const commit = () => {
-    const cm = parseTypedLen(text, units);
-    if (cm === null || !store.getState().setTipRound(cm)) setText(shown);
-  };
-  return (
-    <label
-      className="flex items-center gap-2"
-      title="How far in from the tip edge the tip rounds over: a fuller, domed tip as it grows"
-    >
-      <span>Tip rounding</span>
-      <span className="flex items-center gap-1">
-        <NumericInput
-          value={text}
-          onValueChange={setText}
-          onCommit={commit}
-          onEscape={() => setText(shown)}
-          ariaLabel="Tip rounding"
           className="h-8 w-16 tabular-nums"
         />
         <span className="text-xs text-muted-foreground">{unitSuffix(units)}</span>

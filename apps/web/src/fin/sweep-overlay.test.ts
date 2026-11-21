@@ -4,6 +4,7 @@ import {
   defaultFinDesign,
   prepareBlade,
   sweepFrame,
+  smoothMap,
   smoothRowLine,
   type Vec2,
   thicknessAt,
@@ -24,10 +25,11 @@ describe('the foil sweep over the profile', () => {
     const o = sweepOverlay(d);
     // The base starts at the leading-edge root, on the tab top.
     expect(o.base[0]!.y).toBeCloseTo(0, 9);
-    // The path runs from the base up to the tip line.
+    // The path runs from the base up through the tip line, on to the tip point.
     expect(o.path[0]!.y).toBeCloseTo(0, 6);
-    const tipMid = o.tip[Math.floor(o.tip.length / 2)]!;
-    expect(o.path[o.path.length - 1]!.y).toBeGreaterThan(0.8 * tipMid.y);
+    const end = o.path[o.path.length - 1]!;
+    const { tipPoint } = smoothMap(d);
+    expect(Math.hypot(end.x - tipPoint.x, end.y - tipPoint.y)).toBeLessThan(0.05);
     expect(o.markers.map((m) => m.id)).toEqual([
       'tip-start',
       'tip-end',
