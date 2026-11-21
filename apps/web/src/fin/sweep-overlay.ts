@@ -28,7 +28,7 @@ export interface SweepOverlay {
   readonly base: readonly Vec2[];
   /** Foil sweep end: the tip line. */
   readonly tip: readonly Vec2[];
-  /** The thickness path, base to tip line. */
+  /** The thickness path, base to tip line and on past it to the tip point. */
   readonly path: readonly Vec2[];
   /** The tip past the tip line: its edge round from one end of the tip line to the other. */
   readonly cap: readonly Vec2[];
@@ -57,10 +57,12 @@ const onRow = (sb: SmoothBlade, s: number, along: number): Vec2 => {
 export const sweepOverlay = (d: FinDesign): SweepOverlay => {
   const sb = smoothBlade(d);
   const tip = smoothRowLine(d, sb.sTip) as Vec2[];
-  const path = Array.from({ length: 41 }, (_, k) => {
-    const s = (k / 40) * sb.sTip;
-    return onRow(sb, s, sb.path(s));
-  });
+  // On past the tip line too, along its own curve to where it meets the profile, the tip
+  // point the sections close up to (owner proposal).
+  const path = [
+    ...Array.from({ length: 41 }, (_, k) => (k / 40) * sb.sTip),
+    ...Array.from({ length: 20 }, (_, k) => sb.sTip + ((1 - sb.sTip) * (k + 1)) / 20),
+  ].map((s) => onRow(sb, s, sb.path(s)));
   const rows = pathRows(sb);
   const handle = (i: 0 | 1 | 2): FinCurveMarker => ({
     id: `path-${i}`,

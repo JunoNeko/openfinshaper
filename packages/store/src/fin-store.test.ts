@@ -3,9 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   FIN_MAX_FRONT_OVERHANG,
   FIN_MIN_THICKNESS,
-  FIN_TIP_ROUND,
-  FIN_TIP_ROUND_LIMITS,
-  finTipRound,
   FIN_PANEL_MAX_ANGLE,
   FIN_SLICE_MIN_GAP,
   FIN_THICKNESS_PATH_LIMITS,
@@ -195,23 +192,6 @@ describe('fin store: drags stay inside the rules', () => {
     expect(tip().y).toBeCloseTo(FIN_MIN_THICKNESS, 9);
     s.getState().undo();
     expect(design(s).minThickness).toBe(0.3);
-  });
-
-  it('sets how far in from the tip edge the tip rounds over', () => {
-    // Owner request: the tip fills in to a dome from any angle, 5 mm in by default.
-    const s = storeWith();
-    expect(finTipRound(design(s))).toBe(FIN_TIP_ROUND);
-    expect(s.getState().setTipRound(0.8)).toBe(true);
-    expect(design(s).tipRound).toBe(0.8);
-    expect(validateFinDesign(design(s))).toEqual([]);
-    // Within 1 to 20 mm, and back to the default leaves nothing in the file.
-    s.getState().setTipRound(5);
-    expect(design(s).tipRound).toBe(FIN_TIP_ROUND_LIMITS.max);
-    s.getState().setTipRound(FIN_TIP_ROUND);
-    expect('tipRound' in design(s)).toBe(false);
-    expect(s.getState().setTipRound(FIN_TIP_ROUND)).toBe(false);
-    s.getState().undo();
-    expect(design(s).tipRound).toBe(FIN_TIP_ROUND_LIMITS.max);
   });
 
   it('keeps the taper ends at the root and the tip, and above the minimum', () => {

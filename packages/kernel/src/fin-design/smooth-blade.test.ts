@@ -12,9 +12,11 @@ import type { FinDesign } from './fin-design';
 import { fairness } from './fairness';
 import { finMesh, FIN_MESH_PREVIEW } from './fin-mesh';
 import { sliceMesh } from './mesh-slice';
+import { yAtX } from './curve-shape';
 import {
   foilWarp,
   smoothBlade,
+  smoothMap,
   smoothFoilAt,
   smoothLocate,
   smoothRowAtEta,
@@ -87,6 +89,86 @@ const FINS: [string, () => FinDesign][] = [
   ['steep tip line', () => ownerFin('steep_tip_line.fin.json')],
   ['swept-back tip', () => ownerFin('swept_back_tip.fin.json')],
 ];
+
+describe('past the tip line (owner proposal: the thickness path carried on to the profile)', () => {
+  const fins: [string, FinDesign][] = [
+    ['the starting fin', defaultFinDesign('side', 'left')],
+    ['the centre fin', defaultFinDesign('centre')],
+    ['a raked tip', ownerFin('raked_tip_corner.fin.json')],
+    ['the TSN 800 (hooked)', ownerFin('tsn_800_single.fin.json')],
+  ];
+
+  it.each(fins)('closes the sections up to where the path meets the profile: %s', (_, d) => {
+    const sb = smoothBlade(d);
+    const { tipPoint } = smoothMap(d);
+    // On the outline round the tip, and every point of the last row a sliver from it.
+    const edge = sweepFrame(d).tipEdge.pts;
+    const onEdge = Math.min(
+      ...edge.slice(1).map((q, i) => {
+        const a = edge[i]!;
+        const dx = q.x - a.x;
+        const dy = q.y - a.y;
+        const l2 = dx * dx + dy * dy || 1;
+        const t = Math.min(
+          1,
+          Math.max(0, ((tipPoint.x - a.x) * dx + (tipPoint.y - a.y) * dy) / l2),
+        );
+        return Math.hypot(a.x + dx * t - tipPoint.x, a.y + dy * t - tipPoint.y);
+      }),
+    );
+    expect(onEdge).toBeLessThan(0.01);
+    for (let k = 0; k <= 10; k++) {
+      const q = sb.point(1, k / 10);
+      expect(Math.hypot(q.x - tipPoint.x, q.y - tipPoint.y)).toBeLessThan(0.15);
+    }
+    // The path ends there.
+    const end = sb.spine(1);
+    expect(Math.hypot(end.x - tipPoint.x, end.y - tipPoint.y)).toBeLessThan(0.05);
+  });
+
+  it.each(fins)('carries the path on through the tip line without a corner: %s', (_, d) => {
+    const sb = smoothBlade(d);
+    const h = 0.01;
+    const dir = (a: number, b: number) => {
+      const p = sb.spine(a);
+      const q = sb.spine(b);
+      return Math.atan2(q.y - p.y, q.x - p.x);
+    };
+    const turn = dir(sb.sTip, sb.sTip + h) - dir(sb.sTip - h, sb.sTip);
+    expect(Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)))).toBeLessThan(0.1);
+  });
+
+  it('is as thick as the thickness curve along the path, to a blunt end if it ends thick', () => {
+    const base = defaultFinDesign('side', 'left');
+    // The curve ended at 1.5 mm instead of the minimum.
+    const knots = base.taper.knots;
+    const end = knots[knots.length - 1]!;
+    const up = (p: { x: number; y: number }) => vec2(p.x, Math.max(p.y, 0.15));
+    const taper = splineFromKnots([
+      ...knots.slice(0, -1),
+      knot(vec2(1, 0.15), up(end.tangentToPrev), vec2(1, 0.15), end.continuous),
+    ]);
+    const d = { ...base, taper };
+    const sb = smoothBlade(d);
+    const m = sb.blade.minThickness;
+    for (const s of [sb.sTip + 0.3 * (1 - sb.sTip), sb.sTip + 0.7 * (1 - sb.sTip), 1]) {
+      expect(sb.scale(s) + m).toBeCloseTo(yAtX(d.taper, sb.eta(s)), 9);
+    }
+    expect(sb.eta(1)).toBeCloseTo(1, 9);
+    expect(sb.scale(1) + m).toBeCloseTo(0.15, 9);
+  });
+
+  it('moves the tip point as the tip line moves', () => {
+    const d = ownerFin('raked_tip_corner.fin.json');
+    const tip = d.tipLine!;
+    const a = smoothMap(d).tipPoint;
+    const b = smoothMap({
+      ...d,
+      tipLine: { start: tip.start - 0.03, end: tip.end - 0.03 },
+    }).tipPoint;
+    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(0.05);
+  });
+});
 
 describe('the ends of the last row', () => {
   // rmtest.json (owner testing): an upright cut 145 mm back from the leading-edge root

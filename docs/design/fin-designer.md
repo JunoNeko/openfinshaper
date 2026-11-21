@@ -714,35 +714,29 @@ corrected to end on the tip foil's thickest point there. Beyond it the outline r
 tip is the rows' edges, so the tip thins as a nose does; only the last row needs closing
 (√(1 − t³), over the outer half of those rows).
 
-**The tip rounds over** (owner testing, `docs/specs/fins/raked_tip_corner.fin.json`: "the
-tip should fill in ... from any angle"). The tip used to close twice: the thickness curve,
-and √(1 − t³) across the outer half of the rows past the tip line. Along the trailing side
-of the tip edge it closed as a foil's tail, a wedge. Where the last row met the edges the
-two closings multiplied and eased onto the minimum, a concave neck under the tip edge. Now,
-within a reach of the tip edge (`FinDesign.tipRound`, 5 mm by default, 1 to 20 mm, set in
-the thickness view), **measured by distance in the profile**, the blade goes over to a dome:
-a quarter ellipse, √(x(2 − x)), of the thickness where the rounding starts (x the distance
-from the edge as a share of the reach). It blends from the blade as it stands by
-1 − smootherstep(x): all dome at the edge, so it closes to the minimum whatever the curve
-does; none where the rounding starts, with no slope or curvature either, so no step, turn
-or change of curvature there. Rounding along rows and up the path separately left a waist
-where they met, and a dome matched to the blade's own slope there stayed close to a wedge;
-by distance, the tip is the same dome from any angle.
+**The tip: the thickness path carried on** (owner proposal, replacing every earlier tip
+rule but the minimum: the √(1 − t³) closing, the corner combination, and #17's distance dome
+and its Tip rounding setting). Past the tip line the thickness path carries on along its own
+curve, with the direction and bend it arrives with, until it meets the outline: the **tip
+point**. The layout's rows past the tip line close up to it, the last row a sliver (2% of
+the tip edge) about it, so each is the tip foil shrinking as it nears the point, thickest
+on the path and as thick as the thickness curve says there (read along the path, η → 1 at
+the tip point). A curve that ends thick ends blunt; the owner shapes the end in the
+thickness view. Moving the tip line moves where the path crosses it, and so the tip point.
 
-- The thickness where it starts is read once, at 96 stations along the tip edge, the reach
-  in along its normal, never past halfway to the tip line, so the tip foil lies along it
-  as drawn.
-- Only rows past the tip line round, eased in from it, and the rounding fades in from each
-  end of the tip edge: every other edge keeps the minimum, the trailing edge below the tip
-  stays sharp.
-- The tip edge is the layout's own boundary past the tip line (its two sides and the last
-  row), so a point on it is exactly on it: the dome's √ would otherwise turn a micron's
-  miss into a visible thickening.
-- The rounding is shared by the faces as they stand off the chord line (o² : n²), so a flat
-  face stays flat and a symmetric foil symmetric.
-
-On the owner's fin, 2 mm below the top it is now 1.86 mm thick where it was 1.68 mm, and
-1 mm below, 1.62 mm where it was 1.23 mm.
+- The tip point is traced once, on the layout closing up about the tip edge's middle, then
+  the layout is solved again closing up at it. Tracing again on that layout doesn't settle:
+  where the rows close up tilts the rows just under the tip line and with them the path's
+  direction there (each pass moved the twin fin's tip point another 5% of its tip edge).
+- On the final layout the path past the tip line follows that traced curve, eased in from
+  its own way on over the first 30% (no corner at the tip line) and onto the middle of the
+  last row over the last 30%, smoothed up the rows (8 binomial passes).
+- The layouts are kept: one per outline and tip line, and the one closing up at the tip
+  point held to 1/400 of the tip edge, so editing a foil rarely solves again. A tip line
+  drag solves twice (about 130 ms against 67 ms).
+- The layout's sides put a node on each of the outline's outermost points (rearmost,
+  foremost, highest), and the mesh a row through it: splines over the nodes cut a hook's
+  tip between two of them by up to 0.3 mm, depending on where the nodes fell.
 
 A control section's height is now its fraction of the way from the base to the tip line,
 and its fade ends by the tip line, so sections never disturb the tip foil. The fraction

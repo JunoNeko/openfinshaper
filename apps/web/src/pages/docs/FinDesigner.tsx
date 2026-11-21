@@ -13,8 +13,6 @@ import {
   FIN_EXPORT_MIN_THICKNESS,
   FIN_MIN_THICKNESS,
   FIN_MIN_THICKNESS_LIMITS,
-  FIN_TIP_ROUND,
-  FIN_TIP_ROUND_LIMITS,
   FUTURES_TABS,
   rearClearance,
 } from '@openshaper/kernel';
@@ -171,9 +169,13 @@ export default function DocsFinDesigner() {
           edge to the trailing edge, so each edge is foiled straight across, hooked tips and raised
           rears included, and the foil blends from the base foil to the tip foil. The tip line is
           one of those sections, exactly straight: the tip foil lies along it as you drew it, at one
-          thickness. Past it the sections shorten toward the middle of the tip edge, so the tip
-          thins to its edge the way a foil&apos;s nose does. The whole surface is one smooth piece,
-          so blending the foils, thickness, cant and toe can&apos;t crease it; check it with{' '}
+          thickness. Past it the thickness path carries on along its own curve until it meets the
+          profile, at the <strong>tip point</strong>, and the sections close up to that point: each
+          is the tip foil, shrinking with it, thickest on the path, as thick as the thickness curve
+          says there. Moving the tip line moves where the path crosses it, and so steers the tip
+          point. Nothing else shapes the tip, so a curve that ends thick gives a blunt tip; ease the
+          curve&apos;s end down for a finer one. The whole surface is one smooth piece, so blending
+          the foils, thickness, cant and toe can&apos;t crease it; check it with{' '}
           <a href="#analysis">Zebra</a>.
         </p>
         <p>
@@ -190,13 +192,13 @@ export default function DocsFinDesigner() {
         </p>
         <p>
           The dashed amber line is the <strong>thickness path</strong>: where each section is
-          thickest, from the base to the tip line. Its ends are the base and tip foils&apos;
-          thickest points, so the two always agree: drag the path&apos;s end dot in the profile and
-          that foil is reshaped to match; drag the orange <strong>thickest point</strong> dot in the
-          foil view (or reshape the foil) and the path follows. The middle dot moves only the path.
-          Each section is as thick on the path as the thickness curve says at that point along the
-          fin: the curve is read along the path, from the base round to the tip, so on a hooked or
-          swept fin it follows the arm.
+          thickest, from the base to the tip line, and on past it to the tip point. Its ends are the
+          base and tip foils&apos; thickest points, so the two always agree: drag the path&apos;s
+          end dot in the profile and that foil is reshaped to match; drag the orange{' '}
+          <strong>thickest point</strong> dot in the foil view (or reshape the foil) and the path
+          follows. The middle dot moves only the path. Each section is as thick on the path as the
+          thickness curve says at that point along the fin: the curve is read along the path, from
+          the base round to the tip, so on a hooked or swept fin it follows the arm.
         </p>
         <p>
           On a raised rear the sweep starts along the underside too, so the underside keeps the
@@ -320,16 +322,16 @@ export default function DocsFinDesigner() {
           base (bottom) to the tip (top). It stands upright at the fin&apos;s true depth, so it
           lines up with the profile; thickness runs across, drawn four times wider than true. A
           straight run that curves in near the tip is the usual shape: that curve is what controls
-          how the tip flexes. The curve holds all the way up: past the tip line the tip is no
-          thicker than the curve says at each height, the loft rounding it off to the edge, so a
-          fuller curve near the tip gives a fuller tip and no more. <strong>Base thickness</strong>{' '}
-          scales the whole curve. <strong>Min thickness</strong>, beside it, sets the thinnest the
-          fin may get (see <a href="#rules">Minimum thickness</a>); the dashed line shows it. On a
-          heavily swept-back fin, whose arm reaches back to the tip spanning little height, the
-          curve is measured along the sweep instead — from the base, along the orange thickness
-          path, to the tip — so the arm thins toward its tip rather than keeping its full thickness
-          to the tip line. The thickness view says so when it does; fins that rise as they sweep
-          back are read by height, as always.
+          how the tip flexes. The curve holds all the way up, read along the thickness path to the
+          tip point: a fuller curve near its end gives a fuller tip, and its end is how thick the
+          tip ends. <strong>Base thickness</strong> scales the whole curve.{' '}
+          <strong>Min thickness</strong>, beside it, sets the thinnest the fin may get (see{' '}
+          <a href="#rules">Minimum thickness</a>); the dashed line shows it. On a heavily swept-back
+          fin, whose arm reaches back to the tip spanning little height, the curve is measured along
+          the sweep instead — from the base, along the orange thickness path, to the tip — so the
+          arm thins toward its tip rather than keeping its full thickness to the tip line. The
+          thickness view says so when it does; fins that rise as they sweep back are read by height,
+          as always.
         </p>
       </Section>
 
@@ -516,17 +518,6 @@ export default function DocsFinDesigner() {
             tip, say — reshapes the blade only near that edge, rather than creasing it right across.
             Never under {mm(FIN_MIN_THICKNESS)}, enough edge for CAD to read the surface as closed.
             Exports can thicken it further (see <a href="#export">Export min</a>).
-          </Term>
-          <Term name="Tip rounding">
-            The tip edge rounds over like a foil&apos;s nose: within this distance of it (
-            {mm(FIN_TIP_ROUND)} by default, {mm(FIN_TIP_ROUND_LIMITS.min)} to{' '}
-            {mm(FIN_TIP_ROUND_LIMITS.max)}), the blade goes over to a dome, full until near the edge
-            and closing round onto the minimum. It is measured by distance from the tip edge, so the
-            tip is the same dome from any angle, across its middle and down its sides alike. The
-            thickness curve sets the thickness where the rounding starts; the rounding never reaches
-            more than halfway to the tip line, so the tip foil lies along the tip line as drawn, and
-            the trailing edge below the tip stays sharp. Set it in the thickness view&apos;s{' '}
-            <strong>Tip rounding</strong> box: larger for a fuller tip. It is saved with the fin.
           </Term>
           <Term name="One clean shape">
             The edges keep rising to a single tip, and the foil&apos;s faces never cross.
