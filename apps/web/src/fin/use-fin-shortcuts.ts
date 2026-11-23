@@ -87,6 +87,8 @@ export function useFinShortcuts(
       }
     };
     const onKey = (e: KeyboardEvent) => {
+      // Behind an open dialog the fin is not what the user is working on (modal.tsx).
+      if (document.querySelector('[data-modal]')) return;
       const t = e.target as HTMLElement | null;
       const inField =
         !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);

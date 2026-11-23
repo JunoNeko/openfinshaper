@@ -8,7 +8,7 @@
  * so it is offered again next time. The browser asks once a visit before a page may
  * write to it again.
  */
-import { download, MULTI_DOWNLOAD_GAP_MS } from './file-io';
+import { download, MULTI_DOWNLOAD_GAP_MS } from './download';
 import { objectStore, openSingleStoreDb, promisify } from './idb';
 
 /** A file to write. */
@@ -98,6 +98,9 @@ export async function writeFiles(
 // eslint-disable-next-line no-control-regex
 const NOT_IN_NAMES = /[\\/:*?"<>|\u0000-\u001f]+/g;
 
+/** Windows reserved device names that File System Access rejects even with an extension. */
+const RESERVED_WIN = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
 /**
  * The name typed, made safe for a file: without the extension if it was typed too,
  * without characters a file name can't hold, and `fallback` if nothing is left.
@@ -109,7 +112,7 @@ export function cleanStem(text: string, ext: string, fallback: string): string {
     .replace(NOT_IN_NAMES, '-')
     .replace(/^[.\s]+|[.\s]+$/g, '')
     .slice(0, 120);
-  return s || fallback;
+  return !s || RESERVED_WIN.test(s) ? fallback : s;
 }
 
 /* The remembered folder: one IndexedDB record holding the handle. */
@@ -123,9 +126,14 @@ const db = () => openSingleStoreDb(indexedDB, DB, 1, STORE, 'id');
 export async function recallFolder(): Promise<FileSystemDirectoryHandle | null> {
   if (typeof indexedDB === 'undefined' || !canChooseFolder()) return null;
   try {
-    const rec = (await promisify(objectStore(await db(), STORE, 'readonly').get(KEY))) as
-      { handle?: FileSystemDirectoryHandle } | undefined;
-    return rec?.handle ?? null;
+    const conn = await db();
+    try {
+      const rec = (await promisify(objectStore(conn, STORE, 'readonly').get(KEY))) as
+        { handle?: FileSystemDirectoryHandle } | undefined;
+      return rec?.handle ?? null;
+    } finally {
+      conn.close();
+    }
   } catch {
     return null;
   }
@@ -135,9 +143,14 @@ export async function recallFolder(): Promise<FileSystemDirectoryHandle | null> 
 export async function rememberFolder(folder: FileSystemDirectoryHandle | null): Promise<void> {
   if (typeof indexedDB === 'undefined') return;
   try {
-    const store = objectStore(await db(), STORE, 'readwrite');
-    if (folder) await promisify(store.put({ id: KEY, handle: folder }));
-    else await promisify(store.delete(KEY));
+    const conn = await db();
+    try {
+      const store = objectStore(conn, STORE, 'readwrite');
+      if (folder) await promisify(store.put({ id: KEY, handle: folder }));
+      else await promisify(store.delete(KEY));
+    } finally {
+      conn.close();
+    }
   } catch {
     // Not remembered: it is only a convenience.
   }

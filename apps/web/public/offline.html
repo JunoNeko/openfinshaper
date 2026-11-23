@@ -65,29 +65,27 @@
         justify-content: center;
         flex-wrap: wrap;
       }
-      a,
-      button {
+      a {
         font: inherit;
         font-weight: 500;
         padding: 0.6rem 1.1rem;
         border-radius: 0.5rem;
         cursor: pointer;
         border: 1px solid transparent;
-      }
-      a {
+        text-decoration: none;
         background: #22d3ee;
         color: #04121d;
-        text-decoration: none;
-      }
-      button {
-        background: transparent;
-        border-color: #26364f;
-        color: #e6edf7;
       }
       a:hover {
         background: #67e3f6;
       }
-      button:hover {
+      a.secondary {
+        background: transparent;
+        border-color: #26364f;
+        color: #e6edf7;
+      }
+      a.secondary:hover {
+        background: transparent;
         border-color: #3c5478;
       }
       :focus-visible {
@@ -123,7 +121,7 @@
       <p>This page needs a connection. OpenFinShaper keeps working without one.</p>
       <div class="actions">
         <a href="/fin">Open OpenFinShaper</a>
-        <button type="button" onclick="location.reload()">Try again</button>
+        <a class="secondary" href="">Try again</a>
       </div>
     </main>
   </body>

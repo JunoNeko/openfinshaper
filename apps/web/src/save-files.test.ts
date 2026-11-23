@@ -23,6 +23,12 @@ describe('cleanStem', () => {
     expect(cleanStem('.stl', '.stl', 'fin-centre')).toBe('fin-centre');
   });
 
+  it('rejects Windows reserved device names', () => {
+    expect(cleanStem('CON', '.fin.json', 'fin-side-left')).toBe('fin-side-left');
+    expect(cleanStem('nul', '.stl', 'fin-side-left')).toBe('fin-side-left');
+    expect(cleanStem('COM1', '.step', 'fin-side-left')).toBe('fin-side-left');
+  });
+
   it('keeps a name to 120 characters', () => {
     expect(cleanStem('x'.repeat(300), '.stl', 'fin')).toHaveLength(120);
   });

@@ -178,7 +178,7 @@ export function SaveDialog({
             {note && <p className="text-xs text-muted-foreground">{note}</p>}
             <div className="flex flex-wrap items-center gap-2">
               <span className="w-20 shrink-0">Location</span>
-              <span className="min-w-0 flex-1 truncate" data-testid="save-location">
+              <span className="ph-mask min-w-0 flex-1 truncate" data-testid="save-location">
                 {folder ? folder.name : 'Downloads'}
               </span>
               {pickable && (
@@ -218,13 +218,13 @@ export function SaveDialog({
               </p>
             )}
             {!clash && replacing.length > 0 && (
-              <p className="text-xs text-amber-700 dark:text-amber-400">
+              <p className="ph-mask text-xs text-amber-700 dark:text-amber-400">
                 {replacing.join(' and ')} {replacing.length > 1 ? 'are' : 'is'} already in{' '}
                 {folder?.name}: {action} replaces {replacing.length > 1 ? 'them' : 'it'}.
               </p>
             )}
             {problem && (
-              <p role="alert" className="text-xs text-destructive">
+              <p role="alert" className="ph-mask text-xs text-destructive">
                 {problem}
               </p>
             )}
