@@ -172,11 +172,11 @@ export default function DocsFinDesigner() {
           thickness. Past it the thickness path carries on along its own curve until it meets the
           profile, at the <strong>tip point</strong>, and the sections close up to that point: each
           is the tip foil, shrinking with it, thickest on the path, as thick as the thickness curve
-          says there. Moving the tip line moves where the path crosses it, and so steers the tip
-          point. Nothing else shapes the tip, so a curve that ends thick gives a blunt tip; ease the
-          curve&apos;s end down for a finer one. The whole surface is one smooth piece, so blending
-          the foils, thickness, cant and toe can&apos;t crease it; check it with{' '}
-          <a href="#analysis">Zebra</a>.
+          says there, but never thicker for its length than the tip foil on the tip line, so near
+          the tip point the tip foil shrinks whole and the tip closes cleanly whatever the
+          curve&apos;s end does. Moving the tip line moves where the path crosses it, and so steers
+          the tip point. The whole surface is one smooth piece, so blending the foils, thickness,
+          cant and toe can&apos;t crease it; check it with <a href="#analysis">Zebra</a>.
         </p>
         <p>
           Click either green line to edit its foil: it glows, and the foil view shows that foil with

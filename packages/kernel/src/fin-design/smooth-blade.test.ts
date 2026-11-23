@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { splineFromKnots } from '../bezier-spline';
 import { knot } from '../knot';
 import { vec2 } from '../vec2';
-import { prepareBlade, thicknessAt } from './blade';
+import { bladeSection, prepareBlade, thicknessAt } from './blade';
 import { defaultFinDesign, defaultKeel, defaultSingleFin, defaultTwinFin } from './fin-defaults';
 import type { FinDesign } from './fin-design';
 import { fairness } from './fairness';
@@ -138,9 +138,11 @@ describe('past the tip line (owner proposal: the thickness path carried on to th
     expect(Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)))).toBeLessThan(0.1);
   });
 
-  it('is as thick as the thickness curve along the path, to a blunt end if it ends thick', () => {
+  it('follows the thickness curve, never thicker for its length than the tip foil', () => {
+    // Owner request: near the tip point the rows stayed as thick as the curve said while
+    // their length went to nothing, a blunt nub; now the tip foil shrinks whole there.
     const base = defaultFinDesign('side', 'left');
-    // The curve ended at 1.5 mm instead of the minimum.
+    // A curve ending at 1.5 mm, not the minimum: it would have left the tip blunt.
     const knots = base.taper.knots;
     const end = knots[knots.length - 1]!;
     const up = (p: { x: number; y: number }) => vec2(p.x, Math.max(p.y, 0.15));
@@ -151,11 +153,25 @@ describe('past the tip line (owner proposal: the thickness path carried on to th
     const d = { ...base, taper };
     const sb = smoothBlade(d);
     const m = sb.blade.minThickness;
-    for (const s of [sb.sTip + 0.3 * (1 - sb.sTip), sb.sTip + 0.7 * (1 - sb.sTip), 1]) {
-      expect(sb.scale(s) + m).toBeCloseTo(yAtX(d.taper, sb.eta(s)), 9);
+    const length = (s: number) => {
+      let len = 0;
+      for (let j = 1; j <= 64; j++) {
+        const a = sb.point(s, (j - 1) / 64);
+        const c = sb.point(s, j / 64);
+        len += Math.hypot(c.x - a.x, c.y - a.y);
+      }
+      return len;
+    };
+    const curveAt = (s: number) => yAtX(d.taper, sb.eta(s)) - m;
+    const aspect = sb.scale(sb.sTip) / length(sb.sTip);
+    expect(sb.scale(sb.sTip)).toBeCloseTo(curveAt(sb.sTip), 9);
+    for (let k = 1; k < 20; k++) {
+      const s = sb.sTip + ((1 - sb.sTip) * k) / 20;
+      expect(sb.scale(s)).toBeLessThanOrEqual(curveAt(s) + 1e-9);
+      expect(sb.scale(s)).toBeLessThanOrEqual(1.25 * aspect * length(s) + 1e-9);
     }
-    expect(sb.eta(1)).toBeCloseTo(1, 9);
-    expect(sb.scale(1) + m).toBeCloseTo(0.15, 9);
+    // At the tip point it closes onto the minimum, however thick the curve ends.
+    expect(sb.scale(1)).toBeLessThan(0.005);
   });
 
   it('moves the tip point as the tip line moves', () => {
@@ -167,6 +183,27 @@ describe('past the tip line (owner proposal: the thickness path carried on to th
       tipLine: { start: tip.start - 0.03, end: tip.end - 0.03 },
     }).tipPoint;
     expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(0.05);
+  });
+});
+
+describe('the export’s sections near the tip point', () => {
+  // Owner testing (eggplant.fin.json): the STEP edge jogged near the tip point. A cut's end
+  // within 2% of the last row was snapped onto it, and so carried to the tip point, where
+  // the rows close up; now it is snapped onto whichever side of the layout it is nearest.
+  it('keep both ends of each cut where the outline is, up to the top', () => {
+    const d = ownerFin('eggplant_tip.fin.json');
+    const b = prepareBlade(d);
+    const ys: number[] = [];
+    for (let h = 11; h <= b.depth - 0.05; h += 0.05) {
+      const sec = bladeSection(b, h);
+      ys.push(sec.outside[sec.outside.length - 1]!.y);
+    }
+    let worst = 0;
+    for (let k = 2; k < ys.length; k++) {
+      worst = Math.max(worst, Math.abs(ys[k]! - 2 * ys[k - 1]! + ys[k - 2]!));
+    }
+    // Was 0.33 mm in a step, at 120 mm up; now 0.002 mm.
+    expect(worst).toBeLessThan(0.002);
   });
 });
 
