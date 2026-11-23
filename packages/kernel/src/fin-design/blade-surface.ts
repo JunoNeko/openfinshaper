@@ -221,8 +221,11 @@ const withEdgeCornerRows = (
   const kept: number[] = [];
   for (const h of heights) {
     const last = kept[kept.length - 1];
-    if (last === undefined || h - last >= CORNER_ROWS[0]! * 0.99 || creases.includes(h)) {
+    if (last === undefined || h - last >= CORNER_ROWS[0]! * 0.99) {
       kept.push(h);
+    } else if (creases.includes(h)) {
+      if (h - last < 1e-6 && !creases.includes(last)) kept[kept.length - 1] = h;
+      else kept.push(h);
     } else if (h === top) {
       kept[creases.includes(last) ? kept.length : kept.length - 1] = h;
     }

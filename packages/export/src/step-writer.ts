@@ -109,11 +109,24 @@ export const knotList = (
   knots: readonly number[],
 ): { values: string; mults: string; count: number } => {
   const { values, mults } = knotMultiplicities(knots);
+  // Group by emitted STEP real so two floats that round to the same 9-digit literal never
+  // produce duplicate consecutive entries in the knot vector.
+  const formatted: string[] = [];
+  const merged: number[] = [];
+  for (let i = 0; i < values.length; i++) {
+    const text = real(values[i]!, 1);
+    if (formatted.length > 0 && text === formatted[formatted.length - 1]) {
+      merged[merged.length - 1] = merged[merged.length - 1]! + mults[i]!;
+    } else {
+      formatted.push(text);
+      merged.push(mults[i]!);
+    }
+  }
   return {
     // Knot values are parameters, not lengths: never unit-scaled.
-    values: `(${values.map((v) => real(v, 1)).join(',')})`,
-    mults: `(${mults.join(',')})`,
-    count: values.length,
+    values: `(${formatted.join(',')})`,
+    mults: `(${merged.join(',')})`,
+    count: formatted.length,
   };
 };
 

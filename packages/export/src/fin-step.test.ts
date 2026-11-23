@@ -240,10 +240,10 @@ const faceNormal = (m: Map3, f: Entity): { at: Vert3; normal: Vert3 } => {
     });
     return { at, normal: flip(unitV(radial)) };
   }
-  // B-spline: S_u × S_v at a point on the outside face, half-way up.
+  // B-spline: S_u × S_v at the middle of the face.
   const s = decodeSurface(surf, m, 1 / MM);
   const h = 1e-5;
-  const u = 0.2;
+  const u = 0.5;
   const at = evalSurface(s, u, 0.5);
   const du = sub(evalSurface(s, u + h, 0.5), at);
   const dv = sub(evalSurface(s, u, 0.5 + h), at);
@@ -296,11 +296,30 @@ describe.each(designs)('exportFinStep(%s)', (_, d) => {
 
     it('holds two solids, blade and tab, in one shape', () => {
       expect(solids.map((s) => s.name)).toEqual(['blade', 'tab']);
-      expect(solids[0]!.faces).toHaveLength(3);
+      // The blade: 4 C² side faces (outside, trailing, inside, leading) + root and tip caps.
+      expect(solids[0]!.faces).toHaveLength(6);
       // The tab: 2 sides, 12 round its profile and 16 through its four holes.
       expect(solids[1]!.faces).toHaveLength(30);
       const shape = [...m.values()].find((e) => e.name === 'ADVANCED_BREP_SHAPE_REPRESENTATION')!;
       expect(asList(shape.args[1]).filter(isRef)).toHaveLength(3); // placement + 2 solids
+    });
+
+    it('emits four C²-smooth open blade faces with no self-seams or interior u-creases', () => {
+      const surfs = [...m.values()].filter((e) => e.name === 'B_SPLINE_SURFACE_WITH_KNOTS');
+      expect(surfs).toHaveLength(4);
+      for (const surf of surfs) {
+        // u_closed = .F., v_closed = .F., and no interior knot of multiplicity >= uDegree.
+        expect(raw(surf.args[5])).toBe('.F.');
+        expect(raw(surf.args[6])).toBe('.F.');
+        const uDegree = (surf.args[1] as { num: number }).num;
+        const uMults = nums(surf.args[8]);
+        expect(uMults.slice(1, -1).every((k) => k < uDegree)).toBe(true);
+      }
+      // Every blade face loop uses distinct edges (no self-seam appearing twice in one face).
+      for (const f of solids[0]!.faces) {
+        const edges = loopOf(m, f).map(([e]) => e);
+        expect(new Set(edges).size).toBe(edges.length);
+      }
     });
   });
 
@@ -367,13 +386,26 @@ describe.each(designs)('exportFinStep(%s)', (_, d) => {
   });
 
   describe('geometry', () => {
-    it('writes the blade surface within tolerance of the design, in mm', () => {
-      const surf = [...m.values()].find((e) => e.name === 'B_SPLINE_SURFACE_WITH_KNOTS')!;
-      const s = decodeSurface(surf, m, 1 / MM);
+    it('writes the blade surfaces within tolerance of the design, in mm, meeting seamlessly', () => {
+      const surfs = [...m.values()]
+        .filter((e) => e.name === 'B_SPLINE_SURFACE_WITH_KNOTS')
+        .map((e) => decodeSurface(e, m, 1 / MM));
+      expect(surfs).toHaveLength(4);
       const model = fitBladeSurface(d);
-      expect(bladeSurfaceDeviation(prepareBlade(d), s, model.topZ)).toBeLessThanOrEqual(
-        BLADE_CI_TOLERANCE,
-      );
+      const b = prepareBlade(d);
+      for (const s of surfs) {
+        expect(bladeSurfaceDeviation(b, s, model.topZ)).toBeLessThanOrEqual(BLADE_CI_TOLERANCE);
+      }
+      // Adjacent faces meet identically along all four vertical corners, including the LE seam.
+      for (let k = 0; k < surfs.length; k++) {
+        const a = surfs[k]!;
+        const next = surfs[(k + 1) % surfs.length]!;
+        for (let i = 0; i <= 20; i++) {
+          const p0 = evalSurface(a, 1, i / 20);
+          const p1 = evalSurface(next, 0, i / 20);
+          expect(Math.hypot(p0.x - p1.x, p0.y - p1.y, p0.z - p1.z)).toBeLessThan(1e-7);
+        }
+      }
     });
 
     it('puts the tab corners where the Futures spec does, on both sides', () => {
@@ -468,14 +500,17 @@ describe('exportFinStep: laminate core', () => {
   });
 
   it('writes the core, not the finished blade, within tolerance', () => {
-    const surf = [...m.values()].find((e) => e.name === 'B_SPLINE_SURFACE_WITH_KNOTS')!;
-    const s = decodeSurface(surf, m, 1 / MM);
+    const surfs = [...m.values()]
+      .filter((e) => e.name === 'B_SPLINE_SURFACE_WITH_KNOTS')
+      .map((e) => decodeSurface(e, m, 1 / MM));
     const model = fitBladeSurface(d, { laminate });
-    expect(bladeSurfaceDeviation(prepareBlade(d, laminate), s, model.topZ)).toBeLessThanOrEqual(
-      BLADE_CI_TOLERANCE,
-    );
-    // The finished blade is a laminate's thickness away, well over the tolerance.
-    expect(bladeSurfaceDeviation(prepareBlade(d), s, model.topZ)).toBeGreaterThan(
+    const core = prepareBlade(d, laminate);
+    const finished = prepareBlade(d);
+    for (const s of surfs) {
+      expect(bladeSurfaceDeviation(core, s, model.topZ)).toBeLessThanOrEqual(BLADE_CI_TOLERANCE);
+    }
+    // The finished blade is a laminate's thickness away on the foil faces, well over the tolerance.
+    expect(bladeSurfaceDeviation(finished, surfs[0]!, model.topZ)).toBeGreaterThan(
       BLADE_CI_TOLERANCE,
     );
   });
@@ -633,13 +668,15 @@ describe('exportFinStep: export minimum thickness', () => {
   it('writes the blade with the edges thickened to the export minimum', () => {
     const step = exportFinStep(d, { timestamp: FIXED, minThickness: 0.1 });
     const m = parse(step);
-    const surf = [...m.values()].find((e) => e.name === 'B_SPLINE_SURFACE_WITH_KNOTS')!;
-    const s = decodeSurface(surf, m, 1 / MM);
+    const surfs = [...m.values()]
+      .filter((e) => e.name === 'B_SPLINE_SURFACE_WITH_KNOTS')
+      .map((e) => decodeSurface(e, m, 1 / MM));
     const model = fitBladeSurface(d, { minThickness: 0.1 });
+    const thick = prepareBlade(d, undefined, 0.1);
     // It is the thickened blade, not the design's.
-    expect(
-      bladeSurfaceDeviation(prepareBlade(d, undefined, 0.1), s, model.topZ),
-    ).toBeLessThanOrEqual(BLADE_CI_TOLERANCE);
+    for (const s of surfs) {
+      expect(bladeSurfaceDeviation(thick, s, model.topZ)).toBeLessThanOrEqual(BLADE_CI_TOLERANCE);
+    }
     expect(step).not.toBe(exportFinStep(d, { timestamp: FIXED }));
   });
 });

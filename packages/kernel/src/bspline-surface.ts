@@ -618,3 +618,57 @@ export const knotMultiplicities = (
   }
   return { values, mults };
 };
+
+/**
+ * Split a clamped B-spline surface along every interior C0 u-crease (a knot of
+ * multiplicity `uDegree`) into independent C²-smooth open patches, each re-parameterised
+ * onto u ∈ [0, 1]. Adjacent strips share their boundary control row by identity, so
+ * splitting is exact and matches `evalSurface` across every strip.
+ */
+export const splitSurfaceU = (s: BSplineSurface): BSplineSurface[] => {
+  const p = s.uDegree;
+  const U = s.uKnots;
+  const { values, mults } = knotMultiplicities(U);
+  const breaks: { knot: number; start: number }[] = [];
+  let pos = 0;
+  for (let i = 0; i < values.length; i++) {
+    const m = mults[i]!;
+    if (i > 0 && i < values.length - 1 && m === p) {
+      breaks.push({ knot: values[i]!, start: pos });
+    }
+    pos += m;
+  }
+  if (breaks.length === 0) return [s];
+
+  const out: BSplineSurface[] = [];
+  let ctrlLo = 0;
+  let knotLo = p + 1;
+  let uLo = values[0]!;
+
+  const pushStrip = (ctrlHi: number, interiorKnots: readonly number[], uHi: number) => {
+    const span = uHi - uLo || 1;
+    const norm = (k: number) => (k - uLo) / span;
+    const uKnots = [
+      ...Array<number>(p + 1).fill(0),
+      ...interiorKnots.map(norm),
+      ...Array<number>(p + 1).fill(1),
+    ];
+    out.push({
+      uDegree: p,
+      vDegree: s.vDegree,
+      ctrl: s.ctrl.slice(ctrlLo, ctrlHi + 1),
+      uKnots,
+      vKnots: s.vKnots,
+    });
+  };
+
+  for (const b of breaks) {
+    const ctrlHi = b.start - 1;
+    pushStrip(ctrlHi, U.slice(knotLo, b.start), b.knot);
+    ctrlLo = ctrlHi;
+    knotLo = b.start + p;
+    uLo = b.knot;
+  }
+  pushStrip(s.ctrl.length - 1, U.slice(knotLo, U.length - (p + 1)), values[values.length - 1]!);
+  return out;
+};

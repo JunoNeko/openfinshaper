@@ -26,6 +26,7 @@ import {
   interpolateSurface,
   knotMultiplicities,
   pointParams,
+  splitSurfaceU,
   surfaceBoundaryCurve,
   surfaceNormal,
   type BSplineSurface,
@@ -395,5 +396,51 @@ describe('interpolateSurface: explicit v parameters', () => {
     ] as const) {
       row.forEach((p, c) => expect(dist(evalSurface(s, u, v[c]!), p)).toBeLessThan(1e-9));
     }
+  });
+});
+
+describe('splitSurfaceU', () => {
+  it('returns the original surface unchanged when there are no interior C0 u-creases', () => {
+    const grid = Array.from({ length: 8 }, (_, r) => ring(r * 2.5, 8, 1 + 0.1 * r));
+    const s = interpolateSurface(grid);
+    expect(splitSurfaceU(s)).toEqual([s]);
+  });
+
+  it('splits at every multiplicity-uDegree knot into C² open strips sharing boundary rows', () => {
+    const grid = Array.from({ length: 17 }, (_, r) =>
+      Array.from({ length: 6 }, (_, c) => {
+        const z = r <= 5 ? r : r <= 10 ? 5 - 2 * (r - 5) : -5 + (r - 10);
+        return v3(r, c, z);
+      }),
+    );
+    const s = interpolateSurface(grid, { uBreaks: [5, 10] });
+    const strips = splitSurfaceU(s);
+    expect(strips).toHaveLength(3);
+    // Shared boundary control rows by identity, and no interior multiplicity-3 knots.
+    expect(strips[0]!.ctrl[strips[0]!.ctrl.length - 1]).toBe(strips[1]!.ctrl[0]);
+    expect(strips[1]!.ctrl[strips[1]!.ctrl.length - 1]).toBe(strips[2]!.ctrl[0]);
+    for (const st of strips) {
+      expect(st.uKnots).toHaveLength(st.ctrl.length + st.uDegree + 1);
+      const { values, mults } = knotMultiplicities(st.uKnots);
+      expect(values[0]).toBe(0);
+      expect(values[values.length - 1]).toBe(1);
+      expect(mults.slice(1, -1).every((m) => m < st.uDegree)).toBe(true);
+    }
+    // Every strip evaluates identically to the corresponding u interval of the original surface.
+    const { values, mults } = knotMultiplicities(s.uKnots);
+    const bounds = values.filter(
+      (_, i) => i === 0 || i === values.length - 1 || mults[i] === CUBIC,
+    );
+    strips.forEach((st, k) => {
+      const u0 = bounds[k]!;
+      const u1 = bounds[k + 1]!;
+      for (let i = 0; i <= 10; i++) {
+        const t = i / 10;
+        const u = u0 + (u1 - u0) * t;
+        for (const v of [0, 0.35, 1]) {
+          expect(dist(evalSurface(st, t, v), evalSurface(s, u, v))).toBeLessThan(1e-12);
+        }
+      }
+    });
   });
 });

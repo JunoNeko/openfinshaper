@@ -6,10 +6,13 @@
  * Two solids on a one-tab base; three on FCS 1 (`tab-rear`, `tab-front`):
  *
  * ```
- * blade  MANIFOLD_SOLID_BREP, 3 faces
- *   side    B_SPLINE_SURFACE_WITH_KNOTS, closed in u on a seam (fitBladeSurface)
- *   root    PLANE z = 0
- *   tip     PLANE z = topZ, a sliver just under the tip
+ * blade  MANIFOLD_SOLID_BREP, 6 faces
+ *   outside  B_SPLINE_SURFACE_WITH_KNOTS, C² open patch (fitBladeSurface split at corners)
+ *   trailing B_SPLINE_SURFACE_WITH_KNOTS, trailing-edge blunt cap
+ *   inside   B_SPLINE_SURFACE_WITH_KNOTS, C² open patch
+ *   leading  B_SPLINE_SURFACE_WITH_KNOTS, leading-edge blunt cap
+ *   root     PLANE z = 0
+ *   tip      PLANE z = topZ, a sliver just under the tip
  * tab    MANIFOLD_SOLID_BREP, 14 faces: the Futures tab profile extruded across its
  *        thickness. Two PLANE sides, then one face per profile segment: PLANE for a
  *        line, CYLINDRICAL_SURFACE for the slot end and the corner fillet.
@@ -32,7 +35,7 @@ import {
   evalSurfaceDeriv,
   fitBladeSurface,
   finTabOutline,
-  knotMultiplicities,
+  splitSurfaceU,
   surfaceBoundaryCurve,
   tabCentreY,
   tabFacesY,
@@ -166,94 +169,128 @@ const plane = (w: Writer, origin: Vert3, normal: Vert3, refDir: Vert3): number =
 
 // --- blade ---
 
-/** Parameter in the middle of the k-th strip between u-creases (0-based). */
-const stripMid = (s: BSplineSurface, k: number): number => {
-  const { values } = knotMultiplicities(s.uKnots);
-  const { mults } = knotMultiplicities(s.uKnots);
-  const bounds = values.filter(
-    (_, i) => i === 0 || i === values.length - 1 || mults[i] === s.uDegree,
-  );
-  return (bounds[k]! + bounds[k + 1]!) / 2;
-};
+const BLADE_FACE_LABELS = [
+  'blade-outside',
+  'blade-trailing',
+  'blade-inside',
+  'blade-leading',
+] as const;
+
+const BLADE_EDGE_LABELS = ['le-out', 'te-out', 'te-in', 'le-in'] as const;
 
 /**
- * Whether the side surface's own normal (S_u × S_v) points out of the blade. Sampled
- * half-way up, mid-chord on the outside face: the inside face's point across from it
- * is inward, whatever the hand or cant.
+ * Whether the blade strips' own normal (S_u × S_v) points out of the blade. Sampled
+ * half-way up, mid-chord on the outside face (strip 0): the inside face's point across
+ * from it (strip 2) is inward, whatever the hand or cant. All four strips share the
+ * same orientation because u runs continuously round the section loop.
  */
-const bladeNormalPointsOut = (s: BSplineSurface): boolean => {
-  const { point, du, dv } = evalSurfaceDeriv(s, stripMid(s, 0), 0.5);
-  const across = evalSurfaceDeriv(s, stripMid(s, 2), 0.5).point;
+const bladeNormalPointsOut = (strips: readonly BSplineSurface[]): boolean => {
+  const { point, du, dv } = evalSurfaceDeriv(strips[0]!, 0.5, 0.5);
+  const across = evalSurfaceDeriv(strips[2]!, 0.5, 0.5).point;
   return dot(cross(du, dv), sub(point, across)) > 0;
 };
 
-/** Signed area of a closed boundary curve projected on z: > 0 counter-clockwise about +Z. */
-const zWinding = (c: BSplineCurve): number => {
-  const n = 400;
+/** Signed area of a closed loop of curves projected on z: > 0 counter-clockwise about +Z. */
+const zWinding = (curves: readonly BSplineCurve[]): number => {
+  const n = 100;
   let area = 0;
-  for (let i = 0; i < n; i++) {
-    const a = evalCurve(c, i / n);
-    const b = evalCurve(c, (i + 1) / n);
-    area += a.x * b.y - b.x * a.y;
+  for (const c of curves) {
+    for (let i = 0; i < n; i++) {
+      const a = evalCurve(c, i / n);
+      const b = evalCurve(c, (i + 1) / n);
+      area += a.x * b.y - b.x * a.y;
+    }
   }
   return area;
 };
 
+/**
+ * Emit the blade solid as four C²-smooth open B-spline faces (outside, trailing-edge cap,
+ * inside, leading-edge cap) plus planar root and tip caps. Splitting at the four section
+ * corners avoids a closed self-seam face (which needs explicit PCURVEs and u_closed = .T.
+ * and caused separation along the leading-edge seam in strict STEP importers) and removes
+ * interior C0 u-creases, matching how the board exporter builds its hull.
+ */
 const emitBlade = (w: Writer, m: BladeSurfaceModel): number => {
-  const s = m.surface;
-  const side = emitSurface(w, s, 'blade');
-  const seam = surfaceBoundaryCurve(s, 'u0');
-  const root = surfaceBoundaryCurve(s, 'v0');
-  const top = surfaceBoundaryCurve(s, 'v1');
+  const strips = splitSurfaceU(m.surface);
+  const kCount = strips.length;
+  const surfaces = strips.map((st, k) => emitSurface(w, st, BLADE_FACE_LABELS[k] ?? `blade-${k}`));
 
-  const p0 = seam.ctrl[0]!;
-  const p1 = seam.ctrl[seam.ctrl.length - 1]!;
-  const v0 = w.emit(`VERTEX_POINT('',${ref(w.point(p0))})`);
-  const v1 = w.emit(`VERTEX_POINT('',${ref(w.point(p1))})`);
-  const edge = (a: number, b: number, c: BSplineCurve, label: string): number =>
-    w.emit(`EDGE_CURVE('',${ref(a)},${ref(b)},${ref(emitCurve(w, c, label))},.T.)`);
-  const eSeam = edge(v0, v1, seam, 'seam');
-  const eRoot = edge(v0, v0, root, 'root');
-  const eTop = edge(v1, v1, top, 'tip');
+  // Four vertical corner edges (shared between adjacent strips: strip k's u = 0 is strip k-1's u = 1),
+  // plus four root edges (v = 0) and four tip edges (v = 1).
+  const vertCurves = strips.map((st) => surfaceBoundaryCurve(st, 'u0'));
+  const botCurves = strips.map((st) => surfaceBoundaryCurve(st, 'v0'));
+  const topCurves = strips.map((st) => surfaceBoundaryCurve(st, 'v1'));
 
-  // Side: counter-clockwise in (u, v) is counter-clockwise about S_u × S_v. If that
-  // normal points inward, the face is reversed and so is its loop.
-  const out = bladeNormalPointsOut(s);
-  const walk: readonly [number, boolean][] = out
-    ? [
-        [eRoot, true], // v = 0, u rising
-        [eSeam, true], // u = 1, v rising
-        [eTop, false], // v = 1, u falling
-        [eSeam, false], // u = 0, v falling
-      ]
-    : [
-        [eSeam, true],
-        [eTop, true],
-        [eSeam, false],
-        [eRoot, false],
-      ];
-  const sideFace = face(
-    w,
-    side,
-    walk.map(([e, sense]) => oriented(w, e, sense)),
-    out,
+  const vBot = vertCurves.map((c) => w.emit(`VERTEX_POINT('',${ref(w.point(c.ctrl[0]!))})`));
+  const vTop = vertCurves.map((c) =>
+    w.emit(`VERTEX_POINT('',${ref(w.point(c.ctrl[c.ctrl.length - 1]!))})`),
   );
 
-  // Caps: a one-edge loop, run counter-clockwise about the cap's outward normal.
-  const cap = (e: number, c: BSplineCurve, z: number, up: boolean): number => {
+  const edge = (a: number, b: number, c: BSplineCurve, label: string): number =>
+    w.emit(`EDGE_CURVE('',${ref(a)},${ref(b)},${ref(emitCurve(w, c, label))},.T.)`);
+
+  const eVert = vertCurves.map((c, k) =>
+    edge(vBot[k]!, vTop[k]!, c, BLADE_EDGE_LABELS[k] ?? `edge-${k}`),
+  );
+  const eBot = botCurves.map((c, k) =>
+    edge(vBot[k]!, vBot[(k + 1) % kCount]!, c, `root-${BLADE_FACE_LABELS[k] ?? k}`),
+  );
+  const eTop = topCurves.map((c, k) =>
+    edge(vTop[k]!, vTop[(k + 1) % kCount]!, c, `tip-${BLADE_FACE_LABELS[k] ?? k}`),
+  );
+
+  // Side faces: counter-clockwise in (u, v) is counter-clockwise about S_u × S_v. If that
+  // normal points inward, each face is reversed and so is its loop.
+  const out = bladeNormalPointsOut(strips);
+  const sideFaces = surfaces.map((surf, k) => {
+    const k1 = (k + 1) % kCount;
+    const walk: readonly [number, boolean][] = out
+      ? [
+          [eBot[k]!, true], // v = 0, u rising
+          [eVert[k1]!, true], // u = 1, v rising
+          [eTop[k]!, false], // v = 1, u falling
+          [eVert[k]!, false], // u = 0, v falling
+        ]
+      : [
+          [eVert[k]!, true], // u = 0, v rising
+          [eTop[k]!, true], // v = 1, u rising
+          [eVert[k1]!, false], // u = 1, v falling
+          [eBot[k]!, false], // v = 0, u falling
+        ];
+    return face(
+      w,
+      surf,
+      walk.map(([e, sense]) => oriented(w, e, sense)),
+      out,
+    );
+  });
+
+  // Caps: four-edge loops, run counter-clockwise about the cap's outward normal.
+  const p0 = vertCurves[0]!.ctrl[0]!;
+  const cap = (
+    edges: readonly number[],
+    curves: readonly BSplineCurve[],
+    z: number,
+    up: boolean,
+  ): number => {
     const surf = plane(
       w,
       { x: p0.x, y: p0.y, z },
       { x: 0, y: 0, z: up ? 1 : -1 },
       { x: 1, y: 0, z: 0 },
     );
-    const ccwAboutZ = zWinding(c) > 0;
-    return face(w, surf, [oriented(w, e, ccwAboutZ === up)], true);
+    const ccwAboutZ = zWinding(curves) > 0;
+    const forward = ccwAboutZ === up;
+    const walk = forward
+      ? edges.map((e) => oriented(w, e, true))
+      : [...edges].reverse().map((e) => oriented(w, e, false));
+    return face(w, surf, walk, true);
   };
-  const rootFace = cap(eRoot, root, m.rootZ, false);
-  const topFace = cap(eTop, top, m.topZ, true);
+  const rootFace = cap(eBot, botCurves, m.rootZ, false);
+  const topFace = cap(eTop, topCurves, m.topZ, true);
 
-  const shell = w.emit(`CLOSED_SHELL('',${refs([sideFace, rootFace, topFace])})`);
+  const shell = w.emit(`CLOSED_SHELL('',${refs([...sideFaces, rootFace, topFace])})`);
   return w.emit(`MANIFOLD_SOLID_BREP(${p21('blade')},${ref(shell)})`);
 };
 

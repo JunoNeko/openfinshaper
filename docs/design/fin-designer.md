@@ -194,19 +194,22 @@ As built in step 5 (`packages/kernel/src/fin-design/blade-surface.ts`,
 `packages/export/src/fin-step.ts`):
 
 ```
-blade  3 faces: one bicubic B-spline surface wrapped around the blade, closed in u
-       on a seam (outside face, trailing-edge cap, inside face, leading-edge cap),
+blade  6 faces: four open C²-smooth bicubic B-spline patches (outside face,
+       trailing-edge cap, inside face, leading-edge cap — split from the fitted
+       blade surface at its corner u-creases so there is no closed self-seam),
        plus flat root and tip caps
 tab    14 faces: two flat sides, then one face per profile segment: PLANE for a line,
        CYLINDRICAL_SURFACE for the slot end and the R1.0 corner
 ```
 
-- **One wrapped surface, not two skins.** The minimum thickness makes the edges blunt,
-  so each section is a closed loop with four corners. One surface with C0 knots at
-  the corners (`uBreaks`) shares its edges with itself and the caps exactly, the way
-  the board's two patches share the stringer. Corners in the outline or taper crease
-  along the height the same way (`vBreaks`, added to `interpolateSurface` for this;
-  the board's output is byte-identical).
+- **Four open B-spline patches, no self-seam.** The minimum thickness makes the edges
+  blunt, so each section is a closed loop with four corners. `fitBladeSurface` fits
+  one surface with C0 knots at the corners (`uBreaks`), then `fin-step.ts` splits it
+  with `splitSurfaceU` at those knots into four C²-smooth open faces that share their
+  vertical corner edges by identity — matching the board's open-patch topology and
+  avoiding closed-surface / seam-pcurve ambiguity in strict STEP importers. Corners
+  in the outline or taper crease along the height use `vBreaks` (added to
+  `interpolateSurface` for this; the board's output is byte-identical).
 - **Tip:** sections stop 0.1 mm under the tip and a flat sliver closes the blade. A
   surface pinched to a point is legal but often fails to import.
 - **Accuracy:** fitted to 0.05 mm and refined until met. What remains is in the last
