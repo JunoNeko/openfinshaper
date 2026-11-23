@@ -754,12 +754,22 @@ export const bladeSection = (
     const x = leading + (trailing - leading) * u;
     const found: { s: number; u: number } = sb.nearest(x, h, hint);
     hint = found;
-    // An end of the cut is on the outline, so on the blade's edge: exactly the minimum.
+    // An end of the cut is on the outline, so on the blade's edge: exactly the minimum,
+    // onto whichever side of the layout it is nearest (the leading or trailing edge, or
+    // the last row). Snapped onto the last row whenever near it, an end near the tip point
+    // (where the rows close up, past the tip line) was carried to the tip point, a jog in
+    // the exported edge (owner testing, eggplant.fin.json).
     const onSide = !(u > 0 && u < 1);
-    const at = {
-      s: onSide && found.s > 0.98 ? 1 : found.s,
-      u: onSide && found.u < 0.02 ? 0 : onSide && found.u > 0.98 ? 1 : found.u,
-    };
+    const toTop = 1 - found.s;
+    const nearest = Math.min(found.u, 1 - found.u, toTop);
+    const at = !onSide
+      ? found
+      : nearest === toTop
+        ? { s: toTop < 0.02 ? 1 : found.s, u: found.u }
+        : {
+            s: found.s,
+            u: found.u < 0.5 ? (found.u < 0.02 ? 0 : found.u) : found.u > 0.98 ? 1 : found.u,
+          };
     const f = sb.faces(at.s, at.u);
     // Each station where it belongs along the cut: the layout's edge can stray from the
     // outline by a fraction of a millimetre at a raised rear's corner.

@@ -42,8 +42,9 @@
  *   curve, the direction and bend it arrives with, until it meets the outline: the tip
  *   point. The rows close up to it (the last row a sliver about it), the outline round the
  *   tip being their edges, so each is the tip foil shrinking as it nears the point, its
- *   thickest on the path, as thick as the thickness curve says there. Nothing else shapes
- *   the tip: a curve that ends thick ends blunt. Moving the tip line steers the tip point.
+ *   thickest on the path, as thick as the thickness curve says there, but never thicker
+ *   for its length than the tip foil on the tip line: near the point the tip foil shrinks
+ *   whole. Moving the tip line steers the tip point.
  * - **Minimum**: the foil scaled to the thickness less the minimum, then the minimum
  *   added all over (symmetric foils half each side): the edges and the tip edge end at it
  *   exactly, with no clamp.
@@ -546,44 +547,33 @@ export const smoothMap = (d: FinDesign): SmoothMap => {
   const q =
     Math.round(Math.min(1 - margin, Math.max(margin, past.q)) * TIP_POINT_STEPS) / TIP_POINT_STEPS;
   const layout = kept.about.get(q) ?? bounded(kept.about, q, layoutAbout(d, f, q), 4);
-  // The traced path, as at most 80 points, to cross the rows with.
-  const traced = polyline(past.pts);
-  const line = Array.from({ length: 81 }, (_, k) => alongPath(traced, k / 80));
-  const fractions = new Float64Array(PAST_ROWS + 1);
+  // Past the tip line the path is one smooth curve on the layout, its fraction along each
+  // row a quintic in s: leaving the tip line with the value, slope and bend it arrives
+  // with (no corner or change of bend there), and ending on the middle of the last row,
+  // the tip point the rows close up to, arriving straight. Read where the traced curve
+  // crossed each row instead, it wobbled from row to row and hooked into the tip point at
+  // the end, and the foils laid on it either side were distorted (owner testing,
+  // eggplant.fin.json).
   const { sTip } = layout;
   const below = pathToTipLine(d, sTip);
-  let last = below(sTip);
-  fractions[0] = last;
-  for (let k = 1; k <= PAST_ROWS; k++) {
-    const s = sTip + ((1 - sTip) * k) / PAST_ROWS;
-    const row = Array.from({ length: 97 }, (_, j) => layoutPoint(layout, s, j / 96));
-    let cross: number | null = null;
-    for (let j = 1; j < row.length && cross === null; j++) {
-      for (let i = 1; i < line.length; i++) {
-        const u = crossAt(line[i - 1]!, line[i]!, row[j - 1]!, row[j]!);
-        if (u !== null) {
-          cross = layoutAlong(layout, s, (j - 1 + u) / 96);
-          break;
-        }
-      }
-    }
-    last = cross ?? last;
+  const span = 1 - sTip;
+  const h = 1e-3;
+  const p0 = below(sTip);
+  const m0 = ((below(sTip) - below(sTip - h)) / h) * span;
+  const c0 = ((below(sTip) - 2 * below(sTip - h) + below(sTip - 2 * h)) / (h * h)) * span * span;
+  const fractions = new Float64Array(PAST_ROWS + 1);
+  for (let k = 0; k <= PAST_ROWS; k++) {
     const t = k / PAST_ROWS;
-    // Eased in from the path's own way on past the tip line, so it runs on through the tip
-    // line without a corner; and onto the middle of the last row by the end, where the
-    // rows close up about the tip point.
-    const onto = below(s) + (last - below(s)) * smootherstep(t / 0.3);
-    fractions[k] = onto + (0.5 - onto) * smootherstep((t - 0.7) / 0.3);
-  }
-  // Smoothed up the rows (binomial passes, the ends held): read where it crosses each
-  // row, it steps a little from row to row, which showed as a faint crease.
-  for (let pass = 0; pass < 8; pass++) {
-    let prev = fractions[0]!;
-    for (let k = 1; k < PAST_ROWS; k++) {
-      const here = fractions[k]!;
-      fractions[k] = (prev + 2 * here + fractions[k + 1]!) / 4;
-      prev = here;
-    }
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const t4 = t3 * t;
+    const t5 = t4 * t;
+    const v =
+      p0 * (1 - 10 * t3 + 15 * t4 - 6 * t5) +
+      m0 * (t - 6 * t3 + 8 * t4 - 3 * t5) +
+      c0 * (0.5 * t2 - 1.5 * t3 + 1.5 * t4 - 0.5 * t5) +
+      0.5 * (10 * t3 - 15 * t4 + 6 * t5);
+    fractions[k] = Math.min(0.98, Math.max(0.02, v));
   }
   return bounded(
     kept.maps,
@@ -812,10 +802,38 @@ export const smoothBladeOf = (b: PreparedBlade): SmoothBlade => {
   const etaAt = (s: number) => eta.at(s * SPINE_SAMPLES);
   /** The thickness curve less the minimum, η along the fin. */
   const curve = (e: number) => Math.max(0, taperAt(e) - m);
-  // The thickness: the curve read along the fin (η), to the tip point. Nothing else
-  // shapes the tip: past the tip line the rows close up to the tip point, the tip foil
-  // along them shrinking with them (owner proposal); a blunt curve end is a blunt tip.
-  const scale = (s: number): number => curve(etaAt(s));
+  // The thickness: the curve read along the fin (η), to the tip point. Past the tip line
+  // the rows close up to the tip point, the tip foil along them shrinking with them (owner
+  // proposal), and no row is thicker for its length than the tip foil on the tip line
+  // (owner request: the rows near the point stayed as thick as the curve said while their
+  // length went to nothing, a blunt nub there). Where that cap is under the curve, the
+  // thickness is the curve times h(ρ) = ρ + ρ²(1 − ρ), ρ the cap over the curve: h is 1,
+  // flat, at ρ = 1 and follows the cap (slope 1) as ρ falls to 0, so the curve gives way
+  // to the cap without a crease, and the tip line, where the cap is the curve, is as drawn.
+  const rowLength = (s: number): number => {
+    let len = 0;
+    let prev = point(s, 0);
+    for (let j = 1; j <= 64; j++) {
+      const q = point(s, j / 64);
+      len += Math.hypot(q.x - prev.x, q.y - prev.y);
+      prev = q;
+    }
+    return len;
+  };
+  const pastLength = spline1(
+    Array.from({ length: PAST_ROWS + 1 }, (_, k) => rowLength(sTip + ((1 - sTip) * k) / PAST_ROWS)),
+  );
+  const tipLength = rowLength(sTip);
+  const tipAspect = tipLength > 0 ? curve(etaAt(sTip)) / tipLength : 0;
+  const scale = (s: number): number => {
+    const c = curve(etaAt(s));
+    if (s <= sTip || !(c > 0)) return c;
+    const cap = tipAspect * pastLength.at(((s - sTip) / (1 - sTip)) * PAST_ROWS);
+    const r = cap / c;
+    if (r >= 1) return c;
+    const q = Math.max(0, r);
+    return c * (q + q * q * (1 - q));
+  };
   const offsets = (s: number, u: number): [number, number] => {
     const [o, n, share] = foil(s, alongAt(s, u));
     const k = scale(s);

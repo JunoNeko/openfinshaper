@@ -721,16 +721,23 @@ curve, with the direction and bend it arrives with, until it meets the outline: 
 point**. The layout's rows past the tip line close up to it, the last row a sliver (2% of
 the tip edge) about it, so each is the tip foil shrinking as it nears the point, thickest
 on the path and as thick as the thickness curve says there (read along the path, η → 1 at
-the tip point). A curve that ends thick ends blunt; the owner shapes the end in the
-thickness view. Moving the tip line moves where the path crosses it, and so the tip point.
+the tip point), but never thicker for its length than the tip foil on the tip line: where
+that cap is under the curve the thickness is the curve times h(ρ) = ρ + ρ²(1 − ρ), ρ the
+cap over the curve, which is 1 and flat at ρ = 1 and follows the cap as ρ falls, so the curve
+gives way to it without a crease (owner testing, `eggplant_tip.fin.json`: rows near the point
+kept the curve's thickness while their length went to nothing, a blunt nub; the curve's end
+handle had to be dragged down to hide it). Moving the tip line moves where the path crosses
+it, and so the tip point.
 
 - The tip point is traced once, on the layout closing up about the tip edge's middle, then
   the layout is solved again closing up at it. Tracing again on that layout doesn't settle:
   where the rows close up tilts the rows just under the tip line and with them the path's
   direction there (each pass moved the twin fin's tip point another 5% of its tip edge).
-- On the final layout the path past the tip line follows that traced curve, eased in from
-  its own way on over the first 30% (no corner at the tip line) and onto the middle of the
-  last row over the last 30%, smoothed up the rows (8 binomial passes).
+- On the final layout the path past the tip line is one smooth curve: its fraction along
+  each row a quintic in s, leaving the tip line with the value, slope and bend it arrives
+  with and ending on the middle of the last row, at the tip point, arriving straight. Read
+  where the traced curve crossed each row, it wobbled and hooked into the tip point, and the
+  foils laid on it either side were distorted (owner testing, eggplant).
 - The layouts are kept: one per outline and tip line, and the one closing up at the tip
   point held to 1/400 of the tip edge, so editing a foil rarely solves again. A tip line
   drag solves twice (about 130 ms against 67 ms).
