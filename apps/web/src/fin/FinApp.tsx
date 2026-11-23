@@ -71,6 +71,7 @@ import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
 import { BuyMeACoffee } from './BuyMeACoffee';
+import { BUILD_COMMIT, BUILD_TIME, buildLabel } from '../build-info';
 import { FacingDialog, VECTOR_ACCEPT, readVectorFile } from './VectorImport';
 import type { Ghost } from './ghost';
 import { vectorFoil, vectorOutline, type VectorFacing, type VectorPath } from './vector-import';
@@ -1355,6 +1356,13 @@ export function FinApp() {
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2">
         <h1 className="text-sm font-semibold">OpenFinShaper</h1>
+        <span
+          className="text-xs tabular-nums text-muted-foreground"
+          title={`Build ${BUILD_COMMIT}${BUILD_TIME ? `, made ${new Date(BUILD_TIME).toLocaleString()}` : ''}`}
+          data-testid="build-version"
+        >
+          Build {buildLabel()}
+        </span>
         {/* File, then Edit: groups set apart by a rule (owner review). */}
         <div
           role="group"

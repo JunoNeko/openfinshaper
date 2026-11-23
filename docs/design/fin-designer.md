@@ -733,11 +733,19 @@ it, and so the tip point.
   the layout is solved again closing up at it. Tracing again on that layout doesn't settle:
   where the rows close up tilts the rows just under the tip line and with them the path's
   direction there (each pass moved the twin fin's tip point another 5% of its tip edge).
-- On the final layout the path past the tip line is one smooth curve: its fraction along
-  each row a quintic in s, leaving the tip line with the value, slope and bend it arrives
-  with and ending on the middle of the last row, at the tip point, arriving straight. Read
-  where the traced curve crossed each row, it wobbled and hooked into the tip point, and the
-  foils laid on it either side were distorted (owner testing, eggplant).
+- On the final layout the path past the tip line is that traced curve: where it crosses
+  each row (the row as it is, sampled at 129 points, the curve at 201), as a fraction along
+  the row, eased in from the path's own way on over the first half (it arrives on this
+  layout a little differently from the one it was traced on; over a quarter, the centre
+  fin creased) and onto the middle of the last row over the last tenth. Read where a coarser
+  curve crossed coarser rows, with a pull onto the last row over the last 30%, it wobbled and
+  hooked into the tip point; made a quintic in s, it bent with the rows, flat and then
+  hooked (owner testing, eggplant). On the eggplant it now runs on almost straight, turning
+  at most 0.2° per step.
+- Past the tip line the row's thickness and the foil's toward the row's ends are combined as
+  the nearer closing, 1/g = 1/f + 1/r − 1 (r the row's thickness against how it would carry
+  on from the tip line): multiplied, they closed quadratically near the tip point, a concave
+  neck in an upright cut there (rmtest.json, 145 mm back).
 - The layouts are kept: one per outline and tip line, and the one closing up at the tip
   point held to 1/400 of the tip edge, so editing a foil rarely solves again. A tip line
   drag solves twice (about 130 ms against 67 ms).

@@ -547,33 +547,40 @@ export const smoothMap = (d: FinDesign): SmoothMap => {
   const q =
     Math.round(Math.min(1 - margin, Math.max(margin, past.q)) * TIP_POINT_STEPS) / TIP_POINT_STEPS;
   const layout = kept.about.get(q) ?? bounded(kept.about, q, layoutAbout(d, f, q), 4);
-  // Past the tip line the path is one smooth curve on the layout, its fraction along each
-  // row a quintic in s: leaving the tip line with the value, slope and bend it arrives
-  // with (no corner or change of bend there), and ending on the middle of the last row,
-  // the tip point the rows close up to, arriving straight. Read where the traced curve
-  // crossed each row instead, it wobbled from row to row and hooked into the tip point at
-  // the end, and the foils laid on it either side were distorted (owner testing,
-  // eggplant.fin.json).
+  // Past the tip line the path is the traced curve itself: where it crosses each row,
+  // straight from end to end there (layoutAbout), as a fraction along the row. Onto the
+  // middle of the last row at the very end, where the rows close up about the tip point.
   const { sTip } = layout;
-  const below = pathToTipLine(d, sTip);
-  const span = 1 - sTip;
-  const h = 1e-3;
-  const p0 = below(sTip);
-  const m0 = ((below(sTip) - below(sTip - h)) / h) * span;
-  const c0 = ((below(sTip) - 2 * below(sTip - h) + below(sTip - 2 * h)) / (h * h)) * span * span;
+  const traced = polyline(past.pts);
+  const line = Array.from({ length: 201 }, (_, k) => alongPath(traced, k / 200));
   const fractions = new Float64Array(PAST_ROWS + 1);
-  for (let k = 0; k <= PAST_ROWS; k++) {
+  const below = pathToTipLine(d, sTip);
+  let last = below(sTip);
+  fractions[0] = last;
+  for (let k = 1; k <= PAST_ROWS; k++) {
+    const s = sTip + ((1 - sTip) * k) / PAST_ROWS;
+    // The row as it is (still easing from the solve's just past the tip line).
+    const row = Array.from({ length: 129 }, (_, j) => layoutPoint(layout, s, j / 128));
+    let cross: number | null = null;
+    for (let j = 1; j < row.length && cross === null; j++) {
+      for (let i = 1; i < line.length; i++) {
+        const u = crossAt(line[i - 1]!, line[i]!, row[j - 1]!, row[j]!);
+        if (u !== null) {
+          cross = (j - 1 + u) / 128;
+          break;
+        }
+      }
+    }
+    if (cross !== null) last = layoutAlong(layout, s, cross);
+    // Eased in from the path's own way on over the first half, as it arrives on this
+    // layout a little differently from the one it was traced on (eased over a quarter, it
+    // still creased the centre fin): a corner there creased the foils laid on it. Onto the
+    // middle of the last row at the very end, where the rows
+    // close up about the tip point.
     const t = k / PAST_ROWS;
-    const t2 = t * t;
-    const t3 = t2 * t;
-    const t4 = t3 * t;
-    const t5 = t4 * t;
-    const v =
-      p0 * (1 - 10 * t3 + 15 * t4 - 6 * t5) +
-      m0 * (t - 6 * t3 + 8 * t4 - 3 * t5) +
-      c0 * (0.5 * t2 - 1.5 * t3 + 1.5 * t4 - 0.5 * t5) +
-      0.5 * (10 * t3 - 15 * t4 + 6 * t5);
-    fractions[k] = Math.min(0.98, Math.max(0.02, v));
+    const own = below(s);
+    const onto = own + (last - own) * smootherstep(t / 0.5);
+    fractions[k] = onto + (0.5 - onto) * smootherstep((t - 0.9) / 0.1);
   }
   return bounded(
     kept.maps,
@@ -834,9 +841,33 @@ export const smoothBladeOf = (b: PreparedBlade): SmoothBlade => {
     const q = Math.max(0, r);
     return c * (q + q * q * (1 - q));
   };
+  // Near the tip point the row's thickness and the foil toward the row's ends both close to
+  // the minimum. Multiplied, they closed quadratically there, easing onto it: a concave neck
+  // under the outline (owner testing, rmtest.json: an upright cut 145 mm back). So past the
+  // tip line they are combined as the nearer closing, 1/g = 1/f + 1/r − 1: f the foil's share
+  // of its thickest, r the row's thickness as a share of how it would carry on from the tip
+  // line (the same value and slope there, falling exponentially). That is f on the tip line
+  // (r = 1), so the tip foil lies there as drawn, and r on the thickness path (f = 1), so the
+  // row is as thick as `scale` there; r's slope is 0 at the tip line, so no crease.
+  const t0 = scale(sTip);
+  const ds = 1e-4;
+  const fall = t0 > 0 ? (scale(sTip) - scale(sTip - ds)) / ds / t0 : 0;
+  const carried = (s: number) => t0 * Math.exp(fall * (s - sTip));
+  /** The factor on the foil's faces at row s where the foil is `f` of its thickest. */
+  const faceScale = (s: number, f: number): number => {
+    const k = scale(s);
+    if (s <= sTip || !(t0 > 0)) return k;
+    const c = carried(s);
+    const r = k / c;
+    if (r >= 1) return k;
+    if (!(r > 0)) return 0;
+    if (!(f > 0)) return c;
+    // g / f, so the faces keep the foil's shape at its thickest and close as the nearer one.
+    return (c * r) / (f + r - f * r);
+  };
   const offsets = (s: number, u: number): [number, number] => {
     const [o, n, share] = foil(s, alongAt(s, u));
-    const k = scale(s);
+    const k = faceScale(s, o - n);
     let out = o * k + m * share;
     let ins = n * k - m * (1 - share);
     const { outside: lamOut, inside: lamIn } = b.laminate;

@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
@@ -14,6 +15,28 @@ const SITE_URL = (process.env.VITE_SITE_URL ?? 'https://openfinshaper.com').repl
 const IS_TAURI = !!process.env.TAURI_ENV_PLATFORM;
 
 const OUT_DIR = join(import.meta.dirname, 'dist');
+
+/**
+ * Which build this is (owner request: to be sure the latest is the one being looked at),
+ * shown beside the fin designer's title: the commit it was built from, from the host's
+ * build variables (Cloudflare Pages, Workers Builds) or git, and when.
+ */
+const gitCommit = (): string => {
+  try {
+    return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return '';
+  }
+};
+const BUILD_COMMIT = (
+  process.env.CF_PAGES_COMMIT_SHA ||
+  process.env.WORKERS_CI_COMMIT_SHA ||
+  gitCommit() ||
+  'dev'
+).slice(0, 7);
+const BUILD_TIME = new Date().toISOString();
 
 // Kept in sync with SITE_TAGLINE in src/seo/site.ts by hand: that module reads
 // import.meta.env, which isn't available in the config's Node context.
@@ -55,6 +78,10 @@ function writeCsp(outDir: string) {
 }
 
 export default defineConfig({
+  define: {
+    __BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+  },
   plugins: [
     react(),
     tailwindcss(),
