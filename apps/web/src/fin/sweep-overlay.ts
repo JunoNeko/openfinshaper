@@ -38,20 +38,14 @@ export interface SweepOverlay {
 /** Where the thickness path's three points are (rows): the base, halfway, the tip line. */
 const pathRows = (sb: SmoothBlade): [number, number, number] => [0, 0.5, sb.sTip];
 
-/** The profile point `along` of the way along row s. */
-const onRow = (sb: SmoothBlade, s: number, along: number): Vec2 => {
-  const line = Array.from({ length: 129 }, (_, k) => sb.point(s, k / 128));
-  const run = [0];
-  for (let k = 1; k < line.length; k++) {
-    run.push(run[k - 1]! + Math.hypot(line[k]!.x - line[k - 1]!.x, line[k]!.y - line[k - 1]!.y));
+/** A row sampled uniformly across u, with cumulative arc length. */
+const sampleRow = (sb: SmoothBlade, s: number, steps = 128) => {
+  const line = Array.from({ length: steps + 1 }, (_, k) => sb.point(s, k / steps));
+  const run = new Float64Array(steps + 1);
+  for (let k = 1; k <= steps; k++) {
+    run[k] = run[k - 1]! + Math.hypot(line[k]!.x - line[k - 1]!.x, line[k]!.y - line[k - 1]!.y);
   }
-  const target = along * run[run.length - 1]!;
-  let k = 1;
-  while (k < line.length - 1 && run[k]! < target) k++;
-  const t = (target - run[k - 1]!) / (run[k]! - run[k - 1]! || 1);
-  const a = line[k - 1]!;
-  const c = line[k]!;
-  return { x: a.x + (c.x - a.x) * t, y: a.y + (c.y - a.y) * t } as Vec2;
+  return { line, run, total: run[steps]! };
 };
 
 export const sweepOverlay = (d: FinDesign): SweepOverlay => {
@@ -62,11 +56,11 @@ export const sweepOverlay = (d: FinDesign): SweepOverlay => {
   const path = [
     ...Array.from({ length: 41 }, (_, k) => (k / 40) * sb.sTip),
     ...Array.from({ length: 20 }, (_, k) => sb.sTip + ((1 - sb.sTip) * (k + 1)) / 20),
-  ].map((s) => onRow(sb, s, sb.path(s)));
+  ].map((s) => sb.spine(s) as Vec2);
   const rows = pathRows(sb);
   const handle = (i: 0 | 1 | 2): FinCurveMarker => ({
     id: `path-${i}`,
-    at: onRow(sb, rows[i], sb.path(rows[i])),
+    at: sb.spine(rows[i]) as Vec2,
     color: PATH_COLOR,
     label: [
       'Thickness path at the base',
@@ -91,12 +85,22 @@ export const sweepOverlay = (d: FinDesign): SweepOverlay => {
 
 /** The fraction along row s nearest a point. */
 const alongNear = (sb: SmoothBlade, s: number, p: Vec2): number => {
+  const { line, run, total } = sampleRow(sb, s, 200);
+  if (!(total > 0)) return 0;
   let best = 0;
   let dist = Infinity;
-  for (let k = 0; k <= 200; k++) {
-    const q = onRow(sb, s, k / 200);
-    const dd = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
-    if (dd < dist) [dist, best] = [dd, k / 200];
+  for (let k = 1; k < line.length; k++) {
+    const a = line[k - 1]!;
+    const b = line[k]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+    const dd = (a.x + dx * t - p.x) ** 2 + (a.y + dy * t - p.y) ** 2;
+    if (dd < dist) {
+      dist = dd;
+      best = (run[k - 1]! + (run[k]! - run[k - 1]!) * t) / total;
+    }
   }
   return best;
 };

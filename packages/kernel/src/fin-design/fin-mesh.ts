@@ -109,20 +109,33 @@ const smoothBladeMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh =
   // the profile's outermost points (rearmost, foremost, highest), where the layout has a
   // node on it (smooth-blade.ts), so the mesh reaches them: a hook's tip, say.
   const even = Array.from({ length: o.rows + 1 }, (_, i) => Math.sin((Math.PI / 2) * (i / o.rows)));
-  const ext = [
-    splineExtremes(d.outline, 'x').min,
-    splineExtremes(d.outline, 'x').max,
-    splineExtremes(d.outline, 'y').max,
-  ];
+  const ex = splineExtremes(d.outline, 'x');
+  const ey = splineExtremes(d.outline, 'y');
+  const ext = [ex.min, ex.max, ey.max];
   const through = ext
     .map((e) => sb.nearest(e.point.x, e.point.y).s)
     .filter((s) => s > 0.02 && s < 1);
   const ss = [...even];
+  const used = new Set<number>();
   for (const t of through) {
-    // In place of the nearest row, so the rows stay as many and in order.
-    let k = 1;
-    for (let i = 1; i < ss.length - 1; i++) if (Math.abs(ss[i]! - t) < Math.abs(ss[k]! - t)) k = i;
-    if (t > ss[k - 1]! && t < ss[k + 1]!) ss[k] = t;
+    // In place of the nearest unused interior row, so the rows stay as many, in order, and
+    // without overwriting another extremum's row or collapsing a neighbouring gap.
+    let k = -1;
+    let bestDist = Infinity;
+    for (let i = 1; i < ss.length - 1; i++) {
+      if (used.has(i)) continue;
+      const dist = Math.abs(ss[i]! - t);
+      if (dist < bestDist) {
+        bestDist = dist;
+        k = i;
+      }
+    }
+    if (k < 0) continue;
+    const minGap = (ss[k + 1]! - ss[k - 1]!) * 0.1;
+    if (t - ss[k - 1]! > minGap && ss[k + 1]! - t > minGap) {
+      ss[k] = t;
+      used.add(k);
+    }
   }
   const rows = ss.map((s) => {
     const outside: Vert3[] = [];
@@ -243,11 +256,10 @@ const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
     const lo = rings.map((r) => side(r, yLo));
     const hi = rings.map((r) => side(r, yHi));
     // The two sides: the profile less its holes.
-    const flatIds = (ids: number[][]) => ids.flat();
+    const l = lo.flat();
+    const h = hi.flat();
     const tris = triangulateWithHoles(profile, holes);
     for (const [a, b, c] of tris) {
-      const l = flatIds(lo);
-      const h = flatIds(hi);
       m.tri(l[a]!, l[b]!, l[c]!, { x: 0, y: -1, z: 0 });
       m.tri(h[a]!, h[b]!, h[c]!, { x: 0, y: 1, z: 0 });
     }

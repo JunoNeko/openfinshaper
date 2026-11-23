@@ -12,7 +12,7 @@ import type { FinDesign } from './fin-design';
 import { fairness } from './fairness';
 import { finMesh, FIN_MESH_PREVIEW } from './fin-mesh';
 import { sliceMesh } from './mesh-slice';
-import { yAtX } from './curve-shape';
+import { splineExtremes, yAtX } from './curve-shape';
 import {
   foilWarp,
   smoothBlade,
@@ -183,6 +183,43 @@ describe('past the tip line (owner proposal: the thickness path carried on to th
       tipLine: { start: tip.start - 0.03, end: tip.end - 0.03 },
     }).tipPoint;
     expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(0.05);
+  });
+
+  it('handles a very low tip line and a sharply curving thickness path cleanly', () => {
+    const base = defaultFinDesign('side', 'left');
+    // Dragged low near the base (small sTip) with a strong mid-fin thickness bend that curls
+    // sharply past the tip line, exercising both h clamping and the >π curvature fallback.
+    const lowAndCurved: FinDesign = {
+      ...base,
+      tipLine: { start: 0.08, end: 0.92 },
+      thicknessMid: 0.85,
+      tipSection: moveFoilThickest(nacaSection('0008'), 0.15),
+    };
+    const m = smoothMap(lowAndCurved);
+    expect(Number.isFinite(m.tipPoint.x)).toBe(true);
+    expect(Number.isFinite(m.tipPoint.y)).toBe(true);
+    const sb = smoothBlade(lowAndCurved);
+    const end = sb.spine(1);
+    expect(Math.hypot(end.x - m.tipPoint.x, end.y - m.tipPoint.y)).toBeLessThan(0.1);
+  });
+
+  it('pins extreme rows on a hooked fin mesh without losing closure or cutting the hook tip', () => {
+    const d = ownerFin('tsn_800_single.fin.json');
+    const m = finMesh(d, FIN_MESH_PREVIEW).blade;
+    const ex = splineExtremes(d.outline, 'x');
+    const ey = splineExtremes(d.outline, 'y');
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let maxZ = -Infinity;
+    for (let i = 0; i < m.positions.length; i += 3) {
+      minX = Math.min(minX, m.positions[i]!);
+      maxX = Math.max(maxX, m.positions[i]!);
+      maxZ = Math.max(maxZ, m.positions[i + 2]!);
+    }
+    // Every outline extremum is reached within 0.05 mm (was cut by up to 0.3 mm before pinning).
+    expect(Math.abs(minX - ex.min.point.x)).toBeLessThan(0.005);
+    expect(Math.abs(maxX - ex.max.point.x)).toBeLessThan(0.005);
+    expect(Math.abs(maxZ - ey.max.point.y)).toBeLessThan(0.005);
   });
 });
 

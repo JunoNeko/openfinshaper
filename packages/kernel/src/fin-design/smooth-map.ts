@@ -242,16 +242,40 @@ export const gridFolds = (g: Grid): boolean => {
 export const WINSLOW = { passes: 4000, settled: 1e-7, over: 1.4 } as const;
 
 /**
- * The elliptic (Winslow) grid over four sides: Coons to start, then each interior point
- * moved to where Winslow's equations put it given its neighbours, over and over
- * (Gauss–Seidel, a little over-relaxed), the sides held, until no point moves more than
- * {@link WINSLOW}.settled. In grid units the equations, for x and y alike, are
- * α·x_uu − 2β·x_uv + γ·x_vv = 0, with α = |P_v|², β = P_u·P_v, γ = |P_u|².
+ * The elliptic (Winslow) grid over four sides: Coons to start (or `initial`, with the four
+ * sides updated to `s`), then each interior point moved to where Winslow's equations put
+ * it given its neighbours, over and over (Gauss–Seidel, a little over-relaxed), the sides
+ * held, until no point moves more than {@link WINSLOW}.settled. In grid units the
+ * equations, for x and y alike, are α·x_uu − 2β·x_uv + γ·x_vv = 0, with α = |P_v|²,
+ * β = P_u·P_v, γ = |P_u|².
  */
-export const winslowGrid = (s: Sides, rows: number, cols: number): Grid => {
-  const g = coonsGrid(s, rows, cols);
-  const { x, y } = g;
+export const winslowGrid = (s: Sides, rows: number, cols: number, initial?: Grid): Grid => {
   const w = cols + 1;
+  let g: Grid;
+  if (initial && initial.rows === rows && initial.cols === cols) {
+    const x = initial.x.slice();
+    const y = initial.y.slice();
+    for (let j = 0; j <= cols; j++) {
+      const b = s.bottom(j / cols);
+      x[j] = b.x;
+      y[j] = b.y;
+      const t = s.top(j / cols);
+      x[rows * w + j] = t.x;
+      y[rows * w + j] = t.y;
+    }
+    for (let i = 1; i < rows; i++) {
+      const l = s.left(i / rows);
+      x[i * w] = l.x;
+      y[i * w] = l.y;
+      const r = s.right(i / rows);
+      x[i * w + cols] = r.x;
+      y[i * w + cols] = r.y;
+    }
+    g = { rows, cols, x, y };
+  } else {
+    g = coonsGrid(s, rows, cols);
+  }
+  const { x, y } = g;
   for (let pass = 0; pass < WINSLOW.passes; pass++) {
     let moved = 0;
     for (let i = 1; i < rows; i++) {

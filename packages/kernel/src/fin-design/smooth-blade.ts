@@ -91,6 +91,7 @@ import {
   spline1,
   spline2,
   winslowGrid,
+  type Grid,
   type P2,
   type Sides,
   type Spline1,
@@ -192,7 +193,7 @@ const TIP_TOP = 0.02;
 const PAST_ROWS = 48;
 
 /** Steps (cm) the extended thickness path is traced in, and at most how far (cm). */
-const ARC_STEP = 0.01;
+const ARC_STEP = 0.05;
 const ARC_MAX = 100;
 
 /** A polyline through `pts`, with its running length. */
@@ -214,18 +215,26 @@ const stretch = (p: Polyline, a: number, b: number): P2[] => {
   return a <= b ? pts : pts.reverse();
 };
 
+/** The outline's outermost points (rearmost, foremost, highest), computed once per outline. */
+const outlineExtremes = (outline: FinDesign['outline']): readonly P2[] => {
+  const ex = splineExtremes(outline, 'x');
+  const ey = splineExtremes(outline, 'y');
+  return [ex.min.point, ex.max.point, ey.max.point];
+};
+
 /**
  * A side of the layout, `edge` read at `warp(t)` of its length, with the node nearest each
  * of the outline's outermost points (rearmost, foremost, highest) on it moved onto that
  * point: the layout is read through splines over its nodes, which cut a sharp point (a
  * hook's tip) between two of them by up to a few tenths of a millimetre. Moved by a
  * smooth bump at most half a node's spacing across three nodes either side, so the nodes
- * stay in order; never near row `keep` (the tip line), whose end is on the outline already.
+ * stay in order; never near row `keep` (the tip line), whose end is on the outline already,
+ * and skipping a second pin whose bump would reach an earlier one.
  */
 const pinned = (
   edge: Polyline,
   warp: (t: number) => number,
-  d: FinDesign,
+  extremes: readonly P2[],
   rows: number,
   keep: number,
 ): ((t: number) => P2) => {
@@ -233,11 +242,7 @@ const pinned = (
   const total = edge.cum[n]! || 1;
   const pins: { at: number; by: number }[] = [];
   const reach = 3 / rows;
-  for (const e of [
-    splineExtremes(d.outline, 'x').min.point,
-    splineExtremes(d.outline, 'x').max.point,
-    splineExtremes(d.outline, 'y').max.point,
-  ]) {
+  for (const e of extremes) {
     // How far along the side the point is, if it is on it.
     let best = Infinity;
     let along = 0;
@@ -263,9 +268,16 @@ const pinned = (
     }
     const t = (lo + hi) / 2;
     const node = Math.round(t * rows) / rows;
-    // Not where it would move the tip line's end, which is on the outline already.
-    if (node > 0 && node < 1 && Math.abs(node - keep) >= reach)
+    // Not where it would move the tip line's end (on the outline already) or overlap an
+    // earlier pin's bump (which would push it off target or fold shift(t)).
+    if (
+      node > 0 &&
+      node < 1 &&
+      Math.abs(node - keep) >= reach &&
+      pins.every((p) => Math.abs(node - p.at) >= reach)
+    ) {
       pins.push({ at: node, by: t - node });
+    }
   }
   const shift = (t: number) => {
     let v = t;
@@ -281,7 +293,13 @@ const pinned = (
 /** A layout without the path past the tip line: the rows close up about `q` of the tip edge. */
 type Layout = Omit<SmoothMap, 'tipPoint' | 'pastPath'>;
 
-const layoutAbout = (d: FinDesign, f: ReturnType<typeof sweepFrame>, q: number): Layout => {
+const layoutAbout = (
+  d: FinDesign,
+  f: ReturnType<typeof sweepFrame>,
+  q: number,
+  extremes: readonly P2[],
+  initial?: Grid,
+): { layout: Layout; grid: Grid } => {
   const { rows, cols } = SMOOTH_MAP;
   // Each edge runs on past the tip line round the tip, up to the short last row about q.
   const lo = Math.max(1e-3, q - TIP_TOP / 2);
@@ -299,10 +317,11 @@ const layoutAbout = (d: FinDesign, f: ReturnType<typeof sweepFrame>, q: number):
   const sides: Sides = {
     bottom: (t) => acrossBase(f.base, t),
     top: (t) => alongPath(f.tipEdge, lo + (hi - lo) * t),
-    left: pinned(left, (t) => foilWarp(t, sTip, fL), d, rows, sTip),
-    right: pinned(right, (t) => foilWarp(t, sTip, fR), d, rows, sTip),
+    left: pinned(left, (t) => foilWarp(t, sTip, fL), extremes, rows, sTip),
+    right: pinned(right, (t) => foilWarp(t, sTip, fR), extremes, rows, sTip),
   };
-  const g = winslowGrid(sides, rows, cols);
+  const g = winslowGrid(sides, rows, cols, initial);
+  const grid: Grid = { rows, cols, x: g.x.slice(), y: g.y.slice() };
   // The tip line's row made exactly straight: its points moved square to where they lie by
   // length along it, the move eased out over the rows either side, flat at the row and
   // at both ends, so the layout stays smooth through it.
@@ -383,12 +402,15 @@ const layoutAbout = (d: FinDesign, f: ReturnType<typeof sweepFrame>, q: number):
     }
   }
   return {
-    x,
-    z,
-    along: spline2(along, rows, cols),
-    tipStart: f.tipStart,
-    tipEnd: f.tipEnd,
-    sTip,
+    layout: {
+      x,
+      z,
+      along: spline2(along, rows, cols),
+      tipStart: f.tipStart,
+      tipEnd: f.tipEnd,
+      sTip,
+    },
+    grid,
   };
 };
 
@@ -449,7 +471,7 @@ const pathPast = (
 ): { pts: P2[]; q: number } => {
   const at = pathToTipLine(d, m.sTip);
   const spine = (s: number) => layoutPoint(m, s, layoutU(m, s, at(s)));
-  const h = 0.02;
+  const h = Math.min(0.02, m.sTip / 4);
   const p1 = spine(m.sTip - 2 * h);
   const p2 = spine(m.sTip - h);
   const p3 = spine(m.sTip);
@@ -466,9 +488,13 @@ const pathPast = (
     let dir = Math.atan2(p3.y - p2.y, p3.x - p2.x) + (k * l2) / 2;
     const pts: P2[] = [p3];
     let p = p3;
+    const absK = Math.abs(k);
     for (let step = 0; step * ARC_STEP < ARC_MAX; step++) {
+      // Stop if the arc has curled past half a circle (tight bend looping back inside).
+      if (absK * step * ARC_STEP > Math.PI) return null;
+      const mid = dir + (k * ARC_STEP) / 2;
       dir += k * ARC_STEP;
-      const next = { x: p.x + Math.cos(dir) * ARC_STEP, y: p.y + Math.sin(dir) * ARC_STEP };
+      const next = { x: p.x + Math.cos(mid) * ARC_STEP, y: p.y + Math.sin(mid) * ARC_STEP };
       for (let i = 1; i <= n; i++) {
         const u = crossAt(edge.pts[i - 1]!, edge.pts[i]!, p, next);
         if (u === null) continue;
@@ -495,7 +521,9 @@ const TIP_POINT_STEPS = 400;
 /** Layouts kept per outline and tip line: where the path is found, and a few closing up. */
 interface Layouts {
   readonly frame: ReturnType<typeof sweepFrame>;
+  readonly extremes: readonly P2[];
   readonly first: Layout;
+  readonly firstGrid: Grid;
   readonly about: Map<number, Layout>;
   readonly maps: Map<string, SmoothMap>;
 }
@@ -524,10 +552,19 @@ export const smoothMap = (d: FinDesign): SmoothMap => {
   let kept = byLine.get(tipKey);
   if (!kept) {
     const frame = sweepFrame(d);
+    const extremes = outlineExtremes(d.outline);
+    const { layout: first, grid: firstGrid } = layoutAbout(d, frame, 0.5, extremes);
     kept = bounded(
       byLine,
       tipKey,
-      { frame, first: layoutAbout(d, frame, 0.5), about: new Map(), maps: new Map() },
+      {
+        frame,
+        extremes,
+        first,
+        firstGrid,
+        about: new Map([[0.5, first]]),
+        maps: new Map(),
+      },
       4,
     );
   }
@@ -546,32 +583,50 @@ export const smoothMap = (d: FinDesign): SmoothMap => {
   const past = pathPast(d, f, kept.first);
   const q =
     Math.round(Math.min(1 - margin, Math.max(margin, past.q)) * TIP_POINT_STEPS) / TIP_POINT_STEPS;
-  const layout = kept.about.get(q) ?? bounded(kept.about, q, layoutAbout(d, f, q), 4);
+  const layout =
+    kept.about.get(q) ??
+    bounded(kept.about, q, layoutAbout(d, f, q, kept.extremes, kept.firstGrid).layout, 4);
   // Past the tip line the path is the traced curve itself: where it crosses each row,
   // straight from end to end there (layoutAbout), as a fraction along the row. Onto the
   // middle of the last row at the very end, where the rows close up about the tip point.
   const { sTip } = layout;
-  const traced = polyline(past.pts);
-  const line = Array.from({ length: 201 }, (_, k) => alongPath(traced, k / 200));
+  const line =
+    past.pts.length <= 201
+      ? past.pts
+      : (() => {
+          const traced = polyline(past.pts);
+          return Array.from({ length: 201 }, (_, k) => alongPath(traced, k / 200));
+        })();
   const fractions = new Float64Array(PAST_ROWS + 1);
   const below = pathToTipLine(d, sTip);
   let last = below(sTip);
   fractions[0] = last;
+  const ROW_SAMPLES = 64;
+  let lineStart = 1;
+  const findCross = (row: readonly P2[], from: number, to: number): [number, number] | null => {
+    for (let i = from; i < to; i++) {
+      const a = line[i - 1]!;
+      const b = line[i]!;
+      for (let j = 1; j < row.length; j++) {
+        const u = crossAt(a, b, row[j - 1]!, row[j]!);
+        if (u !== null) return [(j - 1 + u) / ROW_SAMPLES, i];
+      }
+    }
+    return null;
+  };
   for (let k = 1; k <= PAST_ROWS; k++) {
     const s = sTip + ((1 - sTip) * k) / PAST_ROWS;
     // The row as it is (still easing from the solve's just past the tip line).
-    const row = Array.from({ length: 129 }, (_, j) => layoutPoint(layout, s, j / 128));
-    let cross: number | null = null;
-    for (let j = 1; j < row.length && cross === null; j++) {
-      for (let i = 1; i < line.length; i++) {
-        const u = crossAt(line[i - 1]!, line[i]!, row[j - 1]!, row[j]!);
-        if (u !== null) {
-          cross = (j - 1 + u) / 128;
-          break;
-        }
-      }
+    const row = Array.from({ length: ROW_SAMPLES + 1 }, (_, j) =>
+      layoutPoint(layout, s, j / ROW_SAMPLES),
+    );
+    const found =
+      findCross(row, lineStart, line.length) ??
+      (lineStart > 1 ? findCross(row, 1, lineStart) : null);
+    if (found !== null) {
+      last = layoutAlong(layout, s, found[0]);
+      lineStart = Math.max(1, found[1] - 2);
     }
-    if (cross !== null) last = layoutAlong(layout, s, cross);
     // Eased in from the path's own way on over the first half, as it arrives on this
     // layout a little differently from the one it was traced on (eased over a quarter, it
     // still creased the centre fin): a corner there creased the foils laid on it. Onto the

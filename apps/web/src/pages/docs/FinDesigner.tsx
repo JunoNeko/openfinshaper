@@ -322,16 +322,13 @@ export default function DocsFinDesigner() {
           base (bottom) to the tip (top). It stands upright at the fin&apos;s true depth, so it
           lines up with the profile; thickness runs across, drawn four times wider than true. A
           straight run that curves in near the tip is the usual shape: that curve is what controls
-          how the tip flexes. The curve holds all the way up, read along the thickness path to the
-          tip point: a fuller curve near its end gives a fuller tip, and its end is how thick the
-          tip ends. <strong>Base thickness</strong> scales the whole curve.{' '}
+          how the tip flexes. The curve is read along the orange thickness path from the base to the
+          tip point — about the fin&apos;s height on an upright fin, and along the sweep on a
+          heavily swept-back or hooked fin so the arm thins smoothly toward its tip. A fuller curve
+          near its end gives a fuller tip, while near the tip point the tip foil shrinks whole so
+          the tip closes cleanly. <strong>Base thickness</strong> scales the whole curve.{' '}
           <strong>Min thickness</strong>, beside it, sets the thinnest the fin may get (see{' '}
-          <a href="#rules">Minimum thickness</a>); the dashed line shows it. On a heavily swept-back
-          fin, whose arm reaches back to the tip spanning little height, the curve is measured along
-          the sweep instead — from the base, along the orange thickness path, to the tip — so the
-          arm thins toward its tip rather than keeping its full thickness to the tip line. The
-          thickness view says so when it does; fins that rise as they sweep back are read by height,
-          as always.
+          <a href="#rules">Minimum thickness</a>); the dashed line shows it.
         </p>
       </Section>
 
