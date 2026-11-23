@@ -111,6 +111,10 @@ export const FinTaperPane = memo(function FinTaperPane({
     () => (taper ? [{ id: 'taper', spline: taper, editable: true, color: TAPER }] : []),
     [taper],
   );
+  const frameBounds = useMemo(
+    () => ({ minX: -0.04, maxX: 1.06, minY: -0.12, maxY: root * 1.15 }),
+    [root],
+  );
 
   const drawUnder = useCallback(
     (
@@ -167,7 +171,7 @@ export const FinTaperPane = memo(function FinTaperPane({
       selection={pickFromSelection(selection, ['taper'])}
       alsoSelected={alsoFromSelection(selection, ['taper'])}
       yScale={view}
-      frameBounds={{ minX: -0.04, maxX: 1.06, minY: -0.12, maxY: root * 1.15 }}
+      frameBounds={frameBounds}
       frameKey={`${design.position}-${frameKey}`}
       drawUnder={drawUnder}
       guides={guides}

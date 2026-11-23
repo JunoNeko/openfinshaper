@@ -112,7 +112,14 @@ export const panelSpan = (
 /** The minimum of `f` within ±max: a scan every `step`, then a golden-section search. */
 const minimise = (f: (a: number) => number, step: number, max: number): number => {
   let best = 0;
-  for (let a = -max; a <= max + 1e-9; a += step) if (f(a) < f(best) - 1e-12) best = a;
+  let bestV = f(0);
+  for (let a = -max; a <= max + 1e-9; a += step) {
+    const v = f(a);
+    if (v < bestV - 1e-12) {
+      best = a;
+      bestV = v;
+    }
+  }
   let lo = Math.max(-max, best - step);
   let hi = Math.min(max, best + step);
   const g = (Math.sqrt(5) - 1) / 2;
@@ -123,7 +130,7 @@ const minimise = (f: (a: number) => number, step: number, max: number): number =
     else lo = a;
   }
   const a = Math.round(((lo + hi) / 2) * 100) / 100; // to a hundredth of a degree
-  return f(a) <= f(best) ? a : best;
+  return f(a) <= bestV ? a : best;
 };
 
 /**
@@ -135,13 +142,45 @@ export const bestPanelPose = (
   pts: readonly Vert3[],
   outward: 1 | -1 = 1,
 ): PanelPose & { width: number } => {
-  const width = (angle: number, tilt: number) => panelSpan(pts, { angle, tilt }, outward).width;
+  // Pack into flat typed arrays once: the search scans ~2,000 poses over the points.
+  const n = pts.length;
+  const xs = new Float64Array(n);
+  const ys = new Float64Array(n);
+  const zs = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const p = pts[i]!;
+    xs[i] = p.x;
+    ys[i] = p.y;
+    zs[i] = p.z;
+  }
+  const width = (angle: number, tilt: number) => {
+    const a = angle * DEG;
+    const t = tilt * DEG;
+    const c = Math.cos(t);
+    const nx = -Math.sin(a) * c;
+    const ny = Math.cos(a) * c;
+    const nz = -outward * Math.sin(t);
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const d = xs[i]! * nx + ys[i]! * ny + zs[i]! * nz;
+      if (d < lo) lo = d;
+      if (d > hi) hi = d;
+    }
+    return hi - lo;
+  };
   const max = FIN_PANEL_MAX_ANGLE;
   let angle = 0;
   let tilt = 0;
+  let bestW = width(0, 0);
   for (let a = -max; a <= max + 1e-9; a += 3) {
     for (let t = -max; t <= max + 1e-9; t += 3) {
-      if (width(a, t) < width(angle, tilt) - 1e-12) [angle, tilt] = [a, t];
+      const w = width(a, t);
+      if (w < bestW - 1e-12) {
+        angle = a;
+        tilt = t;
+        bestW = w;
+      }
     }
   }
   for (let round = 0; round < 6; round++) {

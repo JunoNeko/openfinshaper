@@ -156,6 +156,9 @@ const MARKER_R = 5;
 /** Half the side of a square marker (px): a block, big enough to grab. */
 const BLOCK_R = 7;
 
+const samePick = (a: FinCurvePick | null, b: FinCurvePick | null): boolean =>
+  a === b || (!!a && !!b && a.layer === b.layer && a.index === b.index && a.kind === b.kind);
+
 export function FinCurveEditor({
   layers,
   selection,
@@ -250,8 +253,10 @@ export function FinCurveEditor({
     const ctx = c?.getContext('2d');
     if (!c || !ctx || !vp) return;
     const dpr = globalThis.devicePixelRatio ?? 1;
-    c.width = Math.round(size.w * dpr);
-    c.height = Math.round(size.h * dpr);
+    const pw = Math.round(size.w * dpr);
+    const ph = Math.round(size.h * dpr);
+    if (c.width !== pw) c.width = pw;
+    if (c.height !== ph) c.height = ph;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     clear(ctx, size.w, size.h, background);
     drawGrid(ctx, vp, size.w, size.h, undefined, gridStep);
@@ -369,7 +374,8 @@ export function FinCurveEditor({
     const d = drag.current;
     if (!d) {
       if (e.pointerType !== 'touch') {
-        setHovered(pickHandle(layers, vp, p, yScale, tolFor(e)));
+        const next = pickHandle(layers, vp, p, yScale, tolFor(e));
+        setHovered((cur) => (samePick(cur, next) ? cur : next));
         onHover?.(fromView(screenToWorld(vp, p), yScale), 1 / vp.scale);
       }
       return;
@@ -448,7 +454,7 @@ export function FinCurveEditor({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onPointerLeave={() => {
-          setHovered(null);
+          setHovered((cur) => (cur === null ? cur : null));
           onHover?.(null, 0);
         }}
         onDoubleClick={onDoubleClick}

@@ -139,9 +139,14 @@ export const FinOutlinePane = memo(function FinOutlinePane({
   const base = design?.base ?? 'futures-side';
   // A US box head follows the fin; every other base is fixed.
   const follows = base === 'us-box' ? design?.outline : undefined;
+  const tabOutline = useMemo(() => finTabOutline(base, follows), [base, follows]);
   const tab = useMemo(() => tabPolygons(base, follows), [base, follows]);
   const kind = futuresKind(base);
-  const { rear: tabRear, length: tabLen, height: tabHeight } = finTabOutline(base, follows);
+  const { rear: tabRear, length: tabLen, height: tabHeight } = tabOutline;
+  const outlineMinX = useMemo(
+    () => (design ? boundsOf(sampleSpline(design.outline)).minX : 0),
+    [design],
+  );
   const frameBounds = useMemo(
     () => ({ minX: tabRear, maxX: tabRear + tabLen, minY: -tabHeight, maxY: 0 }),
     [tabRear, tabLen, tabHeight],
@@ -261,7 +266,7 @@ export const FinOutlinePane = memo(function FinOutlinePane({
       ctx.save();
       ctx.setLineDash([5, 4]);
       // The base: the board's bottom surface, across the whole view.
-      const rear = Math.min(-3, boundsOf(sampleSpline(design.outline)).minX - 1);
+      const rear = Math.min(-3, outlineMinX - 1);
       line({ x: rear, y: 0 }, { x: tabLen + 3, y: 0 }, TAB_LINE);
       if (kind) {
         // Front-overhang limit.
@@ -351,7 +356,7 @@ export const FinOutlinePane = memo(function FinOutlinePane({
         ctx.restore();
       }
     },
-    [design, tab, tabLen, kind, sweep, activeFoil, ghost, box, units],
+    [design, tab, tabLen, outlineMinX, kind, sweep, activeFoil, ghost, box, units],
   );
 
   const onBackgroundClick = useCallback(
