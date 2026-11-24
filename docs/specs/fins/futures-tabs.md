@@ -18,8 +18,8 @@ AutoCAD drawings of the Futures **box slot**, supplied by the project owner, tit
   middle is shorter.
 - The slot drawing gives the side height as 17.7. The tab uses **17.7** (owner's decision;
   the nominal 3/4″ is 19.05).
-- The tab is **6.35** thick (1/4″). The blade's foil may be thicker (e.g. 7.0) and
-  overlap the box slot.
+- The tab is **6.85** thick (adjusted +0.5 mm from 1/4″ / 6.35 for fit). The blade's foil may be
+  thicker (e.g. 7.0) and overlap the box slot.
 - No clearance is subtracted from the notch or slot features.
 
 ## Which tab each fin uses
@@ -40,7 +40,7 @@ centre tab. Unlike a centre fin, they take cant and a side.
   toward the nose, matching the app's tail-at-x=0 rule.
 - **y** runs up from the tab bottom at 0 to the tab top at the tab height. The tab top
   is the blade root plane.
-- The thickness (6.35) is the extrusion across the fin, centred on the tab's mid-plane.
+- The thickness (6.85) is the extrusion across the fin, centred on the tab's mid-plane.
 
 ## Rear end (both tabs)
 

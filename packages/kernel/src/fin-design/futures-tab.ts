@@ -50,7 +50,7 @@ const mm = (n: number): number => n / 10;
 
 const shared = {
   length: mm(113),
-  thickness: mm(6.35),
+  thickness: mm(6.85),
   slotDiameter: mm(4.4),
   slotCentreBelowTop: mm(6.4),
   slotArcCentreFromEnd: mm(3.3),

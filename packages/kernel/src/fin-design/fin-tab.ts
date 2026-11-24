@@ -74,18 +74,19 @@ export const FCS1_BASE = {
 
 /**
  * The US box fin head (cm), from the standard US box head drawing: 25 mm deep and
- * 9.6 mm (3/8") thick, 160–240 mm long. At the front, a 14.1 mm nose half the depth
- * (12.5 mm) carries the 4.5 mm screw hole (8-32 clearance), drilled down through it;
- * behind the nose a 12.7 mm radius scoop curves down to the full depth. The lower rear
- * corner is rounded (radius estimated from the drawing). The head's rear end is fixed
- * at x = 0 and its front follows the fin, `noseAhead` ahead of the leading-edge root
- * (at least `minLength` from the rear), with the screw hole just in front of the blade.
- * So sliding the fin fore and aft slides the blade along the head; a fin starts with
- * its trailing-edge root `rearStub` ahead of the rear end. No cant: centre fins.
+ * 9.1 mm thick (adjusted -0.5 mm from the 9.6 mm drawing for fit), 160–240 mm long.
+ * At the front, a 14.1 mm nose half the depth (12.5 mm) carries the 4.5 mm screw hole
+ * (8-32 clearance), drilled down through it; behind the nose a 12.7 mm radius scoop
+ * curves down to the full depth. The lower rear corner is rounded (radius estimated
+ * from the drawing). The head's rear end is fixed at x = 0 and its front follows the
+ * fin, `noseAhead` ahead of the leading-edge root (at least `minLength` from the rear),
+ * with the screw hole just in front of the blade. So sliding the fin fore and aft
+ * slides the blade along the head; a fin starts with its trailing-edge root `rearStub`
+ * ahead of the rear end. No cant: centre fins.
  */
 export const US_BOX_HEAD = {
   height: 2.5,
-  thickness: 0.96,
+  thickness: 0.91,
   minLength: 16,
   maxLength: 24,
   noseDepth: 1.25,

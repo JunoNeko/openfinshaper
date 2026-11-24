@@ -23,9 +23,9 @@ editable**. The user picks one of:
 
 | Tab               | Length | Depth | Thickness | Notches | Cant  | Sides |
 | ----------------- | ------ | ----- | --------- | ------- | ----- | ----- |
-| Side / quad front | 113    | 17.7  | 6.35      | side    | 0–20° | L / R |
-| Quad rear         | 113    | 12.7  | 6.35      | centre  | 0–20° | L / R |
-| Centre            | 113    | 12.7  | 6.35      | centre  | 0°    | —     |
+| Side / quad front | 113    | 17.7  | 6.85      | side    | 0–20° | L / R |
+| Quad rear         | 113    | 12.7  | 6.85      | centre  | 0–20° | L / R |
+| Centre            | 113    | 12.7  | 6.85      | centre  | 0°    | —     |
 
 All dimensions in mm.
 
@@ -216,7 +216,7 @@ tab    14 faces: two flat sides, then one face per profile segment: PLANE for a 
   0.2 mm under the tip, at the edge corners (about 0.08 mm on the defaults). CI holds
   the whole blade to the board STEP's 0.15 mm and all but the top 0.5% to 0.05 mm.
 - **Touching, not overlapping (changed from the plan).** The plan sank the blade 1 mm
-  into the tab. But the root foil is wider than the 6.35 mm tab (8 mm by default) and
+  into the tab. But the root foil is wider than the 6.85 mm tab (8 mm by default) and
   often longer, so a sunk blade leaves a 1 mm lip below the base outside the tab, and
   the fin would not seat. The blade and tab are two solids that **touch on the
   tab-top plane** (z = 0); CAD Combine / Join merges them. A single fused solid is

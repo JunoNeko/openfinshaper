@@ -18,7 +18,7 @@
  *        line, CYLINDRICAL_SURFACE for the slot end and the corner fillet.
  * ```
  *
- * They touch rather than overlap. The root foil is wider than the 6.35 mm tab and
+ * They touch rather than overlap. The root foil is wider than the 6.85 mm tab and
  * often longer, so sinking the blade into the tab would leave a lip below the base
  * outside the tab, and the fin would not seat. In CAD, Combine / Join merges two
  * bodies that share a face.

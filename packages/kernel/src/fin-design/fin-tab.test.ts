@@ -341,10 +341,11 @@ describe('the US box base', () => {
     return { le: k[0]!.end.x, te: k[k.length - 1]!.end.x };
   };
 
-  it('is a 25 mm deep, 9.6 mm thick head whose front follows the fin', () => {
+  it('is a 25 mm deep, 9.1 mm thick head whose front follows the fin', () => {
     const t = finTabOutline('us-box', single.outline);
     const { le, te } = ends(single);
     expect([t.height, t.thickness]).toEqual([height, thickness]);
+    expect(thickness).toBe(0.91);
     expect(t.parts).toHaveLength(1);
     // Front: the nose ahead of the leading edge; rear: fixed at 0, the usual stub behind
     // the starting fin's trailing edge.
