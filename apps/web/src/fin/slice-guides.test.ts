@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { defaultFinDesign, smoothBlade, smoothEta } from '@openshaper/kernel';
+import { defaultFinDesign, finReadouts, smoothBlade, smoothEta } from '@openshaper/kernel';
 import { createFinStore } from '@openshaper/store';
 import { describe, expect, it } from 'vitest';
-import { sliceGuideHandlers, sliceGuides } from './slice-guides';
+import { cantLineGuides, sliceGuideHandlers, sliceGuides } from './slice-guides';
 import { lengthUnitByKey } from '../format';
 
 describe('sliceGuideHandlers', () => {
@@ -52,5 +52,24 @@ describe('sliceGuideHandlers', () => {
     on.onGuideDragPoint('1', to);
     on.onGuideDragEnd();
     expect(store.getState().design!.slices[0]!.height).toBeCloseTo(0.65, 6);
+  });
+
+  it('shows the transition zone band only on the selected cant line', () => {
+    const store = createFinStore();
+    store.getState().load(defaultFinDesign('side', 'left'));
+    store.getState().addCantLine(0.4);
+    store.getState().setCantLine(1, { transition: 0.2 });
+    store.getState().addCantLine(0.7);
+    const d = store.getState().design!;
+    const depth = finReadouts(d).depth;
+    const mm = lengthUnitByKey('mm');
+
+    const firstSelected = cantLineGuides(d, 1, mm);
+    expect(firstSelected[0]!.bandTo).toBeCloseTo(0.6 * depth, 9);
+    expect(firstSelected[1]!.bandTo).toBeUndefined();
+
+    const noneSelected = cantLineGuides(d, 0, mm);
+    expect(noneSelected[0]!.bandTo).toBeUndefined();
+    expect(noneSelected[1]!.bandTo).toBeUndefined();
   });
 });

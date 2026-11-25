@@ -576,6 +576,19 @@ describe('fin store: cant lines', () => {
     s.getState().addCantLine(0.5);
     s.getState().setCantLine(1, { cant: -40, toe: 9 });
     expect([lines(s)[0]!.cant, lines(s)[0]!.toe]).toEqual([-20, 5]);
+    s.getState().setCantLine(1, { transition: 0.001 });
+    expect(lines(s)[0]!.transition).toBe(FIN_SLICE_MIN_GAP);
+    s.getState().setCantLine(1, { transition: 0.9 });
+    expect(lines(s)[0]!.transition).toBeCloseTo(0.5, 12); // clamped to the top of the fin
+    expect(validateFinDesign(design(s))).toEqual([]);
+  });
+
+  it('clamps a cant line’s transition to the next cant line above it', () => {
+    const s = storeWith();
+    s.getState().addCantLine(0.3);
+    s.getState().addCantLine(0.5);
+    s.getState().setCantLine(1, { transition: 0.4 });
+    expect(lines(s)[0]!.transition).toBeCloseTo(0.2, 12);
     expect(validateFinDesign(design(s))).toEqual([]);
   });
 

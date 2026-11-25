@@ -36,6 +36,7 @@ import { crossings, splineExtremes, yAtX } from './curve-shape';
 import { smoothBladeOf } from './smooth-blade';
 import {
   FIN_MIN_THICKNESS,
+  FIN_SLICE_MIN_GAP,
   finMinThickness,
   finOutward,
   type FinDesign,
@@ -453,14 +454,17 @@ export const hasTwist = (d: FinDesign): boolean => (d.cantLines?.length ?? 0) > 
 /** How far above cant line `i` its change is complete (fraction of the depth). */
 export const cantLineReach = (d: FinDesign, i: number): number => {
   const lines = d.cantLines ?? [];
-  return Math.min(FIN_SLICE_REACH, (lines[i + 1]?.height ?? 1) - lines[i]!.height);
+  const line = lines[i]!;
+  const room = (lines[i + 1]?.height ?? 1) - line.height;
+  const requested = line.transition ?? FIN_SLICE_REACH;
+  return Math.max(Math.min(FIN_SLICE_MIN_GAP, room), Math.min(requested, room));
 };
 
 /**
  * Cant and toe (deg) at height `eta` (fraction of the depth): the fin's own at the base,
- * each cant line's easing in going up from it, over {@link FIN_SLICE_REACH} of the depth
- * or to the next line if that is nearer, with no crease where it starts or ends. Height
- * alone, so the bends run level, along the flow.
+ * each cant line's easing in going up from it, over its transition zone (default
+ * {@link FIN_SLICE_REACH} of the depth) or to the next line if that is nearer, with no
+ * crease where it starts or ends. Height alone, so the bends run level, along the flow.
  */
 export const twistAt = (d: FinDesign, eta: number): FinTwist => {
   let cant = d.cant;

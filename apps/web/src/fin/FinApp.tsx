@@ -16,20 +16,23 @@
  * to every component as a `units` prop (apps/web/CLAUDE.md).
  */
 import {
+  cantLineReach,
   FIN_BASES,
   FIN_BASE_LABEL,
   FIN_MAX_CANT,
   FIN_MAX_TOE,
   FIN_MIN_SLICE_CANT,
+  FIN_SLICE_MIN_GAP,
+  FIN_SLICE_REACH,
   finTabOutline,
   futuresKind,
   finReadouts,
   validateFinDesign,
   type FinBase,
+  type FinCantLine,
   type FinDesign,
   type FinHand,
   type FinLaminate,
-  type FinTwist,
   type FinPosition,
 } from '@openshaper/kernel';
 import type { FinPreviewView } from '@openshaper/render3d';
@@ -419,13 +422,18 @@ function CantLineSelect({ units }: { units: LengthUnit }) {
   );
 }
 
-/** A selected cant line's cant and toe: the blade eases to them going up from the line. */
+/** A selected cant line's cant, toe and transition zone above the line. */
 function CantLineTools({ line, units }: { line: number; units: LengthUnit }) {
   const design = useFinState(finStore, (s) => s.design);
-  const l = design?.cantLines?.[line - 1];
-  if (!design || !l) return null;
-  const set = (change: Partial<FinTwist>) => finStore.getState().setCantLine(line, change);
-  const at = fmtLen(l.height * finReadouts(design).depth, units);
+  const lines = design?.cantLines;
+  const l = lines?.[line - 1];
+  if (!design || !lines || !l) return null;
+  const set = (change: Partial<Omit<FinCantLine, 'height'>>) =>
+    finStore.getState().setCantLine(line, change);
+  const depth = finReadouts(design).depth;
+  const reach = cantLineReach(design, line - 1);
+  const room = (lines[line]?.height ?? 1) - l.height;
+  const at = fmtLen(l.height * depth, units);
   return (
     <ToolGroup title={`Cant line ${at}`}>
       <Tooltip
@@ -436,6 +444,18 @@ function CantLineTools({ line, units }: { line: number; units: LengthUnit }) {
         </div>
       </Tooltip>
       <ToeTools toe={l.toe} onSet={(v) => set({ toe: v })} label="Toe" />
+      <Tooltip
+        label={`How far above this line the change eases in (${fmtLen(FIN_SLICE_MIN_GAP * depth, units)} to ${fmtLen(room * depth, units)})`}
+      >
+        <div>
+          <LenField
+            label="Transition"
+            valueCm={reach * depth}
+            units={units}
+            onCommit={(cm) => set({ transition: depth > 0 ? cm / depth : FIN_SLICE_REACH })}
+          />
+        </div>
+      </Tooltip>
     </ToolGroup>
   );
 }

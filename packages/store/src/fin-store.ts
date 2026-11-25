@@ -25,7 +25,7 @@ import {
   type FinIssueCode,
   type FinSection,
   type Spline,
-  type FinTwist,
+  type FinCantLine,
   type FinHand,
   type Vec2,
 } from '@openshaper/kernel';
@@ -167,7 +167,7 @@ export interface FinState {
   setActiveCantLine: (line: number) => void;
   /** Add a cant line at a height (fraction of the depth), and select it. */
   addCantLine: (height: number) => boolean;
-  setCantLine: (line: number, change: Partial<FinTwist>) => boolean;
+  setCantLine: (line: number, change: Partial<Omit<FinCantLine, 'height'>>) => boolean;
   moveCantLine: (line: number, height: number) => boolean;
   removeCantLine: (line: number) => boolean;
   /** Toe correction (deg, + toe in), clamped to ±5°. */

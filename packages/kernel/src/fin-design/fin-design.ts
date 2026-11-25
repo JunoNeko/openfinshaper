@@ -123,6 +123,12 @@ export interface FinCantLine {
   readonly cant: number;
   /** Toe from here up (deg, + toe in), ±{@link FIN_MAX_TOE}. */
   readonly toe: number;
+  /**
+   * Transition zone above the line (fraction of the depth): how far above the line
+   * the change eases in before holding, clamped to the next cant line or the top.
+   * Absent uses the default (15% of the depth, {@link FIN_SLICE_REACH}).
+   */
+  readonly transition?: number;
 }
 
 /** Cant and toe, as read at a height. */

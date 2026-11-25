@@ -269,6 +269,11 @@ export interface FinCurveGuide {
   readonly path?: readonly Vec2[];
   readonly color?: string;
   readonly selected?: boolean;
+  /**
+   * Optional second coordinate along `axis` (data space): draws a subtle shaded band
+   * between `at` and `bandTo` with a faint dashed boundary at `bandTo` (not pickable).
+   */
+  readonly bandTo?: number;
   /** Drawn beside the line, at its start. */
   readonly label?: string;
 }
@@ -379,7 +384,30 @@ export const drawGuides = (
     }
     const [a, b] = guideLine(g, vp, yScale);
     ctx.save();
-    ctx.strokeStyle = g.color ?? 'rgba(244,114,182,0.9)';
+    const color = g.color ?? 'rgba(244,114,182,0.9)';
+    if (g.bandTo !== undefined) {
+      const [a2, b2] = guideLine({ ...g, at: g.bandTo }, vp, yScale);
+      ctx.save();
+      ctx.globalAlpha = 0.08;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(b2.x, b2.y);
+      ctx.lineTo(a2.x, a2.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(a2.x, a2.y);
+      ctx.lineTo(b2.x, b2.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.strokeStyle = color;
     ctx.lineWidth = g.selected ? 2 : 1;
     if (!g.selected) ctx.setLineDash([6, 4]);
     ctx.beginPath();

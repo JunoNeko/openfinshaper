@@ -147,10 +147,23 @@ describe('.fin.json versions', () => {
     expect(readFinJson(writeFinJson(d)).design.base).toBe('fcs-single');
   });
 
-  it('keeps cant lines', () => {
+  it('keeps cant lines, with or without a custom transition', () => {
     const base = defaultFinDesign('side', 'left');
-    const d = { ...base, cantLines: [{ height: 0.6, cant: 12, toe: -1 }] };
-    expect(readFinJson(writeFinJson(d)).design.cantLines).toEqual(d.cantLines);
+    const d = {
+      ...base,
+      cantLines: [
+        { height: 0.4, cant: 10, toe: 0 },
+        { height: 0.6, cant: 12, toe: -1, transition: 0.08 },
+      ],
+    };
+    const written = writeFinJson(d);
+    const parsed = JSON.parse(written) as { cantLines: Record<string, unknown>[] };
+    expect('transition' in parsed.cantLines[0]!).toBe(false);
+    expect(parsed.cantLines[1]!.transition).toBe(0.08);
+    expect(readFinJson(written).design.cantLines).toEqual(d.cantLines);
+    const bad = JSON.parse(written) as { cantLines: Record<string, unknown>[] };
+    bad.cantLines[1]!.transition = -0.1;
+    expect(() => readFinJson(JSON.stringify(bad))).toThrow(/cant lines/);
   });
 
   it('turns an older file’s control-section cant and toe into a cant line below it', () => {

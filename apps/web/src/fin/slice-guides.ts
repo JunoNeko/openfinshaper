@@ -10,6 +10,7 @@
  * places it by how far along the fin its row is, as the thickness curve is read there.
  */
 import {
+  cantLineReach,
   finReadouts,
   smoothEta,
   smoothLocate,
@@ -56,7 +57,7 @@ export const CANT_LINE_COLOR = 'rgba(226,232,240,0.9)';
 
 const CANT_ID = 'cant-';
 
-/** The cant lines as level guides in the profile. */
+/** The cant lines as level guides in the profile; the selected one shows its transition zone. */
 export const cantLineGuides = (
   d: FinDesign,
   active: number,
@@ -67,6 +68,7 @@ export const cantLineGuides = (
     id: `${CANT_ID}${i + 1}`,
     axis: 'y',
     at: l.height * depth,
+    ...(active === i + 1 ? { bandTo: (l.height + cantLineReach(d, i)) * depth } : {}),
     color: CANT_LINE_COLOR,
     selected: active === i + 1,
     label: `Cant line ${fmtLen(l.height * depth, units)}`,

@@ -510,6 +510,10 @@ describe('FinApp', () => {
     fireEvent.click(threeD.getByRole('button', { name: 'Toe out' }));
     expect(d().cantLines![0]!.toe).toBe(-0.25);
     expect(d().toe).toBe(0); // the whole fin's toe is untouched
+    const transition = threeD.getByLabelText(/^Transition/);
+    fireEvent.change(transition, { target: { value: '10' } });
+    fireEvent.keyDown(transition, { key: 'Enter' });
+    expect(d().cantLines![0]!.transition! * finReadouts(d()).depth * 10).toBeCloseTo(10, 6);
     fireEvent.change(threeD.getByLabelText('Cant and toe at'), { target: { value: '0' } });
     expect(threeD.getByRole('group', { name: 'Position on the tab' })).toBeTruthy();
     fireEvent.change(threeD.getByLabelText('Cant and toe at'), { target: { value: '1' } });

@@ -830,11 +830,13 @@ stand across the water flow, so a bend there worked as a flap, and a tip couldn'
 more than the base. Cant and toe now belong to level lines in the profile
 (`FinDesign.cantLines`), and control sections set the foil only.
 
-A line's change starts at it and builds going up, over 15% of the depth or to the next line,
-by smootherstep (`twistAt`), then holds. Everything depends on height alone: the slide is
-tan(cant) summed up from the base (a C² table in height), and a line's toe turns the blade above
-it about an upright axis where the thickness path first reaches its height. So a level cut
-moves as one, and the surface stays as smooth as before.
+A line's change starts at it and builds going up, over its `transition` zone (15% of the
+depth by default, adjustable per line from 2% of the depth up to the next line or the top,
+and shaded above the selected line in the profile), by smootherstep (`twistAt`), then holds.
+Everything depends on height alone: the slide is tan(cant) summed up from the base (a C²
+table in height), and a line's toe turns the blade above it about an upright axis where the
+thickness path first reaches its height. So a level cut moves as one, and the surface stays
+as smooth as before.
 
 Older files' section cant and toe load as a line 15% of the depth below where the section's row
 crosses the thickness path, which reaches the section's values where they were reached before.

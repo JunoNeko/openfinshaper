@@ -46,6 +46,7 @@ export type FinIssueCode =
   | 'section-symmetry'
   | 'slice-height'
   | 'cant-line-height'
+  | 'cant-line-transition'
   | 'taper-span'
   | 'taper-thickness';
 
@@ -265,6 +266,15 @@ const checkCantLines = (d: FinDesign, issues: FinIssue[]): void => {
     }
     if (!(Math.abs(l.toe) <= FIN_MAX_TOE)) {
       issues.push({ code: 'toe', message: `Toe must be within ±${FIN_MAX_TOE}°${where}.` });
+    }
+    if (
+      l.transition !== undefined &&
+      !(l.transition >= FIN_SLICE_MIN_GAP - EPS && l.transition <= 1 + EPS)
+    ) {
+      issues.push({
+        code: 'cant-line-transition',
+        message: `A cant line's transition must be at least ${FIN_SLICE_MIN_GAP * 100}% of the depth${where}.`,
+      });
     }
   }
 };

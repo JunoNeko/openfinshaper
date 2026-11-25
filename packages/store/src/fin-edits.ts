@@ -50,7 +50,6 @@ import {
   type FinPosition,
   type FinSection,
   type FinCantLine,
-  type FinTwist,
   type Spline,
   type Vec2,
 } from '@openshaper/kernel';
@@ -323,8 +322,12 @@ export const addCantLine = (
   };
 };
 
-/** Cant line `line` (1-based) with new cant or toe, clamped to their ranges. */
-export const setCantLine = (d: FinDesign, line: number, change: Partial<FinTwist>): FinDesign => {
+/** Cant line `line` (1-based) with new cant, toe or transition, clamped to their ranges. */
+export const setCantLine = (
+  d: FinDesign,
+  line: number,
+  change: Partial<Omit<FinCantLine, 'height'>>,
+): FinDesign => {
   const lines = d.cantLines ?? [];
   if (!lines[line - 1]) return d;
   return withCantLines(
@@ -332,10 +335,16 @@ export const setCantLine = (d: FinDesign, line: number, change: Partial<FinTwist
     lines.map((l, i) => {
       if (i !== line - 1) return l;
       const next = { ...l, ...change };
+      const room = (lines[i + 1]?.height ?? 1) - l.height;
+      const transition =
+        change.transition !== undefined
+          ? Math.min(room, Math.max(Math.min(FIN_SLICE_MIN_GAP, room), change.transition))
+          : l.transition;
       return {
         height: l.height,
         cant: Math.min(FIN_MAX_CANT, Math.max(FIN_MIN_SLICE_CANT, next.cant)),
         toe: Math.round(Math.min(FIN_MAX_TOE, Math.max(-FIN_MAX_TOE, next.toe)) * 1e6) / 1e6,
+        ...(transition !== undefined ? { transition } : {}),
       };
     }),
   );

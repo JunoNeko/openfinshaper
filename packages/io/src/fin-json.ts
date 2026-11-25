@@ -111,8 +111,8 @@ export interface FinJson {
     /** Older files: a cant and toe change here. Read as a cant line; never written. */
     twist?: { cant: number; toe: number; transition?: number };
   }[];
-  /** Where the cant and toe change: heights as fractions of the depth. */
-  cantLines?: { height: number; cant: number; toe: number }[];
+  /** Where the cant and toe change: heights and optional transitions as fractions of the depth. */
+  cantLines?: { height: number; cant: number; toe: number; transition?: number }[];
   taper: KnotJson[];
   metadata?: Record<string, unknown>;
 }
@@ -238,7 +238,14 @@ const assertStructure = (doc: Record<string, unknown>): void => {
     const lines = doc.cantLines;
     if (
       !Array.isArray(lines) ||
-      !lines.every((l) => isObject(l) && isNumber(l.height) && isNumber(l.cant) && isNumber(l.toe))
+      !lines.every(
+        (l) =>
+          isObject(l) &&
+          isNumber(l.height) &&
+          isNumber(l.cant) &&
+          isNumber(l.toe) &&
+          (l.transition === undefined || (isNumber(l.transition) && l.transition > 0)),
+      )
     ) {
       fail('Malformed fin: its cant lines are damaged');
     }
@@ -298,7 +305,14 @@ export const readFinJson = (
     })),
     taper: scaleSpline(splineFromJson(doc.taper), same, toCm),
     ...(doc.cantLines?.length
-      ? { cantLines: doc.cantLines.map(({ height, cant, toe }) => ({ height, cant, toe })) }
+      ? {
+          cantLines: doc.cantLines.map(({ height, cant, toe, transition }) => ({
+            height,
+            cant,
+            toe,
+            ...(transition !== undefined ? { transition } : {}),
+          })),
+        }
       : {}),
     ...(doc.tipLine ? { tipLine: { start: doc.tipLine.start, end: doc.tipLine.end } } : {}),
     ...(doc.tipSection ? { tipSection: sectionFromJson(doc.tipSection) } : {}),

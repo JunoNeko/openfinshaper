@@ -307,12 +307,14 @@ export default function DocsFinDesigner() {
         </p>
         <p>
           Click a line, or pick it in the 3D view&apos;s <strong>Cant and toe at</strong> list, to
-          set its <strong>Cant</strong> (−20° to 20°: it may lean back past upright) and{' '}
-          <strong>Toe</strong>. A new line starts at what the blade has there, so adding one changes
-          nothing until you edit it. The blade eases from what it had to the line&apos;s values over
-          the 15% of the depth above the line, or up to the next line if that is nearer, with no
-          crease, and holds them above. <strong>Remove cant line</strong> takes the selected one
-          away. Cant lines keep at least 2% of the depth from each other, the base and the top.
+          set its <strong>Cant</strong> (−20° to 20°: it may lean back past upright),{' '}
+          <strong>Toe</strong> and <strong>Transition</strong>. A new line starts at what the blade
+          has there, so adding one changes nothing until you edit it. The blade eases from what it
+          had to the line&apos;s values over the transition zone above the line (15% of the depth by
+          default; adjustable from 2% of the depth up to the next line or the top, and shaded in the
+          profile while the line is selected), with no crease, and holds them above.{' '}
+          <strong>Remove cant line</strong> takes the selected one away. Cant lines keep at least 2%
+          of the depth from each other, the base and the top.
         </p>
       </Section>
 
