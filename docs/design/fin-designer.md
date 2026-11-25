@@ -874,6 +874,18 @@ The two screw grooves in the tab's side (1/8" end mill, 1/16" deep) are not mode
 side profile extruded across its thickness, and a pocket in one face is not something that model
 can hold. They are recorded in `GBOX_TAB` and in the help.
 
+## Modii tab (owner request, 2026-11)
+
+A seventh base, `modii`, measured from `modii_base_Stabilser.stl` (`MODII_TAB` in `fin-tab.ts`):
+98.05 mm long × 14.2 mm deep × 6.3 mm thick, with the 4.15 mm front U-slot (R2.075 end, R0.5
+mouth fillets), two top-open pockets down to 2.5 mm separated by a 3 mm centre post, 18.14°
+slanted rear wall (R2.0 bottom-rear corner), three rounded-rectangle through-holes, and two
+opposing Ø5.83 × 0.5 mm blind circular side dimples (`FinTabPart.pockets`, modelled as inner
+circular bounds on each side face plus cylindrical wall and planar floor in both `fin-mesh.ts`
+and `fin-step.ts`, mirrored across Y for left/right hands). Modii fins fit front first, so
+`placeOnBase` aligns the leading-edge root with the front of the tab (`x = length`). The box
+carries the cant, so the fin has none (`Cant (box)`).
+
 ## The save dialog (owner request, 2026-11)
 
 Save and each Export used to download straight away, named after the fin's position. They now

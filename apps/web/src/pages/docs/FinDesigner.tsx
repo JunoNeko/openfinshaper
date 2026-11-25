@@ -3,6 +3,7 @@ import {
   FCS_SINGLE_TAB,
   FCS1_BASE,
   GBOX_TAB,
+  MODII_TAB,
   gboxNotchHeight,
   US_BOX_HEAD,
   FUTURES_TAB_HOLES,
@@ -396,6 +397,15 @@ export default function DocsFinDesigner() {
             cover the tab. Not in the exported files: the two screw grooves in the tab&apos;s side
             (a 1/8&quot; flat end mill, 1/16&quot; deep, 7/16&quot; long, 3/16&quot; in from each
             end, 1/4&quot; above the bottom). Cut them after printing or machining.
+          </Term>
+          <Term name={FIN_BASE_LABEL.modii}>
+            The Modii click-in fin base: {mm(MODII_TAB.length)} × {mm(MODII_TAB.height)} ×{' '}
+            {mm(MODII_TAB.thickness)}, with the front barrel U-slot, two top-open pockets separated
+            by a 3 mm post, slanted rear wall, three weight-saving through-holes and two opposing{' '}
+            {mm(MODII_TAB.dimpleRadius * 2)} × {mm(MODII_TAB.dimpleDepth)} blind side dimples. Modii
+            fins fit front first, so moving a fin onto it aligns the leading edge with the front of
+            the tab. The box sets the cant, so the fin has none, and the tab must sit wholly under
+            the fin&apos;s base.
           </Term>
         </Terms>
       </Section>

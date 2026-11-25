@@ -331,9 +331,11 @@ export const validateFinDesign = (d: FinDesign): FinIssue[] => {
           ? 'A fin in a US box has no cant.'
           : d.base === 'gbox'
             ? 'In a Gbox the box sets the cant: the fin has none.'
-            : fcs
-              ? 'On an FCS tab the plug sets the cant: the fin has none.'
-              : `Cant must be 0° to ${FIN_MAX_CANT}°.`,
+            : d.base === 'modii'
+              ? 'In a Modii box the box sets the cant: the fin has none.'
+              : fcs
+                ? 'On an FCS tab the plug sets the cant: the fin has none.'
+                : `Cant must be 0° to ${FIN_MAX_CANT}°.`,
     });
   }
   if (!finHasToe(d) && (d.toe ?? 0) !== 0) {

@@ -477,14 +477,22 @@ function CantField() {
           ? 'A fin in a US box has no cant'
           : base === 'gbox'
             ? 'Set by the Gbox'
-            : fcs
-              ? 'Set by the FCS plug (0°, 5° or 9°)'
-              : `Blade lean out from the tab, 0° to ${FIN_MAX_CANT}°`
+            : base === 'modii'
+              ? 'Set by the Modii box'
+              : fcs
+                ? 'Set by the FCS plug (0°, 5° or 9°)'
+                : `Blade lean out from the tab, 0° to ${FIN_MAX_CANT}°`
       }
     >
       <div>
         <DegField
-          label={base === 'gbox' ? 'Cant (box)' : fcs && base !== 'us-box' ? 'Cant (plug)' : 'Cant'}
+          label={
+            base === 'gbox' || base === 'modii'
+              ? 'Cant (box)'
+              : fcs && base !== 'us-box'
+                ? 'Cant (plug)'
+                : 'Cant'
+          }
           value={cant}
           disabled={fcs}
           onCommit={(v) => finStore.getState().setCant(v)}

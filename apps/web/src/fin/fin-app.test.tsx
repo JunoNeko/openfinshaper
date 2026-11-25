@@ -470,6 +470,21 @@ describe('FinApp', () => {
     expect(screen.queryByRole('status')).toBeNull(); // no rule broken
   });
 
+  it('moves a fin onto a Modii base: front-aligned, cant set by the box', () => {
+    render(<FinApp />);
+    fireEvent.change(screen.getByLabelText('Tab'), { target: { value: 'modii' } });
+    const d = finStore.getState().design!;
+    expect(d.base).toBe('modii');
+    expect(d.cant).toBe(0);
+    expect(d.outline.knots[0]!.end.x).toBeCloseTo(9.805, 9);
+    expect((screen.getByLabelText(/^Cant/) as HTMLInputElement).disabled).toBe(true);
+    expect(
+      screen.getByText(/on Modii \(98\.0 mm × 14\.2 mm\)|on Modii \(98\.1 mm × 14\.2 mm\)/),
+    ).toBeTruthy();
+    expect(screen.getByLabelText(/^Cant \(box\)/)).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull(); // no rule broken
+  });
+
   it('starts a canard on the FCS single tab', () => {
     render(<FinApp />);
     pickNewFin('Canard, right (FCS single)');

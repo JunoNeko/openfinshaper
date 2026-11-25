@@ -33,6 +33,7 @@
 import {
   evalCurve,
   evalSurfaceDeriv,
+  finOutward,
   fitBladeSurface,
   finTabOutline,
   splitSurfaceU,
@@ -404,16 +405,51 @@ const emitTabPart = (
     return { bore, bottom: bottom.loop, top: top.loop, b: bottom, t: top };
   });
 
+  // Shallow blind circular pockets on either side face (Modii locking dimples):
+  // four quarter cylinders + circular planar floor per pocket.
+  const outward = finOutward(d.hand);
+  const pocketRings = (part.pockets ?? []).map((pocket) => {
+    const faceIndex = (pocket.side === 'outside') === (outward === 1) ? 1 : 0;
+    const faceY = sides[faceIndex]!;
+    const ny = faceIndex === 0 ? -1 : 1;
+    const depth = Math.min(pocket.depth, (sides[1] - sides[0]) * 0.45);
+    const floorY = faceY - ny * depth;
+    const quarter = [0, 1, 2, 3].map((j) => (j * Math.PI) / 2);
+    const ringAt = (yCoord: number) => {
+      const c = { x: pocket.x, y: yCoord, z: pocket.y - H };
+      // Right-hand rule about axis +Y with ref +X: +Y × +X = -Z.
+      const pts = quarter.map((a) => ({
+        x: pocket.x + pocket.radius * Math.cos(a),
+        y: yCoord,
+        z: pocket.y - H - pocket.radius * Math.sin(a),
+      }));
+      const circle = w.emit(
+        `CIRCLE('',${ref(placement(w, c, { x: 0, y: 1, z: 0 }, { x: 1, y: 0, z: 0 }))},${real(pocket.radius, factor)})`,
+      );
+      const edges = pts.map((p, k) => {
+        const q = pts[(k + 1) % 4]!;
+        return w.emit(`EDGE_CURVE('',${ref(vtx(p))},${ref(vtx(q))},${ref(circle)},.T.)`);
+      });
+      return { pts, edges, loop: pts.map((p, k) => ({ edge: edges[k]!, sense: true, from: p })) };
+    };
+    const mouth = ringAt(faceY);
+    const floor = ringAt(floorY);
+    return { pocket, faceIndex, faceY, floorY, ny, mouth, floor };
+  });
+
   const faces: number[] = [];
 
-  // The two side faces: the profile, less the holes.
+  // The two side faces: the profile, less through-holes and any blind pockets on that face.
   sides.forEach((y, k) => {
     const normal = { x: 0, y: k === 0 ? -1 : 1, z: 0 };
     const surf = plane(w, at({ x: 0, y: 0 }, y), normal, { x: 1, y: 0, z: 0 });
     const loops = rings.map((ring, r) =>
       ring.map((s, i) => ({ edge: edgesOn[r]![k]![i]!, sense: true, from: at(s.from, y) })),
     );
-    faces.push(faceWithHoles(w, surf, true, loops[0]!, loops.slice(1), normal));
+    const sidePockets = pocketRings.filter((pr) => pr.faceIndex === k).map((pr) => pr.mouth.loop);
+    faces.push(
+      faceWithHoles(w, surf, true, loops[0]!, [...loops.slice(1), ...sidePockets], normal),
+    );
   });
 
   // One face per segment of each ring, across the thickness.
@@ -502,6 +538,37 @@ const emitTabPart = (
       // Material is outside the cylinder: outward points at the axis.
       faces.push(faceAbout(w, surf, false, loop, { x: -Math.cos(m), y: -Math.sin(m), z: 0 }));
     }
+  }
+
+  // Each blind pocket: four quarter-cylinder walls facing in, plus a planar circular floor.
+  for (const { pocket, faceY, floorY, ny, mouth, floor } of pocketRings) {
+    const across = mouth.pts.map((p, k) => lineEdge(p, floor.pts[k]!));
+    const axis = placement(
+      w,
+      { x: pocket.x, y: faceY, z: pocket.y - H },
+      { x: 0, y: 1, z: 0 },
+      { x: 1, y: 0, z: 0 },
+    );
+    const cyl = w.emit(`CYLINDRICAL_SURFACE('',${ref(axis)},${real(pocket.radius, factor)})`);
+    for (let k = 0; k < 4; k++) {
+      const k1 = (k + 1) % 4;
+      const loop: LoopEdge[] = [
+        { edge: mouth.edges[k]!, sense: true, from: mouth.pts[k]! },
+        { edge: across[k1]!, sense: true, from: mouth.pts[k1]! },
+        { edge: floor.edges[k]!, sense: false, from: floor.pts[k1]! },
+        { edge: across[k]!, sense: false, from: floor.pts[k]! },
+      ];
+      const m = ((k + 0.5) * Math.PI) / 2;
+      // Material is outside the cylinder: outward points at the axis.
+      faces.push(faceAbout(w, cyl, false, loop, { x: -Math.cos(m), y: 0, z: Math.sin(m) }));
+    }
+    const floorNormal = { x: 0, y: ny, z: 0 };
+    const floorSurf = plane(w, { x: pocket.x, y: floorY, z: pocket.y - H }, floorNormal, {
+      x: 1,
+      y: 0,
+      z: 0,
+    });
+    faces.push(faceAbout(w, floorSurf, true, floor.loop, floorNormal));
   }
 
   const shell = w.emit(`CLOSED_SHELL('',${refs(faces)})`);

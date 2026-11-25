@@ -611,6 +611,55 @@ describe('exportFinStep: Gbox base', () => {
   });
 });
 
+describe('exportFinStep: Modii base', () => {
+  const d = placeOnBase(defaultFinDesign('side', 'left'), 'modii');
+  const step = exportFinStep(d, { timestamp: FIXED });
+  const m = parse(step);
+  const solids = solidsOf(m);
+  const tab = solids[1]!;
+
+  it('writes the blade and the tab as two solids, including through-holes and side dimples', () => {
+    expect(solids.map((s) => s.name)).toEqual(['blade', 'tab']);
+    // 2 sides + 24 outer walls + 3*8 hole walls + 2*(4 quarter-cylinder walls + 1 floor) = 60.
+    expect(tab.faces).toHaveLength(60);
+  });
+
+  it('closes the tab, holes and blind dimples: each edge used once each way', () => {
+    const uses = new Map<number, boolean[]>();
+    for (const f of tab.faces) {
+      for (const [edge, sense] of allEdgesOf(m, f))
+        uses.set(edge, [...(uses.get(edge) ?? []), sense]);
+    }
+    for (const senses of uses.values()) expect(senses.sort()).toEqual([false, true]);
+  });
+
+  it('winds every flat face counter-clockwise about its outward normal', () => {
+    for (const f of tab.faces) {
+      if (m.get(refOf(f.args[2]))!.name !== 'PLANE') continue;
+      const { normal } = faceNormal(m, f);
+      expect(dotV(newell(loopPolyline(m, f)), normal)).toBeGreaterThan(0);
+    }
+  });
+
+  it('is 98.05 mm long and mirrors across Y for left/right hands', () => {
+    const xs = [...step.matchAll(/CARTESIAN_POINT\('',\(([^)]*)\)\)/g)].map((x) =>
+      Number(x[1]!.split(',')[0]),
+    );
+    expect(xs.some((x) => Math.abs(x - 98.05) < 1e-6)).toBe(true);
+
+    const rightStep = exportFinStep(placeOnBase(defaultFinDesign('side', 'right'), 'modii'), {
+      timestamp: FIXED,
+    });
+    const pts = (s: string) =>
+      [...s.matchAll(/CARTESIAN_POINT\('',\(([^)]*)\)\)/g)].map((x) =>
+        x[1]!.split(',').map(Number),
+      );
+    const key = ([x, y, z]: number[]) => `${x!.toFixed(4)},${y!.toFixed(4)},${z!.toFixed(4)}`;
+    const mirrored = new Set(pts(rightStep).map(([x, y, z]) => key([x!, -y!, z!])));
+    expect(pts(step).every((p) => mirrored.has(key(p)))).toBe(true);
+  });
+});
+
 describe('exportFinStep: US box head', () => {
   const d = defaultSingleFin();
   const step = exportFinStep(d, { timestamp: FIXED });

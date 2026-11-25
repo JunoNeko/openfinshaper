@@ -16,6 +16,7 @@ import {
   FCS_SINGLE_TAB,
   FIN_BASES,
   GBOX_TAB,
+  MODII_TAB,
   US_BOX_HEAD,
   gboxNotchHeight,
   finTabOutline,
@@ -61,7 +62,7 @@ describe('finTabOutline', () => {
   });
 
   it('names a Futures kind only for the Futures bases', () => {
-    expect(FIN_BASES.map(futuresKind)).toEqual(['side', 'centre', null, null, null, null]);
+    expect(FIN_BASES.map(futuresKind)).toEqual(['side', 'centre', null, null, null, null, null]);
   });
 });
 
@@ -316,6 +317,82 @@ describe('the Gbox base', () => {
       const dx = m.positions[i]! - t.length / 2;
       const dz = m.positions[i + 2]! - z0 + c;
       expect(Math.hypot(dx, dz)).toBeGreaterThan(r - 1e-4);
+    }
+  });
+});
+
+describe('the Modii base', () => {
+  const t = finTabOutline('modii');
+  const part = t.parts[0]!;
+  const mm = (cm: number) => cm * 10;
+
+  it('is 98.05 × 14.2 × 6.3 mm with three through-holes and two opposing side dimples', () => {
+    expect(mm(t.length)).toBeCloseTo(98.05, 9);
+    expect(mm(t.height)).toBeCloseTo(14.2, 9);
+    expect(mm(t.thickness)).toBeCloseTo(6.3, 9);
+    expect(t.parts).toHaveLength(1);
+    expect(part.holes).toHaveLength(3);
+    expect(part.pockets).toHaveLength(2);
+    expect(part.pockets!.map((p) => p.side)).toEqual(['outside', 'inside']);
+    for (const p of part.pockets!) {
+      expect(mm(p.radius * 2)).toBeCloseTo(5.83, 9);
+      expect(mm(p.depth)).toBeCloseTo(0.5, 9);
+    }
+  });
+
+  it('has a closed outer profile and three closed holes, every arc end on its circle', () => {
+    const checkRing = (ring: typeof part.segments) => {
+      ring.forEach((s, i) => {
+        const prev = ring[(i + ring.length - 1) % ring.length]!;
+        expect(s.from.x).toBeCloseTo(prev.to.x, 12);
+        expect(s.from.y).toBeCloseTo(prev.to.y, 12);
+        if (s.kind === 'arc') {
+          expect(Math.hypot(s.from.x - s.center.x, s.from.y - s.center.y)).toBeCloseTo(
+            s.radius,
+            12,
+          );
+          expect(Math.hypot(s.to.x - s.center.x, s.to.y - s.center.y)).toBeCloseTo(s.radius, 12);
+        }
+      });
+    };
+    checkRing(part.segments);
+    for (const h of part.holes) checkRing(h);
+  });
+
+  it('fits front first: aligns the leading edge with the front of the tab, with no cant', () => {
+    const d = placeOnBase(defaultFinDesign('side', 'left'), 'modii');
+    expect(d.outline.knots[0]!.end.x).toBeCloseTo(MODII_TAB.length, 12);
+    expect(d.cant).toBe(0);
+    expect(validateFinDesign(d)).toEqual([]);
+  });
+
+  it('says the box sets the cant, and checks the tab stays under the base', () => {
+    const canted = { ...placeOnBase(defaultFinDesign('side', 'left'), 'modii'), cant: 5 };
+    expect(validateFinDesign(canted).map((i) => i.message)).toContain(
+      'In a Modii box the box sets the cant: the fin has none.',
+    );
+    const short = placeOnBase(defaultCanard('left'), 'modii');
+    expect(validateFinDesign(short).map((i) => i.message)).toContain(
+      'The tab must sit wholly under the fin’s base.',
+    );
+  });
+
+  it('meshes as one closed, consistently wound shell with both side dimples, mirrored by hand', () => {
+    const left = finMesh(placeOnBase(defaultFinDesign('side', 'left'), 'modii')).tab;
+    const right = finMesh(placeOnBase(defaultFinDesign('side', 'right'), 'modii')).tab;
+    expect(closedAndOriented(left)).toBe(true);
+    expect(closedAndOriented(right)).toBe(true);
+    // Exact Y-mirror between left and right hands (including the opposing side dimples).
+    const key = (x: number, y: number, z: number) =>
+      `${x.toFixed(4)},${y.toFixed(4)},${z.toFixed(4)}`;
+    const mirrored = new Set<string>();
+    for (let i = 0; i < right.positions.length; i += 3) {
+      mirrored.add(key(right.positions[i]!, -right.positions[i + 1]!, right.positions[i + 2]!));
+    }
+    for (let i = 0; i < left.positions.length; i += 3) {
+      expect(
+        mirrored.has(key(left.positions[i]!, left.positions[i + 1]!, left.positions[i + 2]!)),
+      ).toBe(true);
     }
   });
 });

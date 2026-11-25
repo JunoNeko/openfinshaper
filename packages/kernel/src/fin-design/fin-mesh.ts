@@ -20,7 +20,7 @@ import { splineExtremes } from './curve-shape';
 import type { Vert3 } from '../loft';
 import { cosineStations, type FinLaminate, NO_LAMINATE } from './blade';
 import { sectionLoop } from './blade-surface';
-import { FIN_MIN_THICKNESS, type FinDesign } from './fin-design';
+import { FIN_MIN_THICKNESS, finOutward, type FinDesign } from './fin-design';
 import { smoothBlade } from './smooth-blade';
 import { finTabOutline } from './fin-tab';
 import { tabCentreY, tabFacesY } from './fin-placement';
@@ -242,6 +242,7 @@ const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
   const tab = finTabOutline(d.base, d.outline);
   const { height: H } = tab;
   const [yLo, yHi] = tabFacesY(d, o.laminate);
+  const outward = finOutward(d.hand);
   // Bores are centred on the tab's own mid-plane, whatever a laminate takes off its faces.
   const yc = tabCentreY(d);
   const m = builder();
@@ -255,13 +256,55 @@ const tabMesh = (d: FinDesign, o: Required<FinMeshOptions>): BoardMesh => {
     const rings = [profile, ...holes];
     const lo = rings.map((r) => side(r, yLo));
     const hi = rings.map((r) => side(r, yHi));
-    // The two sides: the profile less its holes.
-    const l = lo.flat();
-    const h = hi.flat();
-    const tris = triangulateWithHoles(profile, holes);
-    for (const [a, b, c] of tris) {
+    // Shallow blind circular recesses on either side face (Modii locking dimples).
+    const pockets = (part.pockets ?? []).map((p) => {
+      const onHi = (p.side === 'outside') === (outward === 1);
+      const faceY = onHi ? yHi : yLo;
+      const ny = onHi ? 1 : -1;
+      const depth = Math.min(p.depth, (yHi - yLo) * 0.45);
+      const floorY = faceY - ny * depth;
+      const n = Math.max(
+        16,
+        Math.ceil((2 * Math.PI * p.radius) / (2 * Math.sqrt(2 * p.radius * o.arcTolerance))),
+      );
+      // Clockwise in (x, y), matching `holes` for triangulateWithHoles.
+      const ring2d = Array.from({ length: n }, (_, j) => {
+        const a = (-2 * Math.PI * j) / n;
+        return vec2(p.x + p.radius * Math.cos(a), p.y + p.radius * Math.sin(a));
+      });
+      const mouthIds = ring2d.map((q) => m.add({ x: q.x, y: faceY, z: q.y - H }));
+      const floorIds = ring2d.map((q) => m.add({ x: q.x, y: floorY, z: q.y - H }));
+      const centerId = m.add({ x: p.x, y: floorY, z: p.y - H });
+      return { p, onHi, ny, ring2d, mouthIds, floorIds, centerId };
+    });
+    const loPockets = pockets.filter((pk) => !pk.onHi);
+    const hiPockets = pockets.filter((pk) => pk.onHi);
+    // The two sides: the profile less its through-holes and any blind pockets on that face.
+    const l = [...lo.flat(), ...loPockets.flatMap((pk) => pk.mouthIds)];
+    const h = [...hi.flat(), ...hiPockets.flatMap((pk) => pk.mouthIds)];
+    for (const [a, b, c] of triangulateWithHoles(profile, [
+      ...holes,
+      ...loPockets.map((pk) => pk.ring2d),
+    ])) {
       m.tri(l[a]!, l[b]!, l[c]!, { x: 0, y: -1, z: 0 });
+    }
+    for (const [a, b, c] of triangulateWithHoles(profile, [
+      ...holes,
+      ...hiPockets.map((pk) => pk.ring2d),
+    ])) {
       m.tri(h[a]!, h[b]!, h[c]!, { x: 0, y: 1, z: 0 });
+    }
+    // Each blind pocket's cylindrical wall (facing in) and flat circular floor (facing out).
+    for (const { p, ny, ring2d, mouthIds, floorIds, centerId } of pockets) {
+      const n = ring2d.length;
+      for (let j = 0; j < n; j++) {
+        const j1 = (j + 1) % n;
+        const q = ring2d[j]!;
+        const inward = { x: p.x - q.x, y: 0, z: p.y - q.y };
+        m.tri(mouthIds[j]!, mouthIds[j1]!, floorIds[j1]!, inward);
+        m.tri(mouthIds[j]!, floorIds[j1]!, floorIds[j]!, inward);
+        m.tri(centerId, floorIds[j]!, floorIds[j1]!, { x: 0, y: ny, z: 0 });
+      }
     }
     // Holes straight down (the US box screw hole): a ring where each bore leaves a flat
     // horizontal wall, shared with the bore's own wall.

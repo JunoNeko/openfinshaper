@@ -23,7 +23,7 @@ import {
 
 /** Which tab the fin sits on. */
 export type FinBase =
-  'futures-side' | 'futures-centre' | 'fcs-single' | 'fcs-1' | 'us-box' | 'gbox';
+  'futures-side' | 'futures-centre' | 'fcs-single' | 'fcs-1' | 'us-box' | 'gbox' | 'modii';
 
 export const FIN_BASES: readonly FinBase[] = [
   'futures-side',
@@ -32,6 +32,7 @@ export const FIN_BASES: readonly FinBase[] = [
   'fcs-1',
   'us-box',
   'gbox',
+  'modii',
 ];
 
 /** What the designer calls each base. */
@@ -42,6 +43,7 @@ export const FIN_BASE_LABEL: Record<FinBase, string> = {
   'fcs-1': 'FCS 1',
   'us-box': 'US box',
   gbox: 'Gbox',
+  modii: 'Modii',
 };
 
 /** The Futures tab a base is, or null for one that isn't Futures. */
@@ -166,6 +168,184 @@ const gboxTab = (): FinTabOutline => {
 };
 
 /**
+ * The Modii click-in fin base (cm), measured from `modii_base_Stabilser.stl`: 98.05 mm
+ * long, 14.2 mm deep and 6.3 mm thick. Front-first installation: the leading-edge root
+ * sits at the front of the tab (`x = length`), with a 4.15 mm open U-slot at the front,
+ * two top-open pockets separated by a 3 mm centre post, an 18.14° slanted rear wall,
+ * three rounded-rectangle weight-saving through-holes, and two opposing Ø5.83 × 0.5 mm
+ * blind side dimples. The box carries the cant (0°, 4° or 8°), so the fin has none.
+ */
+const mm = (n: number): number => n / 10;
+
+export const MODII_TAB = {
+  length: mm(98.05),
+  height: mm(14.2),
+  thickness: mm(6.3),
+  rearFootX: mm(4.651),
+  rearBottomRadius: mm(2.0),
+  frontBottomRadius: mm(1.5),
+  slotHeight: mm(4.15),
+  slotCentreY: mm(7.545),
+  slotArcCentreX: mm(94.17),
+  slotMouthRadius: mm(0.5),
+  pocketFloorY: mm(2.5),
+  pocketRadius: mm(1.6),
+  rearPocketRearX: mm(32.95),
+  rearPocketFrontX: mm(41.1375),
+  frontPocketRearX: mm(44.1375),
+  frontPocketTopX: mm(52.325),
+  frontPocketFootX: mm(56.03),
+  dimpleRadius: mm(5.83 / 2),
+  dimpleDepth: mm(0.5),
+  dimpleY: mm(7.33),
+  rearDimpleX: mm(10.28),
+  frontDimpleX: mm(65.59),
+} as const;
+
+/** A rounded-rectangle through-hole running clockwise (material outside). */
+const roundedHole = (x0: number, x1: number, y0: number, y1: number, r: number): TabSegment[] => {
+  const arc = (from: Vec2, to: Vec2, center: Vec2): TabSegment => ({
+    kind: 'arc',
+    from,
+    to,
+    center,
+    radius: r,
+    ccw: false,
+  });
+  return [
+    { kind: 'line', from: vec2(x0 + r, y1), to: vec2(x1 - r, y1) },
+    arc(vec2(x1 - r, y1), vec2(x1, y1 - r), vec2(x1 - r, y1 - r)),
+    { kind: 'line', from: vec2(x1, y1 - r), to: vec2(x1, y0 + r) },
+    arc(vec2(x1, y0 + r), vec2(x1 - r, y0), vec2(x1 - r, y0 + r)),
+    { kind: 'line', from: vec2(x1 - r, y0), to: vec2(x0 + r, y0) },
+    arc(vec2(x0 + r, y0), vec2(x0, y0 + r), vec2(x0 + r, y0 + r)),
+    { kind: 'line', from: vec2(x0, y0 + r), to: vec2(x0, y1 - r) },
+    arc(vec2(x0, y1 - r), vec2(x0 + r, y1), vec2(x0 + r, y1 - r)),
+  ];
+};
+
+const modiiTab = (): FinTabOutline => {
+  const m = MODII_TAB;
+  const L = m.length;
+  const H = m.height;
+  const rFB = m.frontBottomRadius;
+  const rRB = m.rearBottomRadius;
+  const rSM = m.slotMouthRadius;
+  const rS = m.slotHeight / 2;
+  const slotBot = m.slotCentreY - rS;
+  const slotTop = m.slotCentreY + rS;
+  const rP = m.pocketRadius;
+  const floorY = m.pocketFloorY;
+
+  // Rear slanted wall from (0, H) toward (rearFootX, 0), tangent to the R2.0 bottom corner.
+  const rearTheta = Math.atan(m.rearFootX / H);
+  const rearCx = m.rearFootX + rRB * Math.tan(Math.PI / 4 - rearTheta / 2);
+  const rearTan = vec2(rearCx - rRB * Math.cos(rearTheta), rRB - rRB * Math.sin(rearTheta));
+
+  // Front pocket slanted wall from (frontPocketTopX, H) toward (frontPocketFootX, floorY),
+  // tangent to its R1.6 bottom-front fillet.
+  const frontTheta = Math.atan((m.frontPocketFootX - m.frontPocketTopX) / (H - floorY));
+  const frontCx = m.frontPocketFootX - rP * Math.tan(Math.PI / 4 + frontTheta / 2);
+  const frontTan = vec2(
+    frontCx + rP * Math.cos(frontTheta),
+    floorY + rP + rP * Math.sin(frontTheta),
+  );
+
+  const line = (from: Vec2, to: Vec2): TabSegment => ({ kind: 'line', from, to });
+  const arc = (from: Vec2, to: Vec2, center: Vec2, radius: number, ccw: boolean): TabSegment => ({
+    kind: 'arc',
+    from,
+    to,
+    center,
+    radius,
+    ccw,
+  });
+
+  const segments: TabSegment[] = [
+    line(vec2(rearCx, 0), vec2(L - rFB, 0)),
+    arc(vec2(L - rFB, 0), vec2(L, rFB), vec2(L - rFB, rFB), rFB, true),
+    line(vec2(L, rFB), vec2(L, slotBot - rSM)),
+    arc(vec2(L, slotBot - rSM), vec2(L - rSM, slotBot), vec2(L - rSM, slotBot - rSM), rSM, true),
+    line(vec2(L - rSM, slotBot), vec2(m.slotArcCentreX, slotBot)),
+    arc(
+      vec2(m.slotArcCentreX, slotBot),
+      vec2(m.slotArcCentreX, slotTop),
+      vec2(m.slotArcCentreX, m.slotCentreY),
+      rS,
+      false,
+    ),
+    line(vec2(m.slotArcCentreX, slotTop), vec2(L - rSM, slotTop)),
+    arc(vec2(L - rSM, slotTop), vec2(L, slotTop + rSM), vec2(L - rSM, slotTop + rSM), rSM, true),
+    line(vec2(L, slotTop + rSM), vec2(L, H)),
+    line(vec2(L, H), vec2(m.frontPocketTopX, H)),
+    line(vec2(m.frontPocketTopX, H), frontTan),
+    arc(frontTan, vec2(frontCx, floorY), vec2(frontCx, floorY + rP), rP, false),
+    line(vec2(frontCx, floorY), vec2(m.frontPocketRearX + rP, floorY)),
+    arc(
+      vec2(m.frontPocketRearX + rP, floorY),
+      vec2(m.frontPocketRearX, floorY + rP),
+      vec2(m.frontPocketRearX + rP, floorY + rP),
+      rP,
+      false,
+    ),
+    line(vec2(m.frontPocketRearX, floorY + rP), vec2(m.frontPocketRearX, H)),
+    line(vec2(m.frontPocketRearX, H), vec2(m.rearPocketFrontX, H)),
+    line(vec2(m.rearPocketFrontX, H), vec2(m.rearPocketFrontX, floorY + rP)),
+    arc(
+      vec2(m.rearPocketFrontX, floorY + rP),
+      vec2(m.rearPocketFrontX - rP, floorY),
+      vec2(m.rearPocketFrontX - rP, floorY + rP),
+      rP,
+      false,
+    ),
+    line(vec2(m.rearPocketFrontX - rP, floorY), vec2(m.rearPocketRearX + rP, floorY)),
+    arc(
+      vec2(m.rearPocketRearX + rP, floorY),
+      vec2(m.rearPocketRearX, floorY + rP),
+      vec2(m.rearPocketRearX + rP, floorY + rP),
+      rP,
+      false,
+    ),
+    line(vec2(m.rearPocketRearX, floorY + rP), vec2(m.rearPocketRearX, H)),
+    line(vec2(m.rearPocketRearX, H), vec2(0, H)),
+    line(vec2(0, H), rearTan),
+    arc(rearTan, vec2(rearCx, 0), vec2(rearCx, rRB), rRB, true),
+  ];
+
+  const holes: TabSegment[][] = [
+    roundedHole(mm(17.05), mm(28.05), mm(2.8), mm(11.2), mm(2.5)),
+    roundedHole(mm(72.85), mm(79.15), mm(2.2), mm(12.2), mm(1.6)),
+    roundedHole(mm(82.15), mm(88.45), mm(2.2), mm(12.2), mm(1.6)),
+  ];
+
+  const pockets: FinTabPocket[] = [
+    {
+      x: m.rearDimpleX,
+      y: m.dimpleY,
+      radius: m.dimpleRadius,
+      depth: m.dimpleDepth,
+      side: 'outside',
+    },
+    {
+      x: m.frontDimpleX,
+      y: m.dimpleY,
+      radius: m.dimpleRadius,
+      depth: m.dimpleDepth,
+      side: 'inside',
+    },
+  ];
+
+  return {
+    base: 'modii',
+    rear: 0,
+    length: L,
+    height: H,
+    thickness: m.thickness,
+    parts: [{ segments, holes, pockets }],
+  };
+};
+
+/**
  * A round hole straight down through a tab (along the blade's height), between two of
  * its flat horizontal faces: the US box head's screw hole.
  */
@@ -178,6 +358,22 @@ export interface FinTabBore {
   readonly to: number;
 }
 
+/**
+ * A shallow blind circular recess in one side face of a tab (the Modii side dimples).
+ * `side` is relative to the fin's outward direction (`'outside'` = +Y on a left/centre
+ * fin), so a right fin mirrors a left fin across Y = 0.
+ */
+export interface FinTabPocket {
+  /** Centre along the base (cm, frame above). */
+  readonly x: number;
+  /** Centre height above the tab bottom (cm, frame above). */
+  readonly y: number;
+  readonly radius: number;
+  /** Depth inward from the tab's side face (cm). */
+  readonly depth: number;
+  readonly side: 'outside' | 'inside';
+}
+
 /** One tab of a base: its side profile and any holes through it. */
 export interface FinTabPart {
   /** Closed, counter-clockwise (material on the left): lines and arcs. */
@@ -186,6 +382,8 @@ export interface FinTabPart {
   readonly holes: readonly (readonly TabSegment[])[];
   /** Holes straight down through it, centred across its thickness. */
   readonly bores?: readonly FinTabBore[];
+  /** Shallow blind circular recesses in one side face (Modii locking dimples). */
+  readonly pockets?: readonly FinTabPocket[];
 }
 
 /** A base's tabs and overall size, in the frame above. */
@@ -312,6 +510,7 @@ export const finTabOutline = (base: FinBase, outline?: Spline): FinTabOutline =>
     return usBoxHead(k && k.length ? k[0]!.end.x : 20 - US_BOX_HEAD.noseAhead);
   }
   if (base === 'gbox') return gboxTab();
+  if (base === 'modii') return modiiTab();
   const kind = futuresKind(base);
   if (kind) {
     const spec = FUTURES_TABS[kind];

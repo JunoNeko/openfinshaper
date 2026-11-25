@@ -228,6 +228,15 @@ describe('.fin.json versions', () => {
     expect(back.outline.knots[0]!.end.x).toBeCloseTo(d.outline.knots[0]!.end.x, 12);
   });
 
+  it('writes a Modii fin with its base, and reads it back', () => {
+    const d = placeOnBase(defaultFinDesign('side', 'left'), 'modii');
+    expect(JSON.parse(writeFinJson(d)).base).toBe('modii');
+    const back = readFinJson(writeFinJson(d)).design;
+    expect(back.base).toBe('modii');
+    expect(back.cant).toBe(0);
+    expect(back.outline.knots[0]!.end.x).toBeCloseTo(d.outline.knots[0]!.end.x, 12);
+  });
+
   it('writes an FCS 1 fin with its base, and reads it back', () => {
     const d = placeOnBase(defaultFinDesign('side', 'left'), 'fcs-1');
     const doc = JSON.parse(writeFinJson(d));

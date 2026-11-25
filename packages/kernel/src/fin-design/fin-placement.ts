@@ -170,6 +170,12 @@ export const placeOnBase = (d: FinDesign, base: FinBase): FinDesign => {
     const moved = shift === 0 ? d : shiftOutline(d, shift);
     return { ...moved, base, cant: 0, toe: 0 };
   }
+  if (base === 'modii') {
+    // Front-first installation: align the leading-edge root with the front of the tab.
+    const dx = tab.length - le;
+    const moved = dx === 0 ? d : shiftOutline(d, dx);
+    return { ...moved, base, cant: 0 };
+  }
   const rear = baseTrailingRoot(base);
   let dx = rear === null ? tab.length / 2 - (le + te) / 2 : rear - te;
   // FCS 1 and Gbox: a fin too short for the usual spot comes forward just enough to
