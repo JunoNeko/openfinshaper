@@ -40,12 +40,15 @@ import {
   surfaceBoundaryCurve,
   tabCentreY,
   tabFacesY,
+  transformPanelDir,
+  transformPanelPoint,
   type BSplineCurve,
   type BSplineSurface,
   type BladeSurfaceModel,
   type FinDesign,
   type FinLaminate,
   type FinTabPart,
+  type PanelRigidTransform,
   type TabSegment,
   type Vert3,
 } from '@openshaper/kernel';
@@ -212,8 +215,23 @@ const zWinding = (curves: readonly BSplineCurve[]): number => {
  * and caused separation along the leading-edge seam in strict STEP importers) and removes
  * interior C0 u-creases, matching how the board exporter builds its hull.
  */
-const emitBlade = (w: Writer, m: BladeSurfaceModel): number => {
-  const strips = splitSurfaceU(m.surface);
+const emitBlade = (
+  w: Writer,
+  m: BladeSurfaceModel,
+  xform?: PanelRigidTransform,
+  name = 'blade',
+): number => {
+  const pt = (p: Vert3): Vert3 => (xform ? transformPanelPoint(xform, p) : p);
+  const dir = (v: Vert3): Vert3 => (xform ? transformPanelDir(xform, v) : v);
+
+  const rawStrips = splitSurfaceU(m.surface);
+  const rawBotCurves = rawStrips.map((st) => surfaceBoundaryCurve(st, 'v0'));
+  const rawTopCurves = rawStrips.map((st) => surfaceBoundaryCurve(st, 'v1'));
+  const rawP0 = rawStrips[0]!.ctrl[0]![0]!;
+
+  const strips = xform
+    ? rawStrips.map((st) => ({ ...st, ctrl: st.ctrl.map((row) => row.map(pt)) }))
+    : rawStrips;
   const kCount = strips.length;
   const surfaces = strips.map((st, k) => emitSurface(w, st, BLADE_FACE_LABELS[k] ?? `blade-${k}`));
 
@@ -268,31 +286,26 @@ const emitBlade = (w: Writer, m: BladeSurfaceModel): number => {
   });
 
   // Caps: four-edge loops, run counter-clockwise about the cap's outward normal.
-  const p0 = vertCurves[0]!.ctrl[0]!;
   const cap = (
     edges: readonly number[],
-    curves: readonly BSplineCurve[],
+    rawCurves: readonly BSplineCurve[],
     z: number,
     up: boolean,
   ): number => {
-    const surf = plane(
-      w,
-      { x: p0.x, y: p0.y, z },
-      { x: 0, y: 0, z: up ? 1 : -1 },
-      { x: 1, y: 0, z: 0 },
-    );
-    const ccwAboutZ = zWinding(curves) > 0;
+    const origin = xform ? pt(rawCurves[0]!.ctrl[0]!) : { x: rawP0.x, y: rawP0.y, z };
+    const surf = plane(w, origin, dir({ x: 0, y: 0, z: up ? 1 : -1 }), dir({ x: 1, y: 0, z: 0 }));
+    const ccwAboutZ = zWinding(rawCurves) > 0;
     const forward = ccwAboutZ === up;
     const walk = forward
       ? edges.map((e) => oriented(w, e, true))
       : [...edges].reverse().map((e) => oriented(w, e, false));
     return face(w, surf, walk, true);
   };
-  const rootFace = cap(eBot, botCurves, m.rootZ, false);
-  const topFace = cap(eTop, topCurves, m.topZ, true);
+  const rootFace = cap(eBot, rawBotCurves, m.rootZ, false);
+  const topFace = cap(eTop, rawTopCurves, m.topZ, true);
 
   const shell = w.emit(`CLOSED_SHELL('',${refs([...sideFaces, rootFace, topFace])})`);
-  return w.emit(`MANIFOLD_SOLID_BREP(${p21('blade')},${ref(shell)})`);
+  return w.emit(`MANIFOLD_SOLID_BREP(${p21(name)},${ref(shell)})`);
 };
 
 // --- tab ---
@@ -303,13 +316,15 @@ const emitTabs = (
   d: FinDesign,
   factor: number,
   laminate: FinLaminate | undefined,
+  xform?: PanelRigidTransform,
+  prefix = '',
 ): number[] => {
   const tab = finTabOutline(d.base, d.outline);
   const names =
     tab.parts.length === 1
-      ? ['tab']
-      : tab.parts.map((_, i) => (i === 0 ? 'tab-rear' : 'tab-front'));
-  return tab.parts.map((part, i) => emitTabPart(w, d, part, names[i]!, factor, laminate));
+      ? [`${prefix}tab`]
+      : tab.parts.map((_, i) => `${prefix}${i === 0 ? 'tab-rear' : 'tab-front'}`);
+  return tab.parts.map((part, i) => emitTabPart(w, d, part, names[i]!, factor, laminate, xform));
 };
 
 const emitTabPart = (
@@ -319,11 +334,15 @@ const emitTabPart = (
   name: string,
   factor: number,
   laminate: FinLaminate | undefined,
+  xform?: PanelRigidTransform,
 ): number => {
+  const pt = (p: Vert3): Vert3 => (xform ? transformPanelPoint(xform, p) : p);
+  const dir = (v: Vert3): Vert3 => (xform ? transformPanelDir(xform, v) : v);
+
   const { height: H } = finTabOutline(d.base, d.outline);
   const sides = tabFacesY(d, laminate);
-  // Tab frame (x, y up from the tab bottom) to the fin frame: z = y − H.
-  const at = (p: { x: number; y: number }, y: number): Vert3 => ({ x: p.x, y, z: p.y - H });
+  // Tab frame (x, y up from the tab bottom) to the fin frame: z = y − H, then optional rigid xform.
+  const at = (p: { x: number; y: number }, y: number): Vert3 => pt({ x: p.x, y, z: p.y - H });
   const segs = part.segments;
 
   const vertex = new Map<string, number>();
@@ -340,8 +359,8 @@ const emitTabPart = (
   const lineEdge = (a: Vert3, b: Vert3): number => {
     const d3 = sub(b, a);
     const len = Math.hypot(d3.x, d3.y, d3.z);
-    const dir = direction(w, d3.x / len, d3.y / len, d3.z / len);
-    const vec = w.emit(`VECTOR('',${ref(dir)},${real(len, factor)})`);
+    const unitDir = direction(w, d3.x / len, d3.y / len, d3.z / len);
+    const vec = w.emit(`VECTOR('',${ref(unitDir)},${real(len, factor)})`);
     const line = w.emit(`LINE('',${ref(w.point(a))},${ref(vec)})`);
     return w.emit(`EDGE_CURVE('',${ref(vtx(a))},${ref(vtx(b))},${ref(line)},.T.)`);
   };
@@ -355,11 +374,11 @@ const emitTabPart = (
     const a = at(s.from, y);
     const b = at(s.to, y);
     const c = at(s.center, y);
-    const axis = { x: 0, y: s.ccw ? -1 : 1, z: 0 };
+    const axis = dir({ x: 0, y: s.ccw ? -1 : 1, z: 0 });
     const refDir = sub(a, c);
-    const r = Math.hypot(refDir.x, refDir.z);
+    const r = Math.hypot(refDir.x, refDir.y, refDir.z);
     const circle = w.emit(
-      `CIRCLE('',${ref(placement(w, c, axis, { x: refDir.x / r, y: 0, z: refDir.z / r }))},${real(s.radius, factor)})`,
+      `CIRCLE('',${ref(placement(w, c, axis, { x: refDir.x / r, y: refDir.y / r, z: refDir.z / r }))},${real(s.radius, factor)})`,
     );
     return w.emit(`EDGE_CURVE('',${ref(vtx(a))},${ref(vtx(b))},${ref(circle)},.T.)`);
   };
@@ -384,14 +403,16 @@ const emitTabPart = (
     const quarter = [0, 1, 2, 3].map((j) => (j * Math.PI) / 2);
     const ringAt = (y: number) => {
       const z = y - H;
-      const c = { x: bore.x, y: yc, z };
-      const pts = quarter.map((a) => ({
-        x: bore.x + bore.radius * Math.cos(a),
-        y: yc + bore.radius * Math.sin(a),
-        z,
-      }));
+      const c = pt({ x: bore.x, y: yc, z });
+      const pts = quarter.map((a) =>
+        pt({
+          x: bore.x + bore.radius * Math.cos(a),
+          y: yc + bore.radius * Math.sin(a),
+          z,
+        }),
+      );
       const circle = w.emit(
-        `CIRCLE('',${ref(placement(w, c, { x: 0, y: 0, z: 1 }, { x: 1, y: 0, z: 0 }))},${real(bore.radius, factor)})`,
+        `CIRCLE('',${ref(placement(w, c, dir({ x: 0, y: 0, z: 1 }), dir({ x: 1, y: 0, z: 0 })))},${real(bore.radius, factor)})`,
       );
       // Counter-clockwise about +z, as the circle runs.
       const edges = pts.map((p, k) => {
@@ -416,15 +437,17 @@ const emitTabPart = (
     const floorY = faceY - ny * depth;
     const quarter = [0, 1, 2, 3].map((j) => (j * Math.PI) / 2);
     const ringAt = (yCoord: number) => {
-      const c = { x: pocket.x, y: yCoord, z: pocket.y - H };
+      const c = pt({ x: pocket.x, y: yCoord, z: pocket.y - H });
       // Right-hand rule about axis +Y with ref +X: +Y × +X = -Z.
-      const pts = quarter.map((a) => ({
-        x: pocket.x + pocket.radius * Math.cos(a),
-        y: yCoord,
-        z: pocket.y - H - pocket.radius * Math.sin(a),
-      }));
+      const pts = quarter.map((a) =>
+        pt({
+          x: pocket.x + pocket.radius * Math.cos(a),
+          y: yCoord,
+          z: pocket.y - H - pocket.radius * Math.sin(a),
+        }),
+      );
       const circle = w.emit(
-        `CIRCLE('',${ref(placement(w, c, { x: 0, y: 1, z: 0 }, { x: 1, y: 0, z: 0 }))},${real(pocket.radius, factor)})`,
+        `CIRCLE('',${ref(placement(w, c, dir({ x: 0, y: 1, z: 0 }), dir({ x: 1, y: 0, z: 0 })))},${real(pocket.radius, factor)})`,
       );
       const edges = pts.map((p, k) => {
         const q = pts[(k + 1) % 4]!;
@@ -441,8 +464,9 @@ const emitTabPart = (
 
   // The two side faces: the profile, less through-holes and any blind pockets on that face.
   sides.forEach((y, k) => {
-    const normal = { x: 0, y: k === 0 ? -1 : 1, z: 0 };
-    const surf = plane(w, at({ x: 0, y: 0 }, y), normal, { x: 1, y: 0, z: 0 });
+    const normal = dir({ x: 0, y: k === 0 ? -1 : 1, z: 0 });
+    const origin = xform ? at(segs[0]!.from, y) : at({ x: 0, y: 0 }, y);
+    const surf = plane(w, origin, normal, dir({ x: 1, y: 0, z: 0 }));
     const loops = rings.map((ring, r) =>
       ring.map((s, i) => ({ edge: edgesOn[r]![k]![i]!, sense: true, from: at(s.from, y) })),
     );
@@ -473,8 +497,8 @@ const emitTabPart = (
         const dx = s.to.x - s.from.x;
         const dz = s.to.y - s.from.y;
         const len = Math.hypot(dx, dz);
-        const normal = { x: dz / len, y: 0, z: -dx / len };
-        const surf = plane(w, a0, normal, { x: dx / len, y: 0, z: dz / len });
+        const normal = dir({ x: dz / len, y: 0, z: -dx / len });
+        const surf = plane(w, a0, normal, dir({ x: dx / len, y: 0, z: dz / len }));
         // A flat horizontal wall a bore passes through gets the bore's ring as a hole.
         const level = r === 0 && dz === 0 ? s.from.y : null;
         const lo = Math.min(s.from.x, s.to.x);
@@ -498,9 +522,9 @@ const emitTabPart = (
         // and toward it for cw.
         const c = at(s.center, sides[0]);
         const ref0 = sub(a0, c);
-        const rr = Math.hypot(ref0.x, ref0.z);
+        const rr = Math.hypot(ref0.x, ref0.y, ref0.z);
         const surf = w.emit(
-          `CYLINDRICAL_SURFACE('',${ref(placement(w, c, { x: 0, y: 1, z: 0 }, { x: ref0.x / rr, y: 0, z: ref0.z / rr }))},${real(s.radius, factor)})`,
+          `CYLINDRICAL_SURFACE('',${ref(placement(w, c, dir({ x: 0, y: 1, z: 0 }), { x: ref0.x / rr, y: ref0.y / rr, z: ref0.z / rr }))},${real(s.radius, factor)})`,
         );
         // Outward at the middle of the arc, found by angle: a semicircle's chord
         // midpoint is its centre, so the chord can't say which way it bulges.
@@ -510,7 +534,7 @@ const emitTabPart = (
         if (!s.ccw && sweep >= 0) sweep -= 2 * Math.PI;
         const m = a + sweep / 2;
         const sgn = s.ccw ? 1 : -1;
-        const normal = { x: sgn * Math.cos(m), y: 0, z: sgn * Math.sin(m) };
+        const normal = dir({ x: sgn * Math.cos(m), y: 0, z: sgn * Math.sin(m) });
         faces.push(faceAbout(w, surf, s.ccw, loop, normal));
       }
     });
@@ -521,9 +545,9 @@ const emitTabPart = (
     const up = b.pts.map((p, k) => lineEdge(p, top.pts[k]!));
     const axis = placement(
       w,
-      { x: bore.x, y: yc, z: bore.from - H },
-      { x: 0, y: 0, z: 1 },
-      { x: 1, y: 0, z: 0 },
+      pt({ x: bore.x, y: yc, z: bore.from - H }),
+      dir({ x: 0, y: 0, z: 1 }),
+      dir({ x: 1, y: 0, z: 0 }),
     );
     const surf = w.emit(`CYLINDRICAL_SURFACE('',${ref(axis)},${real(bore.radius, factor)})`);
     for (let k = 0; k < 4; k++) {
@@ -536,7 +560,7 @@ const emitTabPart = (
       ];
       const m = ((k + 0.5) * Math.PI) / 2;
       // Material is outside the cylinder: outward points at the axis.
-      faces.push(faceAbout(w, surf, false, loop, { x: -Math.cos(m), y: -Math.sin(m), z: 0 }));
+      faces.push(faceAbout(w, surf, false, loop, dir({ x: -Math.cos(m), y: -Math.sin(m), z: 0 })));
     }
   }
 
@@ -545,9 +569,9 @@ const emitTabPart = (
     const across = mouth.pts.map((p, k) => lineEdge(p, floor.pts[k]!));
     const axis = placement(
       w,
-      { x: pocket.x, y: faceY, z: pocket.y - H },
-      { x: 0, y: 1, z: 0 },
-      { x: 1, y: 0, z: 0 },
+      pt({ x: pocket.x, y: faceY, z: pocket.y - H }),
+      dir({ x: 0, y: 1, z: 0 }),
+      dir({ x: 1, y: 0, z: 0 }),
     );
     const cyl = w.emit(`CYLINDRICAL_SURFACE('',${ref(axis)},${real(pocket.radius, factor)})`);
     for (let k = 0; k < 4; k++) {
@@ -560,19 +584,41 @@ const emitTabPart = (
       ];
       const m = ((k + 0.5) * Math.PI) / 2;
       // Material is outside the cylinder: outward points at the axis.
-      faces.push(faceAbout(w, cyl, false, loop, { x: -Math.cos(m), y: 0, z: Math.sin(m) }));
+      faces.push(faceAbout(w, cyl, false, loop, dir({ x: -Math.cos(m), y: 0, z: Math.sin(m) })));
     }
-    const floorNormal = { x: 0, y: ny, z: 0 };
-    const floorSurf = plane(w, { x: pocket.x, y: floorY, z: pocket.y - H }, floorNormal, {
-      x: 1,
-      y: 0,
-      z: 0,
-    });
+    const floorNormal = dir({ x: 0, y: ny, z: 0 });
+    const floorSurf = plane(
+      w,
+      pt({ x: pocket.x, y: floorY, z: pocket.y - H }),
+      floorNormal,
+      dir({
+        x: 1,
+        y: 0,
+        z: 0,
+      }),
+    );
     faces.push(faceAbout(w, floorSurf, true, floor.loop, floorNormal));
   }
 
   const shell = w.emit(`CLOSED_SHELL('',${refs(faces)})`);
   return w.emit(`MANIFOLD_SOLID_BREP(${p21(name)},${ref(shell)})`);
+};
+
+/**
+ * Emit a fin's blade and tab solids into an existing STEP writer, optionally rigidly
+ * transformed into a panel placement (`fin-panel-step.ts`).
+ */
+export const emitFinSolids = (
+  w: Writer,
+  d: FinDesign,
+  model: BladeSurfaceModel,
+  factor: number,
+  opts: { laminate?: FinLaminate; xform?: PanelRigidTransform; prefix?: string } = {},
+): number[] => {
+  const prefix = opts.prefix ?? '';
+  const blade = emitBlade(w, model, opts.xform, `${prefix}blade`);
+  const tabs = emitTabs(w, d, factor, opts.laminate, opts.xform, prefix);
+  return [blade, ...tabs];
 };
 
 /**

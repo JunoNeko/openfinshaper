@@ -63,6 +63,7 @@ export * from './fin-design/fin-mesh';
 export * from './fin-design/fairness';
 export * from './fin-design/smooth-blade';
 export * from './fin-design/panel-fit';
+export * from './fin-design/panel-nest';
 export {
   defaultCanard,
   defaultFinDesign,

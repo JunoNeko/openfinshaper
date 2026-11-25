@@ -605,6 +605,20 @@ export default function DocsFinDesigner() {
           fin together to fit the thinnest panel, as one undo step. The angle and tilt are only a
           check, saved with the fin: the fin and its STEP and STL files don&apos;t change.
         </p>
+        <p>
+          To nest several fins onto one G10 sheet for CNC machining, click{' '}
+          <strong>Set up fins in panel</strong> in the header. Choose a folder of{' '}
+          <code>.fin.json</code> files, set the <strong>2D tool cut width</strong> and panel
+          dimensions, and pick either <strong>Calculate panel size from fin collection</strong> or{' '}
+          <strong>Recommend fin collection to fill panel</strong> (with either{' '}
+          <strong>All pairs</strong> for strictly matched left/right pairs, or{' '}
+          <strong>Pairs + odd fins</strong> to pack matched pairs first and fill leftover pockets
+          with individual fins to maximise material use). Each fin is placed in its optimal 3D
+          tilt/angle pose with interlocking 2D polygon nesting, any fin too thick for the panel
+          depth triggers a warning, and the resulting layout can be saved as{' '}
+          <code>.finpanel.json</code> or exported as a multi-solid <code>.step</code> file with
+          every fin positioned inside the panel thickness.
+        </p>
       </Section>
 
       <Section id="import" title="Importing drawings">

@@ -74,6 +74,7 @@ import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
 import { BuyMeACoffee } from './BuyMeACoffee';
+import { PanelSetupDialog } from './PanelSetupDialog';
 import { BUILD_COMMIT, BUILD_TIME, buildLabel } from '../build-info';
 import { FacingDialog, VECTOR_ACCEPT, readVectorFile } from './VectorImport';
 import type { Ghost } from './ghost';
@@ -1348,6 +1349,7 @@ export function FinApp() {
   }, []);
   // Save and Export open the save dialog: names, and where the files go.
   const [saving, setSaving] = useState<SaveRequest | null>(null);
+  const [panelSetupOpen, setPanelSetupOpen] = useState(false);
   const save = useCallback(() => {
     if (finStore.getState().design) setSaving({ format: 'fin' });
   }, []);
@@ -1427,6 +1429,9 @@ export function FinApp() {
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <BuyMeACoffee />
+          <Button type="button" variant="outline" size="sm" onClick={() => setPanelSetupOpen(true)}>
+            Set up fins in panel
+          </Button>
           <ExportMenu
             pair={pair}
             onPair={changePair}
@@ -1520,6 +1525,14 @@ export function FinApp() {
           pair={pair}
           minThickness={settings.exportMin}
           onClose={() => setSaving(null)}
+        />
+      )}
+      {panelSetupOpen && (
+        <PanelSetupDialog
+          units={units}
+          minThickness={settings.exportMin}
+          currentDesign={finStore.getState().design}
+          onClose={() => setPanelSetupOpen(false)}
         />
       )}
     </div>

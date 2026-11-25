@@ -32,6 +32,15 @@ export {
   type FinJson,
 } from './fin-json';
 export {
+  writeFinPanelJson,
+  readFinPanelJson,
+  FinPanelJsonError,
+  FIN_PANEL_JSON_FORMAT,
+  FIN_PANEL_JSON_VERSION,
+  type FinPanelDocument,
+  type FinPanelJson,
+} from './fin-panel-json';
+export {
   encodeShareFragment,
   decodeShareFragment,
   shareCodecSupported,

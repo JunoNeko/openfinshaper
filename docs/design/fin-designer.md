@@ -886,6 +886,27 @@ and `fin-step.ts`, mirrored across Y for left/right hands). Modii fins fit front
 `placeOnBase` aligns the leading-edge root with the front of the tab (`x = length`). The box
 carries the cant, so the fin has none (`Cant (box)`).
 
+## Set up fins in panel (owner request, 2026-11)
+
+CNC operators cutting fins from G10 panels can open **Set up fins in panel** from the header
+(`PanelSetupDialog.tsx`, `panel-nest.ts`, `fin-panel-json.ts`, `fin-panel-step.ts`):
+
+- **Two modes:** _Calculate panel size from fin collection_ (nests chosen fins and computes the
+  smallest enclosing panel length × width × thickness) and _Recommend fin collection to fill panel_
+  (packs matched L+R pairs and centre fins from a folder of `.fin.json` files into fixed panel
+  dimensions, with **All pairs** to keep strictly matched pairs or **Pairs + odd fins** to fill
+  remaining sheet space with individual fins after pairs are placed).
+- **Optimal 3D pose + interlocking 2D nesting:** each fin is oriented into its thinnest 3D
+  `bestPanelPose` (`panelBasis` right-handed orthonormal frame), rasterised from its actual
+  projected triangle mesh (blade + tab, preserving concavities), and packed across 12 in-plane
+  rotations with a circularly dilated exclusion mask guaranteeing Euclidean clearance ≥ 2D tool
+  cut width. Any fin thicker than the panel depth/thickness raises a warning.
+- **Visualisation, Save & Export:** shows a 2D SVG layout of the G10 panel with every placed fin's
+  silhouette, utilisation %, and hover pose readouts; saves self-contained `.finpanel.json` files
+  (re-openable directly in the dialog) and exports multi-solid AP214 `.step` files with every fin
+  rigidly transformed into `[0, length] × [0, width] × [0, thickness]` (positioned fin solids only,
+  surface-fitted once per unique fin design).
+
 ## The save dialog (owner request, 2026-11)
 
 Save and each Export used to download straight away, named after the fin's position. They now
