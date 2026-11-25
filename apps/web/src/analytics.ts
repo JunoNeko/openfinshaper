@@ -82,8 +82,8 @@ export type DisplayMode = 'standalone' | 'browser';
 /** Where this page's document came from: the service worker's cache, or the network. */
 export type ServedFrom = 'cache' | 'network';
 
-/** The editor shells the service worker serves from its precache (`SHELLS` in sw.ts). */
-const CACHED_SHELL = /^\/(?:app|fin)(?:\/|$)/;
+/** The designer shell the service worker serves from its precache (`SHELLS` in sw.ts). */
+const CACHED_SHELL = /^\/fin(?:\/|$)/;
 
 /**
  * Whether this page load was served from the service worker's cache.

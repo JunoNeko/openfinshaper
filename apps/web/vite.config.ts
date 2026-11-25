@@ -133,8 +133,7 @@ export default defineConfig({
         // An allowlist: nothing is precached unless it is named here (the
         // privacy page, for one, is excluded by omission).
         globPatterns: [
-          // .wasm: the print-blank export's solid modeller, so blanks export offline.
-          'assets/**/*.{js,css,woff2,wasm}',
+          'assets/**/*.{js,css,woff2}',
           // The fin designer's shell: the offline island.
           'fin/index.html',
           // Its help rides along: a few KB of HTML, and being unable to read how

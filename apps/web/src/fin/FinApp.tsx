@@ -69,7 +69,6 @@ import {
   writeFinSettings,
   type FinSettings,
 } from './fin-settings';
-import { UPSTREAM_URL } from '../seo/site';
 import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
@@ -103,7 +102,6 @@ import {
   type FinViewOrder,
 } from './fin-views';
 import { useFinAutosave } from './use-fin-autosave';
-import { AddToMyFins, BoardTripBanner, useBoardTrip } from './BoardTrip';
 import { acrossSign, NUDGE_FORE_CM, nudgeAcross, useFinShortcuts } from './use-fin-shortcuts';
 import { useFinState } from './use-fin';
 import { useSettledDesign } from './use-settled-design';
@@ -871,15 +869,6 @@ function Status({ units, minThickness }: { units: LengthUnit; minThickness: numb
       <Readouts units={units} />
       <div className="ml-auto flex items-center gap-4">
         <StatusChip units={units} minThickness={minThickness} />
-        {/* Credit where it's due: a fork of OpenShaper (GPL), at the bottom (owner review). */}
-        <a
-          className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-          href={UPSTREAM_URL}
-          target="_blank"
-          rel="noreferrer"
-        >
-          A fork of OpenShaper
-        </a>
       </div>
       <Issues />
     </div>
@@ -1357,14 +1346,7 @@ export function FinApp() {
   // A new fin re-fits every view, even one with the same position and side as the last
   // (the twin fin and keel are side fins, like the default).
   const [starts, setStarts] = useState(0);
-  // A fin from a board (the OpenFinShaper round trip): opened in place of the one here,
-  // whose autosave waits until the trip is over.
-  const reFit = useCallback(() => {
-    forgetSavedNames();
-    setStarts((n) => n + 1);
-  }, []);
-  const trip = useBoardTrip(finStore, reFit);
-  const ready = useFinAutosave(finStore, undefined, trip !== null);
+  const ready = useFinAutosave(finStore);
   const [order, setOrder] = useState<FinViewOrder>(readViewOrder);
   const swap = useCallback((slot: number) => {
     setOrder((o) => {
@@ -1418,7 +1400,6 @@ export function FinApp() {
             onOpened={restart}
             onImported={() => setStarts((n) => n + 1)}
           />
-          <AddToMyFins store={finStore} />
         </div>
         <div
           role="group"
@@ -1448,7 +1429,6 @@ export function FinApp() {
           </a>
         </div>
       </header>
-      {trip && <BoardTripBanner label={trip.label} onFinish={trip.finish} />}
       {/* Which small slot holds the 3D view: its row is taller, the model and its tools
           both needing room (owner review: the model was 80 px wide). */}
       <main aria-busy={!ready} className="fin-grid min-h-0 flex-1" data-3d-slot={slotOf('3d')}>

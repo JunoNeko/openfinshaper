@@ -8,7 +8,7 @@
  * point along it (it shows the thickness up the blade there). Pure: a mesh in, segments
  * and numbers out, so the 3D view only draws them.
  */
-import type { BoardMesh } from '../tessellate';
+import type { BoardMesh } from '../mesh';
 
 /** Which plane: `z` horizontal at a height, `x` upright at a point along the base. */
 export type SliceAxis = 'x' | 'z';

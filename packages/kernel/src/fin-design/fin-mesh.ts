@@ -13,11 +13,9 @@
  * belongs to exactly two triangles, and each face group is wound against its
  * measured outward direction.
  */
-import { meshWithNormals } from '../fins';
-import type { BoardMesh } from '../tessellate';
+import { meshWithNormals, type BoardMesh, type Vert3 } from '../mesh';
 import { vec2, type Vec2 } from '../vec2';
 import { splineExtremes } from './curve-shape';
-import type { Vert3 } from '../loft';
 import { cosineStations, type FinLaminate, NO_LAMINATE } from './blade';
 import { sectionLoop } from './blade-surface';
 import { FIN_MIN_THICKNESS, finOutward, type FinDesign } from './fin-design';

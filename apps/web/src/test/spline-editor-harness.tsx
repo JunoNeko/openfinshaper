@@ -1,53 +1,14 @@
 /**
- * Shared rig for driving a real `SplineEditor` under jsdom.
- *
- * jsdom has no layout, so the pane's size and page position are variables the
- * test moves directly, and the canvas's `getBoundingClientRect` /
- * `clientWidth` / `clientHeight` are wired to them. `screenOf` maps world cm to
- * the pixel a pointer event should carry, reading the framing the editor itself
- * reported — so tests never hard-code the result of `fitToBounds`.
+ * Shared layout & pointer stubs for driving `FinCurveEditor` panes under jsdom.
  */
-import {
-  board,
-  crossSection,
-  knot,
-  splineFromKnots,
-  vec2,
-  type BezierBoard,
-  type Vec2,
-} from '@openshaper/kernel';
-import {
-  SplineEditor,
-  turnedCanvasToPane,
-  viewportFromCenter,
-  worldToScreen,
-  type ViewCenter,
-} from '@openshaper/render2d';
-import { createBoardStore } from '@openshaper/store';
-import { act, render } from '@testing-library/react';
-import type { ComponentProps } from 'react';
-
-/** A small valid board: outline (half-width), flat-ish bottom and deck. */
-export const makeBoard = (): BezierBoard => {
-  const k = (ex: number, ey: number) => knot(vec2(ex, ey), vec2(ex - 5, ey), vec2(ex + 5, ey));
-  const prof = splineFromKnots([
-    knot(vec2(0, 5), vec2(0, 5), vec2(10, 5)),
-    knot(vec2(10, 8), vec2(10, 6), vec2(10, 8)),
-  ]);
-  return board(
-    splineFromKnots([k(0, 0), k(50, 20), k(100, 0)]),
-    splineFromKnots([k(0, 5), k(100, 5)]),
-    splineFromKnots([k(0, 11), k(100, 11)]),
-    [crossSection(0, prof), crossSection(50, prof), crossSection(100, prof)],
-  );
-};
+import { act } from '@testing-library/react';
 
 export const pane = { w: 600, h: 400, top: 0 };
 
 /** ResizeObserver callbacks registered by the component under test. */
 let observers: ResizeObserverCallback[] = [];
 
-/** Resize the pane the way a wrapping header used to, and flush the observer. */
+/** Resize the pane and flush the observer. */
 export const resizeTo = (w: number, h: number) => {
   pane.w = w;
   pane.h = h;
@@ -117,57 +78,6 @@ export const removeLayoutStubs = () => {
       else delete (p as unknown as Record<string, unknown>)[name];
     }
   }
-};
-
-type EditorProps = ComponentProps<typeof SplineEditor>;
-
-/** Mount the outline editor over a loaded board. */
-export const mountEditor = (overrides: Partial<EditorProps> = {}) => {
-  const store = createBoardStore();
-  act(() => store.getState().load(makeBoard()));
-  let view: ViewCenter | null = null;
-  const element = (props: Partial<EditorProps>) => (
-    <SplineEditor
-      store={store}
-      targets={[{ kind: 'outline' }]}
-      colors={['#fff']}
-      onViewChange={(v) => {
-        view = v;
-      }}
-      {...overrides}
-      {...props}
-    />
-  );
-  const rendered = render(element({}));
-  const canvas = rendered.container.querySelector('canvas')!;
-  /**
-   * The client coordinates a pointer event must carry to sit on `world`.
-   *
-   * A turned pane draws into a canvas whose axes are the swapped pair, rotated into
-   * the pane by CSS. `turnedCanvasToPane` is the same mapping `localPoint` inverts,
-   * imported rather than re-derived — a test that re-implements the transform it is
-   * checking proves only that two copies of a mistake agree.
-   */
-  const screenOf = (world: Vec2) => {
-    const turned = overrides.allowTurn === true && pane.h > pane.w;
-    const cw = turned ? pane.h : pane.w;
-    const ch = turned ? pane.w : pane.h;
-    const local = worldToScreen(viewportFromCenter(view!, cw, ch), world);
-    const inPane = turned ? turnedCanvasToPane(local, cw) : local;
-    return { clientX: inPane.x, clientY: inPane.y + pane.top };
-  };
-  const knotAt = (index = 1) => store.getState().board!.outline.knots[index]!;
-  return {
-    store,
-    canvas,
-    screenOf,
-    knotAt,
-    midKnot: () => knotAt().end,
-    scale: () => view!.scale,
-    unmount: rendered.unmount,
-    /** Re-render with `props` layered over the mount's overrides (owner-held state). */
-    rerender: (props: Partial<EditorProps>) => rendered.rerender(element(props)),
-  };
 };
 
 export const MOUSE = { pointerId: 1, button: 0, pointerType: 'mouse' } as const;

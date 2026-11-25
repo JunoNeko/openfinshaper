@@ -542,15 +542,6 @@ export default function DocsFinDesigner() {
           designer works offline.
         </p>
         <p>
-          <strong>Add to My fins</strong> keeps the fin in this browser&apos;s My fins, which the
-          board editor&apos;s fin chooser lists, so it can go on any board. When you design a fin
-          from a board (its fin chooser&apos;s <strong>Edit in OpenFinShaper</strong> or{' '}
-          <strong>Design a new fin</strong>), a banner names the board&apos;s fin:{' '}
-          <strong>Apply to board</strong> puts the fin there and keeps it in My fins;{' '}
-          <strong>Cancel</strong> leaves the board as it was. Either way the fin you had open here
-          comes back.
-        </p>
-        <p>
           Save, and each Export, opens a dialog first. Name the file there (the extension is added
           for you) and choose where it goes. In Chrome and Edge on a computer,{' '}
           <strong>Choose folder…</strong> picks a folder, which is offered again next time; the

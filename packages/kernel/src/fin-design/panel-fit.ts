@@ -18,7 +18,7 @@
  * but by far less than a machining tolerance at these spacings. Only the extreme points
  * matter, so the mesh is cut down to them first ({@link panelPoints}).
  */
-import type { Vert3 } from '../loft';
+import type { Vert3 } from '../mesh';
 import { vec2, type Vec2 } from '../vec2';
 import { FIN_PANEL_MAX_ANGLE, finOutward, type FinDesign } from './fin-design';
 import { finMesh, type FinMesh } from './fin-mesh';

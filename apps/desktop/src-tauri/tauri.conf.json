@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenShaper",
+  "productName": "OpenFinShaper",
   "version": "0.1.0",
-  "identifier": "app.openshaper.desktop",
+  "identifier": "app.openfinshaper.desktop",
   "build": {
     "frontendDist": "../../web/dist",
     "devUrl": "http://localhost:5173",
@@ -13,8 +13,8 @@
     "windows": [
       {
         "label": "main",
-        "url": "/app",
-        "title": "OpenShaper",
+        "url": "/fin",
+        "title": "OpenFinShaper",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,

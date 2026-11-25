@@ -60,7 +60,7 @@
  * root's thickest point), and any cant lines' changes above them, by height alone, so a
  * bend runs level, along the flow (blade.ts twistAt).
  */
-import type { Vert3 } from '../loft';
+import type { Vert3 } from '../mesh';
 import { splineExtremes, yAtX } from './curve-shape';
 import {
   cosineStations,

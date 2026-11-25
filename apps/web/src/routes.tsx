@@ -26,9 +26,6 @@ const page = (importer: () => Promise<{ default: React.ComponentType }>) => asyn
  * - `errorElement` sits on both the root and `/fin`: an error in the root's own
  *   (vite-react-ssg synthetic) loader bubbles to its own boundary, not a child's,
  *   so the designer needs its own to keep failures scoped.
- *
- * - `/app` is the board editor, routed again in the print version (OpenShaper's
- *   public site serves the fin designer only). The board docs pages stay unrouted.
  */
 export const routes: RouteRecord[] = [
   {
@@ -41,13 +38,6 @@ export const routes: RouteRecord[] = [
       {
         path: 'fin',
         lazy: page(() => import('./pages/FinPage')),
-        errorElement: <RouteErrorBoundary />,
-      },
-      {
-        // The board editor, routed again in the print version: printed boards and
-        // channels are designed here. A client-only island like /fin.
-        path: 'app',
-        lazy: page(() => import('./pages/EditorPage')),
         errorElement: <RouteErrorBoundary />,
       },
       {

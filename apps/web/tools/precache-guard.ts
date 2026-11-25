@@ -117,9 +117,6 @@ export function assertEditorPrecache(entries: readonly PrecacheEntry[]): void {
     problems.push(`no other page may be precached: ${otherHtml.join(', ')}`);
   }
 
-  // The print version routes the board editor again (/app), so its code ships; only its
-  // page stays out of the precache, by the HTML rule above.
-
   // A docs glob that matches nothing still builds — it just quietly ships help
   // that can't be read offline, which is the whole reason it's precached.
   if (!has('docs/fin-designer')) {

@@ -1,17 +1,5 @@
-/** @openshaper/render3d — Three.js board mesh + 3D scene. */
-export { boardCenter, boardGeometry, boardSpan, tessellateAsync, meshToGeometry } from './geometry';
-export {
-  Board3DView,
-  type Board3DViewProps,
-  type Board3DMode,
-  type LightingPreset,
-  type MaterialPreset,
-  type AnalysisMode,
-  type CameraPose,
-} from './Board3DView';
-export { Guides3D } from './Guides3D';
-export { guideLines, type GuideLine, type GuideLines } from './guide-lines';
-export { useBoardOffset, type BoardPlacement } from './use-board-offset';
+// SPDX-License-Identifier: GPL-3.0-or-later
+/** @openshaper/render3d — Three.js 3D fin preview. */
 export { FinPreview3D, type FinPreview3DProps } from './FinPreview3D';
 export type { FinPanelOutline, FinPreviewView, FinSectionPlane } from './fin-preview';
 export {

@@ -3,11 +3,8 @@ import { curveFromKnots, splitCurve } from '../bezier-curve';
 import { knot, type Knot } from '../knot';
 
 /**
- * Insert one knot at `seg`/`t` via exact de Casteljau split (same technique as
- * `matchControlPointCounts`'s `insertMatchingKnot`): the resulting spline traces
- * the identical curve, just sliced into one more segment. Test-only helper for
- * simulating what happens when two adjacent cross-sections end up with
- * differing knot counts.
+ * Insert one knot at `seg`/`t` via exact de Casteljau split: the resulting spline traces
+ * the identical curve, just sliced into one more segment.
  */
 const insertKnotAtSegment = (knots: readonly Knot[], seg: number, t: number): Knot[] => {
   const before = knots[seg]!;
@@ -39,8 +36,6 @@ const insertKnotAtSegment = (knots: readonly Knot[], seg: number, t: number): Kn
 /**
  * Insert several knots (each `seg` index relative to the ORIGINAL `knots` array),
  * applied highest segment index first so earlier splices don't shift later ones.
- * Every `seg` must be distinct (inserting twice into the same original segment
- * needs its own re-parametrization and isn't supported here).
  */
 export const reslice = (knots: readonly Knot[], inserts: { seg: number; t: number }[]): Knot[] =>
   [...inserts]

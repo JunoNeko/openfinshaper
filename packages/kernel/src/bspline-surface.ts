@@ -36,7 +36,7 @@
  * The join is exact rather than approximate, because both strips are clamped to
  * the same data row, so their shared control point is the same number.
  */
-import type { Vert3 } from './loft';
+import type { Vert3 } from './mesh';
 
 /** A clamped B-spline curve. `knots.length === ctrl.length + degree + 1`. */
 export interface BSplineCurve {

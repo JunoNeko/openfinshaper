@@ -81,12 +81,9 @@ describe('assertEditorPrecache', () => {
     );
   });
 
-  // The print version routes the board editor: its code ships, its page isn't precached.
-  it('takes the board editor’s code, but not its page', () => {
+  it('rejects any unexpected page shell in the precache', () => {
     const shell = [...validManifest(), { url: 'app', revision: 'a' }];
     expect(messageOf(() => assertEditorPrecache(shell))).toMatch(/no other page.*app/);
-    const code = [...validManifest(), { url: 'assets/EditorPage-DQk.js', revision: null }];
-    expect(() => assertEditorPrecache(code)).not.toThrow();
   });
 
   it('rejects a missing offline fallback', () => {

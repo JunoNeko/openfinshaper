@@ -5,7 +5,7 @@
  * that are easy to get subtly wrong.
  */
 import { describe, expect, it } from 'vitest';
-import { matches, SHORTCUTS, shortcutKeys, VIEW_KEYS, type Shortcut } from './shortcuts';
+import { matches, SHORTCUTS, shortcutKeys, type Shortcut } from './shortcuts';
 
 const byId = (id: string): Shortcut => {
   const s = SHORTCUTS.find((x) => x.id === id);
@@ -47,10 +47,10 @@ describe('matches', () => {
     expect(matches(byId('delete-point'), key('Backspace'), false)).toBe(true);
   });
 
-  // Typing a bracket in the board-name field must not page the cross-section.
+  // Pressing Delete in a text field must not delete the selected control point.
   it('suppresses unmodified bindings while a field has focus', () => {
-    expect(matches(byId('cross-section-next'), key(']'), false)).toBe(true);
-    expect(matches(byId('cross-section-next'), key(']'), true)).toBe(false);
+    expect(matches(byId('delete-point'), key('Delete'), false)).toBe(true);
+    expect(matches(byId('delete-point'), key('Delete'), true)).toBe(false);
   });
 
   // ...but Save should still work from inside a text field.
@@ -89,14 +89,8 @@ describe('the table itself', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('covers every numbered view', () => {
-    for (const v of VIEW_KEYS) {
-      expect(SHORTCUTS.some((s) => s.id === `view-${v.key}`)).toBe(true);
-    }
-  });
-
   it('exposes display chords by id, and rejects unknown ids', () => {
-    expect(shortcutKeys('cross-section-prev')).toBe('[');
+    expect(shortcutKeys('save')).toBe('⌘S');
     expect(() => shortcutKeys('nope')).toThrow(/Unknown shortcut/);
   });
 });

@@ -16,7 +16,7 @@
  * maintains a circularly dilated exclusion mask so every pair of placed fins is
  * guaranteed at least `toolWidth` apart in Euclidean distance.
  */
-import type { Vert3 } from '../loft';
+import type { Vert3 } from '../mesh';
 import { vec2, type Vec2 } from '../vec2';
 import { finOutward, type FinDesign, type FinHand } from './fin-design';
 import { finMesh, tabProfilePoints, type FinMesh } from './fin-mesh';

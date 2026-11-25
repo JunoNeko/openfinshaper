@@ -19,7 +19,7 @@
  * design, so its turn doesn't halve. The sampler decides what counts as an edge (how far
  * in its columns start).
  */
-import type { Vert3 } from '../loft';
+import type { Vert3 } from '../mesh';
 import { bladeRowHeights, bladeSection, bladeTop, prepareBlade } from './blade';
 import type { FinDesign } from './fin-design';
 

@@ -1,134 +1,36 @@
-# OpenShaper
+# OpenFinShaper
 
-Free, open-source surfboard CAD, in your browser — a from-scratch modern rebuild of the
-legacy Java/Swing [BoardCAD-LE](https://github.com/ciditup/boardcad). Draw outlines,
-rocker and cross-sections, watch volume and weight update as you go, and export files you
-can actually build from — STEP, STL, DXF and 1:1 printable PDF. Nothing to install,
-nothing to sign up for.
+Free, open-source surf fin CAD/CAM for CNC milling and 3D printing — runs entirely in the browser with offline PWA support.
 
-**▶ Live: https://openshaper.com** — the app opens at [openshaper.com/app](https://openshaper.com/app).
+Design surf fins across four live views (Profile, Foil, Thickness, and 3D), configure Futures, FCS 1/II, US Box, Gbox, and Modii bases, check panel fit, nest multiple fins onto CNC G10 sheets, and export watertight AP214 STEP, binary STL, laminated cores, and 1:1 profile SVGs.
 
-A passion project for the shaping community. Built and shared under the GPL, the same
-license as the BoardCAD it descends from.
+## Development
 
-## Features
+Requires Node 22+ and pnpm 9.
 
-- Outline, rocker, and cross-section editors driven by one shared board model
-- Live specs: length, width, thickness, volume, plan-shape area, center of mass, weight
-- 3D preview (Three.js) with a striped-reflection shading mode for fairness checks
-- Compare against a "ghost" board; printable spec sheet
-- Export **STEP** (B-spline solid, for CAD/CAM), **STL** (3D print / CAM), **DXF** (2D
-  outline), and 1:1 printable **PDF** templates, plus a native `.board.json` save — every
-  format free
-- Reads legacy `.brd` files
-
-## Stack
-
-- pnpm workspaces + Turborepo + Vite (prerendered static SPA)
-- React 18 + TypeScript, Tailwind CSS
-- Zustand (board document + command/undo)
-- Canvas 2D editors; Three.js / react-three-fiber 3D
-- Pure, immutable, framework-agnostic geometry kernel pinned to golden reference data
-- Tauri 2 optional desktop shell wrapping the same web app
-
-## Layout
-
-```
-apps/web        the product (React)
-apps/desktop    Tauri native shell wrapping apps/web
-packages/kernel pure geometry + board model (port of cadcore + board)
-packages/io     file readers/writers (.brd in; .board.json/STEP/DXF/STL/PDF out)
-packages/store  board document store, command/undo, derived-spec selectors
-packages/render2d  canvas viewport + 2D editor draw layer
-packages/render3d  three.js board mesh + scene
-packages/units  metric/imperial + fraction formatting
-packages/export STEP/STL/DXF/PDF/spec-sheet exporters
-packages/ui     design-system components
-docs/specs      extracted legacy behavior specs + golden reference data
-```
-
-## Site map
-
-The static site is prerendered to real HTML at build time ([vite-react-ssg](https://github.com/Daydreamer-riri/vite-react-ssg)):
-
-| Route                              | Page                                         |
-| ---------------------------------- | -------------------------------------------- |
-| `/`                                | Marketing landing                            |
-| `/app`                             | The design app (editor; client-only island)  |
-| `/about`                           | About / the maker's story                    |
-| `/privacy`                         | What analytics collect, and how to change it |
-| `/surfboard-design-guide`          | Guide: outline, rocker, rails, volume        |
-| `/surfboard-construction-methods`  | Guide: PU, EPS, hollow wood & more           |
-| `/surfboard-volume-calculator`     | Guide + calculator: finding your litres      |
-| `/build-a-hollow-wooden-surfboard` | Guide: hollow wooden board build             |
-| `/docs`                            | Reference docs: overview                     |
-| `/docs/editing`                    | Reference docs: the editors                  |
-| `/docs/specs`                      | Reference docs: volume, weight, specs        |
-| `/docs/fins`                       | Reference docs: fin setups and systems       |
-| `/docs/construction`               | Reference docs: construction settings        |
-| `/docs/export`                     | Reference docs: export formats               |
-| `/docs/files`                      | Reference docs: saving, opening, `.brd`      |
-| `/docs/offline`                    | Reference docs: offline and installing       |
-| `/docs/shortcuts`                  | Reference docs: keyboard shortcuts           |
-
-Each content route ships a unique `<title>`, meta description, canonical, Open Graph and
-JSON-LD; `robots.txt` and `sitemap.xml` are generated into `dist/` on build.
-
-## Develop
-
-```sh
+```bash
 pnpm install
-pnpm dev          # run the web app (vite-react-ssg dev)
-pnpm test         # all package tests (kernel golden tests, etc.)
-pnpm typecheck
-pnpm build        # prerendered static build to apps/web/dist
+pnpm dev          # Start web app at http://localhost:5173/fin
+pnpm typecheck    # Strict TypeScript checks across all packages
+pnpm test         # Run workspace Vitest suites
+pnpm lint         # ESLint + Prettier check
+pnpm build        # Build static SSG + PWA bundle in apps/web/dist
 ```
 
-## Deploy (Cloudflare)
+## Workspace Structure
 
-The site deploys to **Cloudflare** (Workers Builds, Git-connected) at the `openshaper.com`
-apex domain. `wrangler.toml` declares the assets directory; `.node-version` pins Node.
-
-- **Build command (dashboard):** `pnpm build`
-- **Deploy command (dashboard):** `npx wrangler deploy`
-- **Assets directory:** `apps/web/dist` (from `wrangler.toml` → `[assets] directory`)
-- **Worker name:** must match `name` in `wrangler.toml` (`openshaper`)
-- **Canonical/OG origin:** `VITE_SITE_URL` build env var (defaults to `https://openshaper.com`)
-
-`_headers` (in `apps/web/public/`) is honored. The build's `base` is `/` for the root domain
-and switches to `./` only under a Tauri build.
-
-### One-time setup (manual)
-
-1. In the Cloudflare dashboard, set the project's **build command** to `pnpm build` (deploy
-   command `npx wrangler deploy` is the default). Output dir + Node come from the repo.
-2. Add `openshaper.com` as a **custom domain** on the Worker (Cloudflare manages DNS).
-3. Optionally replace `apps/web/public/og-cover.svg` with a rasterized 1200×630 `og-cover.png`
-   for maximum social-scraper compatibility (then update `OG_IMAGE` in `apps/web/src/seo/site.ts`).
-
-## Contributing
-
-Issues and pull requests welcome — bug reports, board templates, file-format fixes,
-and shaping-domain feedback especially. See [`CONTRIBUTING.md`](./CONTRIBUTING.md), which
-covers the ground rules and how to submit a board template. By contributing you agree your
-work is licensed under the project's GPL-3.0-or-later.
-
-## Support
-
-OpenShaper is free and open-source — every feature, every export format. If it's useful
-to you and you'd like to chip in toward its development, you can
-[buy me a coffee](https://www.buymeacoffee.com/jaredg). It's entirely optional and supports
-a solo passion project. 🙏
+- `apps/web` — React / Vite / vite-react-ssg web application (`openfinshaper.com`)
+- `apps/desktop` — Tauri desktop shell
+- `packages/kernel` — Pure geometry, Bezier/B-spline surfaces, fin blade/tab modeling, and CNC panel nesting
+- `packages/io` — `.fin.json` and `.finpanel.json` readers and writers
+- `packages/store` — Fin state and undo/redo history
+- `packages/render2d` — 2D canvas spline editor
+- `packages/render3d` — Three.js 3D fin preview and section analysis
+- `packages/export` — Single-fin and multi-fin panel STEP + binary STL exporters
+- `packages/units` — Length/thickness/area measurement formatting and parsing
+- `packages/ui` — Shared UI components
+- `worker/` — Cloudflare Worker serving static assets and `/edge` analytics proxy
 
 ## License
 
-OpenShaper is licensed under the **GNU General Public License v3.0 or later**
-(GPL-3.0-or-later) — see [`LICENSE`](./LICENSE).
-
-Its kernel is a behavioral port of **BoardCAD-LE** and is therefore a derivative work;
-we release OpenShaper under the same copyleft to honor it. See [`NOTICE.md`](./NOTICE.md)
-for attribution to the original BoardCAD authors. The BoardCAD-LE source is used as a
-reference only and is not redistributed here.
-
-Project orchestration and architecture conventions live in
-[`.claude/CLAUDE.md`](.claude/CLAUDE.md).
+GPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).

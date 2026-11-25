@@ -284,7 +284,6 @@ describe('resolveServedFrom', () => {
 
   it('is cache when the worker answered without the network', () => {
     expect(resolveServedFrom({ transferSize: 0 }, true, '/fin')).toBe('cache');
-    expect(resolveServedFrom({ transferSize: 0 }, true, '/app')).toBe('cache');
   });
 
   it('is network when the worker passed the request on', () => {
@@ -292,10 +291,10 @@ describe('resolveServedFrom', () => {
     expect(resolveServedFrom({ transferSize: 18_000 }, true, '/docs/fin-designer')).toBe('network');
   });
 
-  it('falls back to the cached shells where the browser reports no transfer size', () => {
+  it('falls back to the cached shell where the browser reports no transfer size', () => {
     expect(resolveServedFrom({}, true, '/fin')).toBe('cache');
-    expect(resolveServedFrom(undefined, true, '/app/')).toBe('cache');
-    expect(resolveServedFrom({}, true, '/apple')).toBe('network');
+    expect(resolveServedFrom(undefined, true, '/fin/')).toBe('cache');
+    expect(resolveServedFrom({}, true, '/finish')).toBe('network');
     expect(resolveServedFrom({}, true, '/docs')).toBe('network');
   });
 });

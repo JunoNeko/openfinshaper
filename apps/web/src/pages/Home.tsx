@@ -5,7 +5,7 @@ import { Head } from 'vite-react-ssg';
 import { Seo } from '../seo/Seo';
 
 /**
- * `/`: the print version is the board editor, so the home page is a pointer to it.
+ * `/`: OpenFinShaper's home page redirects straight to the fin designer at `/fin`.
  *
  * In production `public/_redirects` answers `/` with a 301 before this page is ever
  * served. This is what a host without that file shows instead: a meta refresh (no
@@ -14,18 +14,18 @@ import { Seo } from '../seo/Seo';
  */
 export default function Home() {
   useEffect(() => {
-    window.location.replace('/app');
+    window.location.replace('/fin');
   }, []);
 
   return (
     <>
-      <Seo title="OpenShaper" path="/app" noindex />
+      <Seo title="OpenFinShaper" path="/fin" noindex />
       <Head>
-        <meta httpEquiv="refresh" content="0; url=/app" />
+        <meta httpEquiv="refresh" content="0; url=/fin" />
       </Head>
       <main className="flex min-h-screen items-center justify-center p-6 text-sm">
-        <Link to="/app" className="underline underline-offset-4">
-          Open OpenShaper
+        <Link to="/fin" className="underline underline-offset-4">
+          Open OpenFinShaper
         </Link>
       </main>
     </>

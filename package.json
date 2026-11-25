@@ -1,8 +1,8 @@
 {
-  "name": "openshaper",
+  "name": "openfinshaper",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenShaper — modern surfboard CAD/CAM (rebuild of BoardCAD-LE)",
+  "description": "OpenFinShaper — free, open-source surf fin CAD/CAM",
   "license": "GPL-3.0-or-later",
   "packageManager": "pnpm@9.15.9",
   "engines": {

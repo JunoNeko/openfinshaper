@@ -1,16 +1,5 @@
-import {
-  curvatureCombReference,
-  curvatureCombRuns,
-  curvatureCombSide,
-  curvatureInflections,
-  value,
-  type CombSample,
-  type Knot,
-  type ResolvedFin,
-  type Spline,
-  type Vec2,
-} from '@openshaper/kernel';
-import { boundsOf } from './sample';
+// SPDX-License-Identifier: GPL-3.0-or-later
+import type { Knot, Spline, Vec2 } from '@openshaper/kernel';
 import { screenToWorld, worldToScreen, type Viewport } from './viewport';
 import type { Hit } from './hit';
 
@@ -36,7 +25,6 @@ export const defaultStyle: DrawStyle = {
   tangentSelected: '#F97316',
 };
 
-/** Reflection options: outline mirrors across y=0; cross-sections across x=0. */
 export interface Mirror {
   mirrorX?: boolean;
   mirrorY?: boolean;
@@ -94,8 +82,6 @@ export const drawGhostSpline = (
 ): void => {
   if (spline.curves.length === 0) return;
   ctx.save();
-  // If a custom color is supplied use it at 55% opacity; otherwise fall back to
-  // the original semi-transparent silver so callers that pass nothing are unchanged.
   ctx.strokeStyle = color ? `${color}8c` : 'rgba(180,184,196,0.55)';
   ctx.lineWidth = 1.5;
   ctx.setLineDash([6, 4]);
@@ -118,16 +104,9 @@ const square = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, 
   ctx.fillRect(x - r, y - r, r * 2, r * 2);
 };
 
-/** How far out from its point a locked handle's bar sits, and half its length (px). */
 const LOCK_BAR_AT = 12;
 const LOCK_BAR_HALF = 4;
 
-/**
- * Mark a locked knot: a short bar across each locked handle's line, a fixed distance
- * out from the point. It is drawn along the lock rather than the handle, joined to
- * the point when the handle is shorter than that, so a collapsed handle still shows
- * which way it will come out.
- */
 const drawLockBars = (
   ctx: CanvasRenderingContext2D,
   k: Knot,
@@ -162,25 +141,16 @@ const drawLockBars = (
   ctx.lineWidth = 1;
 };
 
-/**
- * Draw control points + tangent handles for a spline. Smooth (continuous) knots
- * render as circles; corner knots as squares — mirroring the legacy editor so the
- * continuity of a point is readable at a glance. A locked knot adds a bar across
- * each locked handle's line.
- */
+/** Draw control points + tangent handles for a spline. */
 export const drawControlPoints = (
   ctx: CanvasRenderingContext2D,
   spline: Spline,
   vp: Viewport,
   style: DrawStyle,
   selectedIndex: number | null,
-  /** Override the control-point radius (px). Defaults to 5 for circles / 4 for squares. */
   pointSize?: number,
-  /** Which part of the selected knot is active. */
   selectedKind: Hit['kind'] = 'end',
-  /** The individual point currently under the cursor. */
   hovered: Hit | null = null,
-  /** Other endpoints selected along with `selectedIndex` (multi-select). */
   alsoSelected: ReadonlySet<number> | null = null,
 ): void => {
   const r = pointSize ?? 5;
@@ -213,8 +183,6 @@ export const drawControlPoints = (
         ? style.point
         : style.pointCorner;
 
-    // Draw the endpoint first and handles last. A selected zero-length handle then
-    // remains visible on top of the endpoint and can be dragged out again.
     const endScale = endActive ? 1.55 : 1;
     if (k.continuous) dot(ctx, end.x, end.y, r * endScale, endFill);
     else square(ctx, end.x, end.y, rSq * endScale, endFill);
@@ -235,10 +203,7 @@ export const drawControlPoints = (
   });
 };
 
-/**
- * Round a target spacing (cm) up to a "nice" 1 / 2 / 5 × 10ᵏ value, so the grid
- * lands on round centimeters at any zoom. Returns 0 for non-finite/≤0 input.
- */
+/** Round a target spacing (cm) up to a "nice" 1 / 2 / 5 × 10ᵏ value. */
 export const gridStep = (rawCm: number): number => {
   if (!Number.isFinite(rawCm) || rawCm <= 0) return 0;
   const pow = Math.pow(10, Math.floor(Math.log10(rawCm)));
@@ -247,18 +212,6 @@ export const gridStep = (rawCm: number): number => {
   return nice * pow;
 };
 
-/**
- * A faint reference grid with emphasized world axes — the legacy View ▸ Show Grid
- * + Show Baseline + Show Center Line, unified into one overlay. The cell size is an
- * adaptive "nice" number of centimeters (≈ a target pixel spacing), so the grid
- * stays legible and lands on round values at any zoom. The world x = 0 axis (tail
- * station / cross-section centerline) and y = 0 axis (rocker baseline / outline
- * stringer) are drawn slightly stronger so they read as datum lines.
- */
-/**
- * Parse a 6-digit CSS hex color (#rrggbb) into an rgba() string with the given
- * alpha, falling back to the provided `fallback` if parsing fails.
- */
 const hexToRgba = (hex: string, alpha: number, fallback: string): string => {
   const m = /^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/.exec(hex);
   if (!m) return fallback;
@@ -273,13 +226,7 @@ export const drawGrid = (
   vp: Viewport,
   w: number,
   h: number,
-  /** Override grid color (6-digit hex). Defaults to the built-in muted-blue-grey. */
   color?: string,
-  /**
-   * A fixed cell size (world units) instead of the adaptive one. Zoomed out until its
-   * lines would crowd closer than {@link MIN_FIXED_GRID_PX}, every 2nd, 4th… line is
-   * drawn, so the lines still fall on multiples of it.
-   */
   fixed?: number,
 ): void => {
   const TARGET_PX = 64;
@@ -297,7 +244,6 @@ export const drawGrid = (
   const minY = Math.min(tl.y, br.y);
   const maxY = Math.max(tl.y, br.y);
 
-  // Derive minor / axis colors: minor at 12% opacity, axes at 40%.
   const minorColor = color
     ? hexToRgba(color, 0.12, 'rgba(138,155,179,0.12)')
     : 'rgba(138,155,179,0.12)';
@@ -306,7 +252,6 @@ export const drawGrid = (
     : 'rgba(138,155,179,0.4)';
 
   ctx.save();
-  // Minor grid lines.
   ctx.strokeStyle = minorColor;
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -322,7 +267,6 @@ export const drawGrid = (
   }
   ctx.stroke();
 
-  // Emphasized zero-axes (baseline / centerline), only when in view.
   ctx.strokeStyle = axisColor;
   ctx.lineWidth = 1.25;
   ctx.beginPath();
@@ -338,887 +282,6 @@ export const drawGrid = (
   }
   ctx.stroke();
   ctx.restore();
-};
-
-/** Toggleable analysis overlays drawn on a 2D editor pane. */
-export interface EditorOverlays {
-  /** Faint reference grid + emphasized baseline/centerline axes. */
-  grid?: boolean;
-  /**
-   * Board-x of the cross-pane "sliding location" line, drawn as a vertical probe
-   * (solid inside the board, dashed outside). Length-axis panes only.
-   */
-  scrubProbe?: number;
-  /** Curvature comb on the edited spline(s). */
-  curvatureComb?: boolean;
-  /** Tunni line + point on every segment of the edited spline(s), draggable. */
-  tunni?: boolean;
-  /** Vertical reference lines (e.g. center of mass). */
-  verticalMarkers?: { x: number; color: string; label?: string }[];
-  /** Longitudinal distribution strip (e.g. cross-sectional area vs. length). */
-  distribution?: { x: number; value: number }[];
-  /** Resolved fins to draw on this pane (placement + box/blade geometry). */
-  fins?: readonly ResolvedFin[];
-  /** Fin boxes and plugs in plan (outline pane): each a closed outline (cm). */
-  finBoxes?: readonly (readonly Vec2[])[];
-  /** How to draw fins: `'plan'` (footprint + box, default) or `'profile'` (blade silhouette). */
-  finView?: 'plan' | 'profile';
-  /**
-   * Bottom channels cut into the cross-section on show (print version): the cut bottom,
-   * one side, and the points on it. Drawn on both sides when the pane mirrors.
-   */
-  channelCut?: {
-    curve: readonly Vec2[];
-    points: readonly Vec2[];
-  };
-  /**
-   * Bottom channels drawn as lines: walls in plan on the outline, the depth above the
-   * bottom on the rocker. Mirrored with the pane.
-   */
-  channelLines?: readonly (readonly Vec2[])[];
-  /**
-   * Points of applied channels that can be dragged, by id (`SplineEditor`'s
-   * `onChannelKeyDrag`). Drawn on both halves of a mirrored pane.
-   */
-  channelKeys?: readonly { id: string; p: Vec2; square?: boolean }[];
-  /**
-   * Lines drawn dashed in the outline's colour, mirrored with the pane: a swallow tail's
-   * deck line, where its inside wall meets the deck.
-   */
-  dashedLines?: readonly (readonly Vec2[])[];
-}
-
-/** Draw `dashedLines`: dashed, mirrored with the pane. */
-export const drawDashedLines = (
-  ctx: CanvasRenderingContext2D,
-  lines: readonly (readonly Vec2[])[],
-  vp: Viewport,
-  color: string,
-  mirror: Mirror = {},
-): void => {
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.25;
-  ctx.setLineDash([6, 5]);
-  for (const f of reflections(mirror)) {
-    for (const w of lines) {
-      if (w.length < 2) continue;
-      ctx.beginPath();
-      w.forEach((p, i) => {
-        const s = worldToScreen(vp, f(p));
-        if (i === 0) ctx.moveTo(s.x, s.y);
-        else ctx.lineTo(s.x, s.y);
-      });
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-};
-
-/** Draw draggable channel points: green with a dark ring (white squares if `square`), on each half of a mirrored pane. */
-export const drawChannelKeys = (
-  ctx: CanvasRenderingContext2D,
-  keys: readonly { id: string; p: Vec2; square?: boolean }[],
-  vp: Viewport,
-  mirror: Mirror = {},
-): void => {
-  ctx.save();
-  for (const f of reflections(mirror)) {
-    for (const k of keys) {
-      const s = worldToScreen(vp, f(k.p));
-      if (k.square) {
-        // A square, white with a dark ring: a point of the outline's own kind.
-        const r = CHANNEL_KEY_RADIUS - 0.5;
-        ctx.beginPath();
-        ctx.rect(s.x - r, s.y - r, 2 * r, 2 * r);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fill();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = '#0B1220';
-        ctx.stroke();
-        continue;
-      }
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, CHANNEL_KEY_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = CHANNEL_CUT_COLOR;
-      ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = '#0B1220';
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-};
-
-/** The reflections of a mirrored pane, as signs on x and y: the drawn halves. */
-export const mirrorSigns = (m: Mirror): { x: number; y: number }[] => {
-  const out = [{ x: 1, y: 1 }];
-  if (m.mirrorY) out.push({ x: 1, y: -1 });
-  if (m.mirrorX) out.push({ x: -1, y: 1 });
-  return out;
-};
-
-/** Screen radius of a channel key (px). */
-export const CHANNEL_KEY_RADIUS = 5;
-
-/** Draw channel lines (walls in plan, depth in profile): thin green, mirrored with the pane. */
-export const drawChannelLines = (
-  ctx: CanvasRenderingContext2D,
-  walls: readonly (readonly Vec2[])[],
-  vp: Viewport,
-  mirror: Mirror = {},
-): void => {
-  ctx.save();
-  ctx.strokeStyle = CHANNEL_CUT_COLOR;
-  ctx.lineWidth = 1.25;
-  for (const f of reflections(mirror)) {
-    for (const w of walls) {
-      if (w.length < 2) continue;
-      ctx.beginPath();
-      w.forEach((p, i) => {
-        const s = worldToScreen(vp, f(p));
-        if (i === 0) ctx.moveTo(s.x, s.y);
-        else ctx.lineTo(s.x, s.y);
-      });
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-};
-
-/** The channel cut's colour: green, as the owner's design draws it. */
-export const CHANNEL_CUT_COLOR = '#4ADE80';
-
-/** Draw bottom channels cut into a cross-section: the cut on both sides, its points on one. */
-export const drawChannelCut = (
-  ctx: CanvasRenderingContext2D,
-  cut: NonNullable<EditorOverlays['channelCut']>,
-  vp: Viewport,
-  mirror: Mirror = {},
-): void => {
-  if (cut.curve.length < 2) return;
-  ctx.save();
-  ctx.strokeStyle = CHANNEL_CUT_COLOR;
-  ctx.lineWidth = 1.5;
-  for (const f of reflections(mirror)) {
-    ctx.beginPath();
-    cut.curve.forEach((p, i) => {
-      const s = worldToScreen(vp, f(p));
-      if (i === 0) ctx.moveTo(s.x, s.y);
-      else ctx.lineTo(s.x, s.y);
-    });
-    ctx.stroke();
-  }
-  for (const p of cut.points) {
-    const s = worldToScreen(vp, p);
-    dot(ctx, s.x, s.y, 2.5, CHANNEL_CUT_COLOR);
-  }
-  ctx.restore();
-};
-
-/** A cross-section's longitudinal position, shown as a pickable line on the outline. */
-export interface SectionMarker {
-  /** Board length position (world x). */
-  pos: number;
-  /** Cross-section index, passed back on pick. */
-  index: number;
-  active: boolean;
-}
-
-/** Vertical inset for the two pick handles on a cross-section marker. */
-export const SECTION_MARKER_HANDLE_OFFSET = 28;
-
-/** Base half-size of a cross-section marker's diamond handle. */
-const SECTION_MARKER_HANDLE_RADIUS = 5;
-
-/**
- * Draw vertical section-position markers across the outline/rocker view (legacy
- * "cross-section positions"). Dashed and cyan/teal so they read as *stations*,
- * clearly distinct from the solid neutral-grey reference grid: the active section
- * is a solid cyan line, the rest are faint teal dashes.
- */
-/** Which of a marker's two diamond grips a pointer is working with. */
-export type SectionHandle = 'top' | 'bottom';
-
-export interface SectionMarkerLabel {
-  index: number;
-  /** The grip being dragged — the chip rides it rather than a fixed corner. */
-  handle: SectionHandle;
-  /** Already formatted by the caller — `render2d` has no unit preferences. */
-  text: string;
-}
-
-export const drawSectionMarkers = (
-  ctx: CanvasRenderingContext2D,
-  markers: readonly SectionMarker[],
-  vp: Viewport,
-  height: number,
-  hoveredIndex: number | null = null,
-  focusedIndex: number | null = null,
-  label: SectionMarkerLabel | null = null,
-  turned = false,
-): void => {
-  ctx.save();
-  for (const m of markers) {
-    const x = worldToScreen(vp, { x: m.pos, y: 0 }).x;
-    const highlighted = m.active || m.index === hoveredIndex || m.index === focusedIndex;
-    const color = highlighted ? '#22D3EE' : 'rgba(45,212,191,0.65)';
-    ctx.strokeStyle = color;
-    ctx.fillStyle = m.index === focusedIndex ? '#F97316' : color;
-    ctx.lineWidth = 1;
-    ctx.setLineDash(highlighted ? [] : [3, 4]);
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
-    ctx.stroke();
-
-    const radius = highlighted ? SECTION_MARKER_HANDLE_RADIUS + 2 : SECTION_MARKER_HANDLE_RADIUS;
-    for (const y of [SECTION_MARKER_HANDLE_OFFSET, height - SECTION_MARKER_HANDLE_OFFSET]) {
-      ctx.beginPath();
-      ctx.moveTo(x, y - radius);
-      ctx.lineTo(x + radius, y);
-      ctx.lineTo(x, y + radius);
-      ctx.lineTo(x - radius, y);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    if (label && label.index === m.index)
-      drawMarkerLabel(ctx, x, radius, height, label.handle, label.text, turned);
-  }
-  ctx.restore();
-};
-
-/**
- * The dragged station's position, in a chip beside the grip being dragged — put it
- * anywhere else and the eye, which is on the handle, misses it. Flips to the left
- * of the line near the right edge so it never runs off the pane.
- *
- * The top grip shares its corner with the hover HUD; `SplineEditor` drops that HUD
- * for the duration of a station drag, so the two cannot overlap.
- */
-const drawMarkerLabel = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  radius: number,
-  height: number,
-  handle: SectionHandle,
-  text: string,
-  turned: boolean,
-): void => {
-  const padX = 5;
-  const boxH = 17;
-  ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'left';
-  const boxW = ctx.measureText(text).width + padX * 2;
-  const flip = x + radius + 4 + boxW > ctx.canvas.width;
-  const boxX = flip ? x - radius - 4 - boxW : x + radius + 4;
-  const cy =
-    handle === 'top' ? SECTION_MARKER_HANDLE_OFFSET : height - SECTION_MARKER_HANDLE_OFFSET;
-
-  ctx.setLineDash([]);
-  ctx.fillStyle = 'rgba(15,23,42,0.92)';
-  ctx.strokeStyle = '#F97316';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.rect(boxX, cy - boxH / 2, boxW, boxH);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = '#F8FAFC';
-  fillTextUpright(ctx, text, boxX + padX, cy, turned);
-};
-
-/**
- * Draw text the right way up, even when the canvas ELEMENT has been turned.
- *
- * The board turn is a CSS rotation on the canvas, which is what leaves every
- * geometry routine in this file working in an ordinary unrotated space. The one
- * thing that does not survive a rotated element is text: a station label would
- * come out reading sideways. Counter-rotating it here cancels the element's turn
- * exactly, so the label stays horizontal while the board it annotates does not.
- *
- * `ctx.rotate` is clockwise-positive in canvas coordinates (y grows downward), and
- * the element turns -90°, so +90° here is the inverse.
- *
- * There are exactly two text draws in this file, which is the main reason turning
- * the element is so much cheaper than turning the transform.
- */
-export const fillTextUpright = (
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  turned: boolean,
-): void => {
-  if (!turned) {
-    ctx.fillText(text, x, y);
-    return;
-  }
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(Math.PI / 2);
-  ctx.fillText(text, 0, 0);
-  ctx.restore();
-};
-
-/** Section marker whose top or bottom diamond contains `screen`, or null. */
-export const hitSectionMarker = (
-  markers: readonly SectionMarker[],
-  vp: Viewport,
-  screen: { x: number; y: number },
-  height: number,
-  tolPx = 10,
-): SectionMarker | null => {
-  let best: { marker: SectionMarker; d: number } | null = null;
-  for (const m of markers) {
-    const x = worldToScreen(vp, { x: m.pos, y: 0 }).x;
-    const d = Math.min(
-      Math.hypot(x - screen.x, SECTION_MARKER_HANDLE_OFFSET - screen.y),
-      Math.hypot(x - screen.x, height - SECTION_MARKER_HANDLE_OFFSET - screen.y),
-    );
-    if (d <= tolPx && (!best || d < best.d)) best = { marker: m, d };
-  }
-  return best?.marker ?? null;
-};
-
-/**
- * Pick a uniform per-segment sample count adaptive to the curve's on-screen
- * length: roughly one sample per `PX_PER_SAMPLE` screen pixels, clamped, and
- * capped so the total quill count stays bounded for perf.
- */
-const adaptiveCombSamples = (spline: Spline, vp: Viewport): number => {
-  const PX_PER_SAMPLE = 8;
-  const MIN = 12;
-  const MAX = 40;
-  const MAX_TOTAL = 400;
-  const segCount = spline.coeffs.length;
-  let screenLen = 0;
-  for (const k of spline.coeffs) {
-    const a = value(k, 0);
-    const b = value(k, 1);
-    screenLen += Math.hypot(b.x - a.x, b.y - a.y) * vp.scale;
-  }
-  const perSeg = Math.round(screenLen / PX_PER_SAMPLE / Math.max(1, segCount));
-  const capped = Math.floor(MAX_TOTAL / Math.max(1, segCount));
-  return Math.max(MIN, Math.min(MAX, capped, perSeg));
-};
-
-/** World length of a quill at the reference curvature, as a fraction of the pane's extent. */
-const COMB_LENGTH = 0.06;
-/** Quills are capped at this multiple of the reference length (a flat-topped envelope). */
-const COMB_CAP = 3;
-
-/**
- * Draw curvature combs ("porcupines") for every spline a pane edits: at samples along
- * each segment, a quill normal to the curve whose length is the curvature, with the
- * quill tips joined into an envelope. The classic fairing aid:
- *
- * - **Outside the board.** Each curve's comb stays on the side facing away from the
- *   pane's other curves (or, alone, from its own middle) — deck quills up, bottom quills
- *   down, outline quills away from the stringer — and never cuts through the foam. Where the curve turns from
- *   convex to concave (a nose kick, a concave into the rail) a small ring marks the
- *   inflection instead of the comb crossing over.
- * - **Continuity.** A smooth envelope means curvature-continuous (G2); a step in it at a
- *   knot is a curvature jump; a quill dropping to the curve is a flat spot.
- * - **One scale per pane.** All splines share it, so deck and bottom quills in the rocker
- *   compare directly. A quill at the 95th-percentile curvature is `COMB_LENGTH` of the
- *   pane's extent; tighter spots are capped at `COMB_CAP` times that.
- *
- * `samplesPerSegment` defaults to an on-screen-length-adaptive count.
- */
-export const drawCurvatureComb = (
-  ctx: CanvasRenderingContext2D,
-  splines: readonly Spline[],
-  vp: Viewport,
-  color = '#38BDF8',
-  samplesPerSegment?: number,
-): void => {
-  const combs = splines
-    .filter((s) => s.coeffs.length > 0)
-    .map((s) => curvatureCombRuns(s, samplesPerSegment ?? adaptiveCombSamples(s, vp)));
-  const ref = curvatureCombReference(combs.flat());
-  if (!(ref > 1e-9)) return;
-  const b = boundsOf(combs.flat(2).map((c) => c.p));
-  const centre = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
-  // What each comb stands away from: the pane's other curves (every 4th sample is plenty
-  // for a vote), or the centre when it is the only curve.
-  const insideOf = (i: number): Vec2[] => {
-    const others = combs.flatMap((runs, j) =>
-      j === i
-        ? []
-        : runs
-            .flat()
-            .filter((_, n) => n % 4 === 0)
-            .map((c) => c.p),
-    );
-    return others.length ? others : [centre];
-  };
-  const length = (Math.hypot(b.maxX - b.minX, b.maxY - b.minY) || 1) * COMB_LENGTH;
-
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-  combs.forEach((runs, i) => {
-    const side = curvatureCombSide(runs, insideOf(i));
-    const tipOf = (c: CombSample): Vec2 => {
-      const d = side * Math.min(COMB_CAP, Math.abs(c.k) / ref) * length;
-      return { x: c.p.x + c.normal.x * d, y: c.p.y + c.normal.y * d };
-    };
-    // Quills.
-    ctx.globalAlpha = 0.5;
-    ctx.beginPath();
-    for (const c of runs.flat()) {
-      const a = worldToScreen(vp, c.p);
-      const tip = worldToScreen(vp, tipOf(c));
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(tip.x, tip.y);
-    }
-    ctx.stroke();
-    // Envelope joining the tips, broken where a degenerate segment left no samples.
-    ctx.globalAlpha = 0.9;
-    ctx.beginPath();
-    for (const run of runs) {
-      run.forEach((c, i) => {
-        const tip = worldToScreen(vp, tipOf(c));
-        if (i === 0) ctx.moveTo(tip.x, tip.y);
-        else ctx.lineTo(tip.x, tip.y);
-      });
-    }
-    ctx.stroke();
-    // Inflections: rings on the curve where the curvature changes sign.
-    ctx.globalAlpha = 1;
-    for (const p of curvatureInflections(runs, ref * 1e-3)) {
-      const s = worldToScreen(vp, p);
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, 3.5, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  });
-  ctx.restore();
-};
-
-/** Labeled vertical reference lines at world-x positions (e.g. center of mass). */
-export const drawVerticalMarkers = (
-  ctx: CanvasRenderingContext2D,
-  markers: readonly { x: number; color: string; label?: string }[],
-  vp: Viewport,
-  height: number,
-  turned = false,
-): void => {
-  for (const m of markers) {
-    const x = worldToScreen(vp, { x: m.x, y: 0 }).x;
-    ctx.strokeStyle = m.color;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 4]);
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    if (m.label) {
-      ctx.fillStyle = m.color;
-      ctx.font = '10px ui-monospace, monospace';
-      fillTextUpright(ctx, m.label, x + 3, 12, turned);
-    }
-  }
-};
-
-/**
- * Longitudinal distribution strip (e.g. cross-sectional area vs. length) drawn
- * along the bottom of the view: normalized to its own max, filled translucent.
- */
-export const drawDistribution = (
-  ctx: CanvasRenderingContext2D,
-  data: readonly { x: number; value: number }[],
-  vp: Viewport,
-  height: number,
-  color = '#2DD4BF',
-): void => {
-  if (data.length < 2) return;
-  const maxV = data.reduce((m, d) => Math.max(m, d.value), 1e-9);
-  const stripH = Math.min(70, height * 0.25);
-  const base = height - 6;
-  const sx = (x: number) => worldToScreen(vp, { x, y: 0 }).x;
-  ctx.beginPath();
-  data.forEach((d, i) => {
-    const x = sx(d.x);
-    const y = base - (d.value / maxV) * stripH;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.lineTo(sx(data[data.length - 1]!.x), base);
-  ctx.lineTo(sx(data[0]!.x), base);
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.globalAlpha = 0.15;
-  ctx.fill();
-  ctx.globalAlpha = 1;
-};
-
-const FIN_COLOR = '#A78BFA';
-const FIN_COLOR_SELECTED = '#22D3EE';
-
-const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y });
-const len2 = (a: Vec2): number => Math.hypot(a.x, a.y);
-const unit2 = (a: Vec2): Vec2 => {
-  const l = len2(a);
-  return l < 1e-9 ? { x: 1, y: 0 } : { x: a.x / l, y: a.y / l };
-};
-const mid = (a: Vec2, b: Vec2): Vec2 => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
-
-/**
- * Draw fins in PLAN view (bottom, looking up): each fin reads edge-on as its toed
- * base footprint, with the system box/plugs routed along it. The selected fin is
- * highlighted. Plan world coords: x = length, y = lateral (stringer at 0).
- */
-export const drawFinsPlan = (
-  ctx: CanvasRenderingContext2D,
-  fins: readonly ResolvedFin[],
-  vp: Viewport,
-  selectedIndex: number | null = null,
-): void => {
-  ctx.save();
-  ctx.lineCap = 'round';
-  fins.forEach((f, i) => {
-    const selected = i === selectedIndex;
-    const color = selected ? FIN_COLOR_SELECTED : FIN_COLOR;
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-
-    const fore = worldToScreen(vp, f.baseLine.fore);
-    const aft = worldToScreen(vp, f.baseLine.aft);
-
-    // Footprint (the toed base line), trailing→leading.
-    ctx.lineWidth = selected ? 4 : 3;
-    ctx.beginPath();
-    ctx.moveTo(aft.x, aft.y);
-    ctx.lineTo(fore.x, fore.y);
-    ctx.stroke();
-    // The fin dot: the trailing edge's root, the mark it is placed and measured by.
-    const dot = worldToScreen(vp, f.dot);
-    ctx.beginPath();
-    ctx.arc(dot.x, dot.y, selected ? 4.5 : 3.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Its tab's slot, where the fin's tab puts it (a fin with a design), or the old
-    // generic footprints, centred on the base line.
-    if (f.slot) drawFinSlot(ctx, f.slot, vp, color, selected);
-    else drawFinBox(ctx, f, vp, color, selected);
-  });
-  ctx.restore();
-};
-
-/** A fin's tab slot: a rectangle from its back end to its front, the tab's width. */
-const drawFinSlot = (
-  ctx: CanvasRenderingContext2D,
-  slot: NonNullable<ResolvedFin['slot']>,
-  vp: Viewport,
-  color: string,
-  selected: boolean,
-): void => {
-  const along = unit2(sub(slot.front, slot.rear));
-  const hw = slot.width / 2;
-  const n = { x: -along.y * hw, y: along.x * hw };
-  const c = [
-    { x: slot.rear.x + n.x, y: slot.rear.y + n.y },
-    { x: slot.front.x + n.x, y: slot.front.y + n.y },
-    { x: slot.front.x - n.x, y: slot.front.y - n.y },
-    { x: slot.rear.x - n.x, y: slot.rear.y - n.y },
-  ].map((p) => worldToScreen(vp, p));
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = selected ? 0.9 : 0.6;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(c[0]!.x, c[0]!.y);
-  for (let k = 1; k < 4; k++) ctx.lineTo(c[k]!.x, c[k]!.y);
-  ctx.closePath();
-  ctx.stroke();
-  ctx.restore();
-};
-
-/** Draw fin boxes and plugs in plan (a Futures flange, an FCS II plug): thin outlines. */
-export const drawFinBoxes = (
-  ctx: CanvasRenderingContext2D,
-  boxes: readonly (readonly Vec2[])[],
-  vp: Viewport,
-): void => {
-  ctx.save();
-  ctx.strokeStyle = FIN_COLOR;
-  ctx.globalAlpha = 0.55;
-  ctx.lineWidth = 1;
-  for (const box of boxes) {
-    if (box.length < 3) continue;
-    ctx.beginPath();
-    box.forEach((p, i) => {
-      const s = worldToScreen(vp, p);
-      if (i === 0) ctx.moveTo(s.x, s.y);
-      else ctx.lineTo(s.x, s.y);
-    });
-    ctx.closePath();
-    ctx.stroke();
-  }
-  ctx.restore();
-};
-
-/** Draw the routed box/plug footprints (rect slots / round plugs) for one fin. */
-const drawFinBox = (
-  ctx: CanvasRenderingContext2D,
-  f: ResolvedFin,
-  vp: Viewport,
-  color: string,
-  selected: boolean,
-): void => {
-  if (f.box.kind !== 'shapes') return;
-  const center = mid(f.baseLine.fore, f.baseLine.aft);
-  const along = unit2(sub(f.baseLine.fore, f.baseLine.aft)); // toward nose
-  const normal = { x: -along.y, y: along.x };
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = selected ? 0.9 : 0.6;
-  ctx.lineWidth = 1.5;
-  for (const fp of f.box.footprints) {
-    const cx = center.x + along.x * fp.along;
-    const cy = center.y + along.y * fp.along;
-    if (fp.shape.kind === 'rect') {
-      const hl = fp.shape.length / 2;
-      const hw = fp.shape.width / 2;
-      const corner = (sa: number, sn: number): Vec2 =>
-        worldToScreen(vp, {
-          x: cx + along.x * hl * sa + normal.x * hw * sn,
-          y: cy + along.y * hl * sa + normal.y * hw * sn,
-        });
-      const c = [corner(1, 1), corner(1, -1), corner(-1, -1), corner(-1, 1)];
-      ctx.beginPath();
-      ctx.moveTo(c[0]!.x, c[0]!.y);
-      for (let k = 1; k < 4; k++) ctx.lineTo(c[k]!.x, c[k]!.y);
-      ctx.closePath();
-      ctx.stroke();
-    } else {
-      const r = (fp.shape.diameter / 2) * vp.scale;
-      const p = worldToScreen(vp, { x: cx, y: cy });
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(1.5, r), 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-};
-
-/**
- * Draw fins in PROFILE/rail view (side elevation): the blade silhouette hangs from
- * the bottom surface. Profile world coords: x = length, y = height (rocker).
- */
-export const drawFinsProfile = (
-  ctx: CanvasRenderingContext2D,
-  fins: readonly ResolvedFin[],
-  vp: Viewport,
-  selectedIndex: number | null = null,
-): void => {
-  ctx.save();
-  ctx.lineJoin = 'round';
-  fins.forEach((f, i) => {
-    if (f.template.length < 3) return;
-    const selected = i === selectedIndex;
-    const color = selected ? FIN_COLOR_SELECTED : FIN_COLOR;
-    // The fin dot (template local x=0) at the base's back end; local x runs toward the
-    // nose (+x — the tail is always at x=0), local y is depth downward. The fin stands
-    // square to the bottom: its base on the bottom's tangent at the base's middle, its
-    // depth down the normal there (`ResolvedFin.pitch`).
-    const half = f.spec.base / 2;
-    const c = Math.cos(f.pitch);
-    const sn = Math.sin(f.pitch);
-    const toScreen = (p: Vec2) => {
-      const along = p.x - half;
-      return worldToScreen(vp, {
-        x: f.center.x + along * c + p.y * sn,
-        y: f.surfaceZ + along * sn - p.y * c,
-      });
-    };
-    ctx.beginPath();
-    const p0 = toScreen(f.template[0]!);
-    ctx.moveTo(p0.x, p0.y);
-    for (let k = 1; k < f.template.length; k++) {
-      const p = toScreen(f.template[k]!);
-      ctx.lineTo(p.x, p.y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.globalAlpha = selected ? 0.28 : 0.16;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = selected ? 2 : 1.4;
-    ctx.stroke();
-  });
-  ctx.restore();
-};
-
-/** Distance (px) from a screen point to a segment a→b. */
-const segDistPx = (p: Vec2, a: Vec2, b: Vec2): number => {
-  const abx = b.x - a.x;
-  const aby = b.y - a.y;
-  const l2 = abx * abx + aby * aby;
-  if (l2 < 1e-9) return Math.hypot(p.x - a.x, p.y - a.y);
-  let t = ((p.x - a.x) * abx + (p.y - a.y) * aby) / l2;
-  t = Math.max(0, Math.min(1, t));
-  return Math.hypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t));
-};
-
-/**
- * Index of the fin whose plan base line is nearest `screen` within `tolPx`, or null.
- * Used to pick / drag fins in the plan (outline) pane.
- */
-export const hitFin = (
-  fins: readonly ResolvedFin[],
-  vp: Viewport,
-  screen: Vec2,
-  tolPx = 8,
-): number | null => {
-  let bestIndex: number | null = null;
-  let bestDist = tolPx;
-  for (let i = 0; i < fins.length; i++) {
-    const f = fins[i]!;
-    const d = segDistPx(
-      screen,
-      worldToScreen(vp, f.baseLine.fore),
-      worldToScreen(vp, f.baseLine.aft),
-    );
-    if (d <= bestDist) {
-      bestDist = d;
-      bestIndex = i;
-    }
-  }
-  return bestIndex;
-};
-
-/**
- * Colours for the cross-section measurement cursor, shared with the readout HUD so
- * the line and its number are colour-coded together (legacy BoardCAD "sliding info").
- */
-export const MEASURE_COLORS = {
-  /** Vertical probe at the cursor x — pairs with the "From CL" readout. */
-  fromCl: '#22D3EE',
-  /** Horizontal probe at the cursor y — pairs with the "Height" readout. */
-  height: '#FBBF24',
-} as const;
-
-/** Sorted y-values where the vertical line x=X crosses the closed polyline. */
-const vCrossings = (poly: readonly Vec2[], X: number): number[] => {
-  const ys: number[] = [];
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i]!;
-    const b = poly[(i + 1) % poly.length]!;
-    if (a.x <= X === b.x <= X) continue; // both the same side → no straddle
-    ys.push(a.y + ((X - a.x) / (b.x - a.x)) * (b.y - a.y));
-  }
-  return ys.sort((p, q) => p - q);
-};
-
-/** Sorted x-values where the horizontal line y=Y crosses the closed polyline. */
-const hCrossings = (poly: readonly Vec2[], Y: number): number[] => {
-  const xs: number[] = [];
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i]!;
-    const b = poly[(i + 1) % poly.length]!;
-    if (a.y <= Y === b.y <= Y) continue;
-    xs.push(a.x + ((Y - a.y) / (b.y - a.y)) * (b.x - a.x));
-  }
-  return xs.sort((p, q) => p - q);
-};
-
-/**
- * Vertical "sliding location" probe at world x: a dashed full-height guide with
- * the segment(s) *inside* the board profile overdrawn solid — so the local span
- * (width in plan view, thickness in side/section view) reads straight off the
- * board. Used for the cross-pane scrub line in every 2D pane (legacy "sliding
- * info"). `profile` is the closed board outline for the pane.
- */
-export const drawVProbe = (
-  ctx: CanvasRenderingContext2D,
-  profile: readonly Vec2[],
-  vp: Viewport,
-  h: number,
-  x: number,
-  color: string,
-): void => {
-  if (profile.length < 3) return;
-  const sx = worldToScreen(vp, { x, y: 0 }).x;
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-  ctx.globalAlpha = 0.4;
-  ctx.setLineDash([4, 4]);
-  ctx.beginPath();
-  ctx.moveTo(sx, 0);
-  ctx.lineTo(sx, h);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-  ctx.setLineDash([]);
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  const ys = vCrossings(profile, x);
-  for (let i = 0; i + 1 < ys.length; i += 2) {
-    ctx.moveTo(sx, worldToScreen(vp, { x, y: ys[i]! }).y);
-    ctx.lineTo(sx, worldToScreen(vp, { x, y: ys[i + 1]! }).y);
-  }
-  ctx.stroke();
-  ctx.restore();
-};
-
-/** Horizontal "sliding location" probe at world y — the orthogonal partner of {@link drawVProbe}. */
-export const drawHProbe = (
-  ctx: CanvasRenderingContext2D,
-  profile: readonly Vec2[],
-  vp: Viewport,
-  w: number,
-  y: number,
-  color: string,
-): void => {
-  if (profile.length < 3) return;
-  const sy = worldToScreen(vp, { x: 0, y }).y;
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-  ctx.globalAlpha = 0.4;
-  ctx.setLineDash([4, 4]);
-  ctx.beginPath();
-  ctx.moveTo(0, sy);
-  ctx.lineTo(w, sy);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-  ctx.setLineDash([]);
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  const xs = hCrossings(profile, y);
-  for (let i = 0; i + 1 < xs.length; i += 2) {
-    ctx.moveTo(worldToScreen(vp, { x: xs[i]!, y }).x, sy);
-    ctx.lineTo(worldToScreen(vp, { x: xs[i + 1]!, y }).x, sy);
-  }
-  ctx.stroke();
-  ctx.restore();
-};
-
-/**
- * Cross-section measurement cursor (legacy "sliding info"): a full crosshair at
- * the hovered point — vertical + horizontal probes, each solid inside the section
- * profile and dashed outside — colour-coded to match the readout HUD rows.
- */
-export const drawMeasureCursor = (
-  ctx: CanvasRenderingContext2D,
-  profile: readonly Vec2[],
-  vp: Viewport,
-  w: number,
-  h: number,
-  cursor: Vec2,
-): void => {
-  drawVProbe(ctx, profile, vp, h, cursor.x, MEASURE_COLORS.fromCl);
-  drawHProbe(ctx, profile, vp, w, cursor.y, MEASURE_COLORS.height);
 };
 
 export const clear = (ctx: CanvasRenderingContext2D, w: number, h: number, bg = '#0A1424') => {

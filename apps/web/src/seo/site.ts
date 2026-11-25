@@ -21,13 +21,7 @@ export const DEFAULT_DESCRIPTION =
 export const OG_IMAGE = '/og-cover.png';
 
 /** This project's source. */
-export const GITHUB_URL = 'https://github.com/JunoNeko/OpenShaper';
-
-/**
- * The project OpenFinShaper was forked from (GPL-3.0-or-later). Credited in the
- * designer's status bar.
- */
-export const UPSTREAM_URL = 'https://github.com/jarbid/openshaper';
+export const GITHUB_URL = 'https://github.com/JunoNeko/openfinshaper';
 
 /** Contact address for feedback, bugs, feature requests and enquiries. */
 export const CONTACT_EMAIL = 'stephen.franklin@outlook.com';

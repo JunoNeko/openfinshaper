@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import type { BoardMesh } from '../tessellate';
+import type { BoardMesh } from '../mesh';
 import { vec2 } from '../vec2';
 import { bladeSection, cosineStations, prepareBlade } from './blade';
 import { sectionLoop } from './blade-surface';

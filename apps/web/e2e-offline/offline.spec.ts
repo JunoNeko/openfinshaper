@@ -61,30 +61,13 @@ test.describe('the production site', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the home page goes to the board editor (print version)', async ({ page }) => {
+  test('the home page redirects to the fin designer', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveURL(/\/app$/);
+    await expect(page).toHaveURL(/\/fin$/);
   });
 
-  // The print version serves the board editor at /app too; the surfboard marketing and
-  // board docs pages are still not part of the site.
-  test('the board editor runs under the Content-Security-Policy, with nothing blocked', async ({
-    page,
-  }) => {
-    const errors = trackErrors(page);
-    const response = await page.goto('/app');
-    expect(response?.status()).toBe(200);
-    expect(response?.headers()['content-security-policy']).toMatch(/script-src 'self' 'sha256-/);
-    await expect(page.getByRole('tab', { name: 'Shape' })).toBeVisible();
-    await expect(page.getByText(/Unexpected Application Error|Something didn't load/i)).toHaveCount(
-      0,
-    );
-    expect(errors.filter((e) => /Content Security Policy/i.test(e))).toEqual([]);
-    expect(errors).toEqual([]);
-  });
-
-  test('none of the surfboard marketing or board docs pages are served', async ({ request }) => {
-    for (const path of ['/about', '/docs', '/docs/fins', '/surfboard-design-guide']) {
+  test('unknown board or marketing pages return 404', async ({ request }) => {
+    for (const path of ['/app', '/about', '/docs', '/docs/fins', '/surfboard-design-guide']) {
       expect((await request.get(path)).status(), path).toBe(404);
     }
   });

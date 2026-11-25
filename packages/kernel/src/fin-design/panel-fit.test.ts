@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { describe, expect, it } from 'vitest';
-import type { BoardMesh } from '../tessellate';
+import type { BoardMesh } from '../mesh';
 import { defaultFinDesign, defaultKeel, defaultTaper } from './fin-defaults';
 import { FIN_PANEL_MAX_ANGLE } from './fin-design';
 import { FCS_SINGLE_TAB } from './fin-tab';

@@ -1,4 +1,5 @@
-/** @openshaper/render2d — canvas viewport + 2D editor draw layer. */
+// SPDX-License-Identifier: GPL-3.0-or-later
+/** @openshaper/render2d — canvas viewport and 2D fin curve editor. */
 export {
   CSS_PX_PER_CM,
   worldToScreen,
@@ -21,42 +22,17 @@ export {
 export { sampleSpline, boundsOf } from './sample';
 export { handlePoint, hitTest, type Hit, type HandleKind } from './hit';
 export {
-  handleKindForVisualSide,
-  visualSideForHandleKind,
-  handleSideName,
-  type HandleSide,
-  type TangentKind,
-} from './handle-side';
-export {
   drawSpline,
   drawGhostSpline,
   drawControlPoints,
   drawGrid,
   MIN_FIXED_GRID_PX,
   gridStep,
-  drawSectionMarkers,
-  drawCurvatureComb,
-  drawVerticalMarkers,
-  fillTextUpright,
-  drawDistribution,
-  drawFinsPlan,
-  drawFinsProfile,
-  hitFin,
-  drawMeasureCursor,
-  drawVProbe,
-  MEASURE_COLORS,
-  hitSectionMarker,
-  SECTION_MARKER_HANDLE_OFFSET,
   clear,
   defaultStyle,
   type DrawStyle,
   type Mirror,
-  type SectionMarker,
-  type SectionMarkerLabel,
-  type SectionHandle,
-  type EditorOverlays,
 } from './draw';
-export { SplineEditor, type SplineEditorProps, type Calibration } from './SplineEditor';
 export { FinCurveEditor, type FinCurveEditorProps, type FinCurveMarker } from './FinCurveEditor';
 export {
   HIT_TOL_PX,
@@ -81,15 +57,3 @@ export {
   type ViewMap,
   type ViewScale,
 } from './fin-curve-view';
-export {
-  solveSimilarity,
-  scaleFromTypedLength,
-  imgToWorld,
-  worldToImg,
-  imageCenterWorld,
-  toggleFlip,
-  setRotationAboutCenter,
-  traceCanvasMatrix,
-  type SimilarityParams,
-  type CanvasMatrix,
-} from './trace-transform';

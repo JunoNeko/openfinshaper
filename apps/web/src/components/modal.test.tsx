@@ -5,10 +5,7 @@
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { SettingsDialog } from '../SettingsDialog';
-import { DEFAULT_SETTINGS } from '../settings';
 import { Modal } from './modal';
 
 function Harness({ onClose = () => {} }: { onClose?: () => void }) {
@@ -78,20 +75,6 @@ describe('<Modal /> (P34)', () => {
     fireEvent.click(screen.getByText('first'));
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('dialog'));
-    expect(onClose).toHaveBeenCalledOnce();
-  });
-});
-
-describe('dialogs that had no Escape (P34)', () => {
-  it('Settings closes on Escape', () => {
-    const onClose = vi.fn();
-    render(
-      <MemoryRouter>
-        <SettingsDialog settings={DEFAULT_SETTINGS} onSave={() => {}} onClose={onClose} />
-      </MemoryRouter>,
-    );
-    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
-    fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledOnce();
   });
 });

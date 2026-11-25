@@ -14,9 +14,7 @@
  * `keys` is the display form (using ⌘/⇧ symbols); `match` is what the handler
  * actually tests. Keep them describing the same chord.
  */
-import type { View } from './view-toolkit';
-
-export type ShortcutGroup = 'File' | 'Edit' | 'View' | 'Cross-sections' | 'OpenFinShaper';
+export type ShortcutGroup = 'File' | 'Edit' | 'OpenFinShaper';
 
 export interface ShortcutMatch {
   /** Lowercased `KeyboardEvent.key`, or one of several for an either/or binding. */
@@ -27,14 +25,12 @@ export interface ShortcutMatch {
   shift?: boolean;
   /**
    * Suppressed while a text field has focus. Only meaningful for bindings with no
-   * modifier — `⌘S` should still save while a name field is focused, but `[`
-   * must not page the cross-section while someone is typing a bracket.
+   * modifier — `⌘S` should still save while a name field is focused.
    */
   notInField?: boolean;
   /**
    * Suppressed while the focus is somewhere text is typed, so the browser's own
-   * text undo works there. Narrower than `notInField`: a focused checkbox or
-   * slider still lets ⌘Z undo the board edit it just made.
+   * text undo works there.
    */
   notInTextEntry?: boolean;
 }
@@ -47,25 +43,6 @@ export interface Shortcut {
   group: ShortcutGroup;
   match: ShortcutMatch;
 }
-
-/**
- * The views, in toolbar order — the single source for both the number keys and
- * the tab strip. The strip used to repeat this list as five hand-written
- * buttons, so gating a view by layout tier was two edits with nothing to keep
- * them honest. `label` names the shortcut on `/docs/shortcuts`; `tabLabel` is
- * the button.
- */
-export const VIEW_KEYS: readonly { key: string; view: View; label: string; tabLabel: string }[] = [
-  { key: '1', view: 'quad', label: 'Quad view', tabLabel: 'Quad' },
-  { key: '2', view: 'outline', label: 'Outline view', tabLabel: 'Outline' },
-  { key: '3', view: 'rocker', label: 'Rocker view', tabLabel: 'Rocker' },
-  { key: '4', view: 'crossSection', label: 'Cross-section view', tabLabel: 'Cross-section' },
-  { key: '5', view: '3d', label: '3D view', tabLabel: '3D' },
-  // Appended rather than slotted in beside Quad: this list orders the tab strip
-  // *and* numbers the keys, so giving Split the place its kinship with Quad
-  // suggests would renumber four bindings people already have in their hands.
-  { key: '6', view: 'split', label: 'Split view', tabLabel: 'Split' },
-];
 
 export const SHORTCUTS: readonly Shortcut[] = [
   {
@@ -97,52 +74,12 @@ export const SHORTCUTS: readonly Shortcut[] = [
     match: { keys: ['delete', 'backspace'], notInField: true },
   },
   {
-    id: 'toggle-lock',
-    keys: 'L',
-    label: "Lock or unlock the selected point's handle angles",
-    group: 'Edit',
-    match: { keys: ['l'], notInField: true },
-  },
-  {
     id: 'save',
     keys: '⌘S',
-    label: 'Save the board',
+    label: 'Save the fin',
     group: 'File',
     match: { keys: ['s'], mod: true },
   },
-  {
-    id: 'command-palette',
-    keys: '⌘K',
-    label: 'Open the command palette',
-    group: 'File',
-    match: { keys: ['k'], mod: true },
-  },
-  {
-    id: 'cross-section-prev',
-    keys: '[',
-    label: 'Previous cross-section',
-    group: 'Cross-sections',
-    match: { keys: ['['], notInField: true },
-  },
-  {
-    id: 'cross-section-next',
-    keys: ']',
-    label: 'Next cross-section',
-    group: 'Cross-sections',
-    match: { keys: [']'], notInField: true },
-  },
-  {
-    id: 'cross-section-blur',
-    keys: 'Esc',
-    label: 'Clear the selected point, handle, or station marker',
-    group: 'Edit',
-    // Coordinate editors clear their own selection locally. Suppress the global
-    // action in other fields so Escape can keep its field/dialog-specific meaning.
-    match: { keys: ['escape'], notInField: true },
-  },
-  // The fin designer's nudge arrows (/fin). The board editor has no binding for these
-  // ids, so on /app the arrows keep their usual behaviour. They follow the 3D view from
-  // above, where the nose is up the screen: up/down along the tab, left/right across it.
   {
     id: 'fin-nudge-forward',
     keys: '↑',
@@ -171,13 +108,6 @@ export const SHORTCUTS: readonly Shortcut[] = [
     group: 'OpenFinShaper',
     match: { keys: ['arrowright'], notInField: true },
   },
-  ...VIEW_KEYS.map(({ key, label }): Shortcut => ({
-    id: `view-${key}`,
-    keys: key,
-    label,
-    group: 'View',
-    match: { keys: [key], notInField: true },
-  })),
 ];
 
 /** Look up a shortcut's display chord, for tooltips. Throws on an unknown id. */

@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { splineFromKnots } from '../bezier-spline';
 import { knot } from '../knot';
-import type { BoardMesh } from '../tessellate';
+import type { BoardMesh } from '../mesh';
 import { vec2 } from '../vec2';
 import { defaultCanard, defaultFinDesign, defaultSingleFin } from './fin-defaults';
 import { finHasToe } from './fin-design';

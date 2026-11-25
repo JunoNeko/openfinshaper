@@ -31,7 +31,7 @@ import {
   surfaceNormal,
   type BSplineSurface,
 } from './bspline-surface';
-import type { Vert3 } from './loft';
+import type { Vert3 } from './mesh';
 
 const v3 = (x: number, y: number, z: number): Vert3 => ({ x, y, z });
 const dist = (a: Vert3, b: Vert3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);

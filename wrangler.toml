@@ -13,7 +13,7 @@
 # and `_redirects` in the assets directory are honored. Node version is pinned by
 # the repo's .node-version file; the build command (`pnpm build`) is set in the
 # dashboard.
-name = "openshaper-print-version"
+name = "openfinshaper"
 main = "worker/index.ts"
 compatibility_date = "2026-06-01"
 

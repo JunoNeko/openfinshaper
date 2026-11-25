@@ -31,7 +31,7 @@ import { splineFromKnots, type Spline } from '../bezier-spline';
 import { knot } from '../knot';
 import { vec2, type Vec2 } from '../vec2';
 import { DEG_TO_RAD } from '../constants';
-import type { Vert3 } from '../loft';
+import type { Vert3 } from '../mesh';
 import { crossings, splineExtremes, yAtX } from './curve-shape';
 import { smoothBladeOf } from './smooth-blade';
 import {

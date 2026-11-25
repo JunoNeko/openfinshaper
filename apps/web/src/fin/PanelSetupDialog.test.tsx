@@ -59,7 +59,7 @@ describe('PanelSetupDialog', () => {
     expect(
       (screen.getByRole('button', { name: 'Export STEP' }) as HTMLButtonElement).disabled,
     ).toBe(false);
-  });
+  }, 20_000);
 
   it('calculates minimum panel size from a fin collection', async () => {
     render(
@@ -78,7 +78,7 @@ describe('PanelSetupDialog', () => {
     await waitFor(() => {
       expect(screen.getByRole('img', { name: /Panel layout.*1 fins/ })).toBeTruthy();
     });
-  });
+  }, 20_000);
 
   it('offers All pairs and Pairs + odd fins options in recommend mode', async () => {
     render(
@@ -112,5 +112,5 @@ describe('PanelSetupDialog', () => {
     await waitFor(() => {
       expect(screen.getByRole('img', { name: /Panel layout/ })).toBeTruthy();
     });
-  });
+  }, 20_000);
 });

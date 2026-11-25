@@ -52,7 +52,7 @@ import {
   type BSplineSurface,
   type SurfaceFitOptions,
 } from '../bspline-surface';
-import type { Vert3 } from '../loft';
+import type { Vert3 } from '../mesh';
 import {
   bladeSection,
   bladeTop,
