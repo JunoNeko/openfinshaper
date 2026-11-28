@@ -10,6 +10,7 @@ import {
   FIN_MAX_TOE,
   FIN_PANEL_MAX_ANGLE,
   FIN_PANEL_THICKNESS,
+  WEAVE_ANGLE_LIMITS,
   FIN_MIN_SLICE_CANT,
   twistAt,
   FIN_MIN_THICKNESS,
@@ -796,4 +797,15 @@ export const resetThicknessPath = (d: FinDesign): FinDesign => {
   const { thicknessMid: _old, ...rest } = d;
   void _old;
   return rest;
+};
+
+/** Set G10 weave orientation (deg, −90 to +90). 0° is stored as absent. */
+export const setWeaveAngle = (d: FinDesign, deg: number): FinDesign => {
+  if (!Number.isFinite(deg)) return d;
+  const clamped = Math.min(WEAVE_ANGLE_LIMITS.max, Math.max(WEAVE_ANGLE_LIMITS.min, deg));
+  const snapped = Math.round(clamped * 10) / 10;
+  if (snapped === (d.weaveAngle ?? 0)) return d;
+  const { weaveAngle: _old, ...rest } = d;
+  void _old;
+  return snapped === 0 ? rest : { ...rest, weaveAngle: snapped };
 };

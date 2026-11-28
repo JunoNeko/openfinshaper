@@ -73,6 +73,7 @@ import { shortcutKeys } from '../shortcuts';
 import { FinOutlinePane } from './FinOutlinePane';
 import { FinSectionPane, FinSectionTools } from './FinSectionPane';
 import { BuyMeACoffee } from './BuyMeACoffee';
+import { FlexAnalysisDialog } from './FlexAnalysisDialog';
 import { PanelSetupDialog } from './PanelSetupDialog';
 import { BUILD_COMMIT, BUILD_TIME, buildLabel } from '../build-info';
 import { FacingDialog, VECTOR_ACCEPT, readVectorFile } from './VectorImport';
@@ -204,6 +205,12 @@ function Readouts({ units }: { units: LengthUnit }) {
         <Readout
           label="Toe"
           value={`${design!.toe > 0 ? 'in' : 'out'} ${Math.abs(design!.toe).toFixed(2)}°`}
+        />
+      )}
+      {design!.weaveAngle !== undefined && design!.weaveAngle !== 0 && (
+        <Readout
+          label="G10 weave"
+          value={`${design!.weaveAngle > 0 ? '+' : ''}${design!.weaveAngle}°`}
         />
       )}
       {/* Futures only: the limit is the grub screw at the box's front. */}
@@ -1285,6 +1292,12 @@ function FinSaveDialog({
   );
 }
 
+function FlexDialogHost({ units, onClose }: { units: LengthUnit; onClose: () => void }) {
+  const design = useFinState(finStore, (s) => s.design);
+  if (!design) return null;
+  return <FlexAnalysisDialog design={design} units={units} onClose={onClose} />;
+}
+
 /** Opens File settings. */
 function SettingsButton({
   settings,
@@ -1339,6 +1352,7 @@ export function FinApp() {
   // Save and Export open the save dialog: names, and where the files go.
   const [saving, setSaving] = useState<SaveRequest | null>(null);
   const [panelSetupOpen, setPanelSetupOpen] = useState(false);
+  const [flexOpen, setFlexOpen] = useState(false);
   const save = useCallback(() => {
     if (finStore.getState().design) setSaving({ format: 'fin' });
   }, []);
@@ -1410,6 +1424,9 @@ export function FinApp() {
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <BuyMeACoffee />
+          <Button type="button" variant="outline" size="sm" onClick={() => setFlexOpen(true)}>
+            Flex / Stiffness
+          </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setPanelSetupOpen(true)}>
             Set up fins in panel
           </Button>
@@ -1515,6 +1532,7 @@ export function FinApp() {
           onClose={() => setPanelSetupOpen(false)}
         />
       )}
+      {flexOpen && <FlexDialogHost units={units} onClose={() => setFlexOpen(false)} />}
     </div>
   );
 }

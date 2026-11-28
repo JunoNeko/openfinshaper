@@ -292,6 +292,15 @@ describe('.fin.json versions', () => {
     expect(() => readFinJson(JSON.stringify({ ...doc, minThickness: -1 }))).toThrow(/minimum/);
   });
 
+  it('keeps a G10 weave angle through a save and omits 0°', () => {
+    const base = defaultFinDesign('side', 'left');
+    expect(JSON.parse(writeFinJson(base))).not.toHaveProperty('weaveAngle');
+    const doc = JSON.parse(writeFinJson({ ...base, weaveAngle: 25 }));
+    expect(doc.weaveAngle).toBe(25);
+    expect(readFinJson(JSON.stringify(doc)).design.weaveAngle).toBe(25);
+    expect(() => readFinJson(JSON.stringify({ ...doc, weaveAngle: 'bad' }))).toThrow(/weave/);
+  });
+
   it('reads and drops a tip rounding, now the thickness path shapes the tip', () => {
     const doc = JSON.parse(writeFinJson(defaultFinDesign('side', 'left')));
     const d = readFinJson(JSON.stringify({ ...doc, tipRound: 8 })).design;

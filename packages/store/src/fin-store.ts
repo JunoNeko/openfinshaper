@@ -75,6 +75,7 @@ import {
   setPanelThickness,
   setMinThickness,
   setPanelTilt,
+  setWeaveAngle,
   smoothKnot,
   spanMidpoint,
   withFinCurve,
@@ -182,6 +183,10 @@ export interface FinState {
   setPanelTilt: (deg: number) => boolean;
   /** Turn and tilt the fin in its panel at once (bestPanelPose), as one undo step. */
   fitPanel: (pose: { angle: number; tilt: number }) => boolean;
+  /** Set the G10 weave orientation angle (deg, −90 to +90). */
+  setWeaveAngle: (deg: number) => boolean;
+  /** Apply a flex-tuned fin design (taper and/or weave angle) as one undo step. */
+  applyFlexDesign: (next: FinDesign, label?: string) => boolean;
   /** Move the fin onto another tab, placed as that tab's fins start (placeOnBase). */
   setBase: (base: FinBase) => boolean;
   /**
@@ -693,6 +698,14 @@ export const createFinStore = (): StoreApi<FinState> =>
       nudgeLateral: (dy) => {
         const d = get().design;
         return d ? commitChecked(nudgeLateral(d, dy), 'Nudge fin') : false;
+      },
+      setWeaveAngle: (deg) => {
+        const d = get().design;
+        return d ? commit(setWeaveAngle(d, deg), 'Set weave angle') : false;
+      },
+      applyFlexDesign: (next, label = 'Tune fin flex') => {
+        const d = get().design;
+        return d ? commitChecked(next, label) : false;
       },
 
       setActiveFoil: (foil) => {

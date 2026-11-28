@@ -102,6 +102,8 @@ export interface FinJson {
   tipScale?: unknown;
   /** Version 2: the panel it's cut from (thickness in mm, angle and tilt in deg). Absent: none. */
   panel?: { thickness: number; angle: number; tilt?: number };
+  /** G10 weave orientation (deg, −90 to +90, CCW from base). Absent means 0°. */
+  weaveAngle?: number;
   /** Version 2: the tab. Absent means the position's default Futures tab. */
   base?: FinBase;
   /** Version 2: foils at other heights, lowest first; height is a fraction of the depth. */
@@ -167,6 +169,7 @@ export const writeFinJson = (d: FinDesign, metadata?: Record<string, unknown>): 
           },
         }
       : {}),
+    ...(d.weaveAngle ? { weaveAngle: d.weaveAngle } : {}),
     outline: splineToJson(scaleSpline(d.outline, toMm, toMm)),
     section: sectionToJson(d.section),
     ...(d.slices.length
@@ -224,6 +227,9 @@ const assertStructure = (doc: Record<string, unknown>): void => {
   }
   if (doc.minThickness !== undefined && !(isNumber(doc.minThickness) && doc.minThickness > 0)) {
     fail('Malformed fin: the minimum thickness needs a positive number');
+  }
+  if (doc.weaveAngle !== undefined && !isNumber(doc.weaveAngle)) {
+    fail('Malformed fin: weave angle is not a number');
   }
   if (doc.tipSection !== undefined) assertSection(doc.tipSection, 'tip section');
   if (doc.base !== undefined && !(FIN_BASES as readonly unknown[]).includes(doc.base)) {
@@ -327,6 +333,7 @@ export const readFinJson = (
           },
         }
       : {}),
+    ...(doc.weaveAngle ? { weaveAngle: doc.weaveAngle } : {}),
   };
   // An older file's cant and toe, kept on its control sections.
   const changes = (doc.slices ?? []).flatMap((sl) =>

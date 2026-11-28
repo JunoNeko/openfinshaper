@@ -264,4 +264,10 @@ export interface FinDesign {
    * {@link FIN_MIN_THICKNESS_LIMITS}.
    */
   readonly minThickness?: number;
+  /**
+   * G10 laminate weave orientation in the fin profile plane (deg, −90 to +90, CCW from
+   * the base +X axis): 0 aligns the warp parallel to the base and the fill vertically up
+   * the depth. Absent means 0°.
+   */
+  readonly weaveAngle?: number;
 }
